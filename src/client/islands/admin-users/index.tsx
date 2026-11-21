@@ -175,16 +175,16 @@ export function AdminUsersIsland({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-2 border-b border-zinc-200 pb-3.5 sm:flex-row sm:items-end sm:justify-between dark:border-zinc-800">
         <div>
-          <p className="m-0 text-[11px] font-semibold uppercase tracking-widest text-accent-600 dark:text-accent-400">
-            Administration
-          </p>
-          <h1 className="m-0 mt-0.5 text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-            Users
+          <h1 className="m-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+            Users &amp; Accounts
           </h1>
+          <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            Manage directory accounts, roles, login passwords, and active or disabled status.
+          </p>
         </div>
         <button
           type="button"
@@ -194,10 +194,10 @@ export function AdminUsersIsland({
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           <span>Add user</span>
         </button>
-      </div>
+      </header>
 
-      {/* Admin sub-navigation */}
-      <AdminSubNav active="users" userCount={counts.total} />
+      {/* Admin sub-navigation (mobile) */}
+      <AdminSubNav active="users" counts={{ users: counts.total }} />
 
       {/* Compact Metrics Strip */}
       <div
@@ -205,11 +205,11 @@ export function AdminUsersIsland({
         aria-label="User directory metrics"
       >
         <div className="rounded-lg border border-zinc-200 bg-white px-3.5 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
             <span>Total Users</span>
             <Users className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
           </div>
-          <div className="mt-1 flex items-baseline justify-between gap-2">
+          <div className="mt-1.5 flex items-baseline justify-between gap-2">
             <span className="font-mono text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
               {counts.total}
             </span>
@@ -220,11 +220,11 @@ export function AdminUsersIsland({
         </div>
 
         <div className="rounded-lg border border-zinc-200 bg-white px-3.5 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
             <span>Role Breakdown</span>
             <UserCheck className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
             <span className="rounded border border-accent-500/35 bg-accent-500/10 px-1.5 py-0.5 text-accent-700 dark:text-accent-300">
               {counts.admins} admin
             </span>
@@ -238,11 +238,11 @@ export function AdminUsersIsland({
         </div>
 
         <div className="rounded-lg border border-zinc-200 bg-white px-3.5 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
             <span>Primary Admin</span>
             <Shield className="h-3.5 w-3.5 text-accent-600 dark:text-accent-400" aria-hidden="true" />
           </div>
-          <div className="mt-1 flex items-baseline justify-between gap-2">
+          <div className="mt-1.5 flex items-baseline justify-between gap-2">
             <span className="truncate font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100">
               {primaryNamespaceSlug ? `@${primaryNamespaceSlug}` : "@admin"}
             </span>

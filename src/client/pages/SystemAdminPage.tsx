@@ -6,8 +6,15 @@ import { IslandHost } from "@/client/server/IslandHost";
 export type SystemAdminPageProps = SystemAdminIslandProps;
 
 export function SystemAdminPage(props: SystemAdminPageProps) {
+  const activeSection = props.activeSection ?? "overview";
+  const counts = {
+    users: props.namespaces.length,
+    repositories: props.repositories.length,
+    activeTokens: props.tokens.filter((t) => !t.revokedAt).length,
+  };
+
   return (
-    <AdminSettingsLayout active="overview">
+    <AdminSettingsLayout active={activeSection} counts={counts}>
       <IslandHost name="system-admin" props={props}>
         <SystemAdminIsland {...props} />
       </IslandHost>

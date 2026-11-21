@@ -36,6 +36,18 @@ describe("system admin panel & dedicated users management APIs", () => {
     expect(settingsRes.status).toBe(302);
     expect(settingsRes.headers.get("location")).toBe("/auth?next=%2Fadmin%2Fsettings");
 
+    const reposRes = await SELF.fetch(`${ORIGIN}/admin/repositories`, { redirect: "manual" });
+    expect(reposRes.status).toBe(302);
+    expect(reposRes.headers.get("location")).toBe("/auth?next=%2Fadmin%2Frepositories");
+
+    const tokensRes = await SELF.fetch(`${ORIGIN}/admin/tokens`, { redirect: "manual" });
+    expect(tokensRes.status).toBe(302);
+    expect(tokensRes.headers.get("location")).toBe("/auth?next=%2Fadmin%2Ftokens");
+
+    const securityRes = await SELF.fetch(`${ORIGIN}/admin/security`, { redirect: "manual" });
+    expect(securityRes.status).toBe(302);
+    expect(securityRes.headers.get("location")).toBe("/auth?next=%2Fadmin%2Fsecurity");
+
     const overviewApi = await SELF.fetch(`${ORIGIN}/admin/api/overview`);
     expect(overviewApi.status).toBe(401);
 
@@ -109,7 +121,10 @@ describe("system admin panel & dedicated users management APIs", () => {
     expect(adminHtml).toContain("Site Administration");
     expect(adminHtml).toContain("Total Repositories");
     expect(adminHtml).toContain("/admin/users");
+    expect(adminHtml).toContain("/admin/repositories");
+    expect(adminHtml).toContain("/admin/tokens");
     expect(adminHtml).toContain("/admin/settings");
+    expect(adminHtml).toContain("/admin/security");
     expect(adminHtml).toContain("Site administration navigation");
 
     const usersRes = await SELF.fetch(`${ORIGIN}/admin/users`, {
@@ -117,10 +132,27 @@ describe("system admin panel & dedicated users management APIs", () => {
     });
     expect(usersRes.status).toBe(200);
     const usersHtml = await usersRes.text();
-    expect(usersHtml).toContain("Users");
+    expect(usersHtml).toContain("Users &amp; Accounts");
     expect(usersHtml).toContain("Administrator");
     expect(usersHtml).toContain("@admin");
     expect(usersHtml).toContain("Site administration navigation");
+
+    const adminReposRes = await SELF.fetch(`${ORIGIN}/admin/repositories`, {
+      headers: { Cookie: cookie },
+    });
+    expect(adminReposRes.status).toBe(200);
+    const adminReposHtml = await adminReposRes.text();
+    expect(adminReposHtml).toContain("Repositories");
+    expect(adminReposHtml).toContain("admin/edge-starter");
+    expect(adminReposHtml).toContain("Site administration navigation");
+
+    const adminTokensRes = await SELF.fetch(`${ORIGIN}/admin/tokens`, {
+      headers: { Cookie: cookie },
+    });
+    expect(adminTokensRes.status).toBe(200);
+    const adminTokensHtml = await adminTokensRes.text();
+    expect(adminTokensHtml).toContain("Access Tokens");
+    expect(adminTokensHtml).toContain("Site administration navigation");
 
     const settingsRes = await SELF.fetch(`${ORIGIN}/admin/settings`, {
       headers: { Cookie: cookie },
@@ -129,6 +161,14 @@ describe("system admin panel & dedicated users management APIs", () => {
     const settingsHtml = await settingsRes.text();
     expect(settingsHtml).toContain("Settings Control Panel");
     expect(settingsHtml).toContain("Site administration navigation");
+
+    const securityRes = await SELF.fetch(`${ORIGIN}/admin/security`, {
+      headers: { Cookie: cookie },
+    });
+    expect(securityRes.status).toBe(200);
+    const securityHtml = await securityRes.text();
+    expect(securityHtml).toContain("Role-Based Access Control (RBAC) Matrix");
+    expect(securityHtml).toContain("Site administration navigation");
 
     const aliasRes = await SELF.fetch(`${ORIGIN}/admin/SettingsControlPanel`, {
       headers: { Cookie: cookie },
@@ -435,19 +475,20 @@ describe("system admin panel & dedicated users management APIs", () => {
     expect(memberAccountHtml).toContain("Change password");
     expect(memberAccountHtml).not.toContain("/admin/users");
 
-    const memberAdminHtmlRes = await SELF.fetch(`${ORIGIN}/admin`, {
-      headers: { Cookie: memberCookie },
-      redirect: "manual",
-    });
-    expect(memberAdminHtmlRes.status).toBe(303);
-    expect(memberAdminHtmlRes.headers.get("location")).toBe("/");
-
-    const memberAdminSettingsRes = await SELF.fetch(`${ORIGIN}/admin/settings`, {
-      headers: { Cookie: memberCookie },
-      redirect: "manual",
-    });
-    expect(memberAdminSettingsRes.status).toBe(303);
-    expect(memberAdminSettingsRes.headers.get("location")).toBe("/");
+    for (const restrictedPath of [
+      "/admin",
+      "/admin/repositories",
+      "/admin/tokens",
+      "/admin/settings",
+      "/admin/security",
+    ]) {
+      const restrictedRes = await SELF.fetch(`${ORIGIN}${restrictedPath}`, {
+        headers: { Cookie: memberCookie },
+        redirect: "manual",
+      });
+      expect(restrictedRes.status).toBe(303);
+      expect(restrictedRes.headers.get("location")).toBe("/");
+    }
 
     const memberAdminApiRes = await SELF.fetch(`${ORIGIN}/admin/api/users`, {
       headers: { Cookie: memberCookie },

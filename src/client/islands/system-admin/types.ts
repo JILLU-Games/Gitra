@@ -4,9 +4,11 @@ import type {
   AdminTokenEntry,
 } from "@/shared/admin/panel";
 
-export type SystemAdminTab = "all" | "tokens" | "repositories";
+export type SystemAdminSection = "overview" | "repositories" | "tokens";
 
 export type SystemAdminIslandProps = {
+  activeSection?: SystemAdminSection;
+  authMode?: "demo" | "configured";
   origin: string;
   primaryNamespaceSlug?: string;
   namespaces: AdminNamespaceEntry[];

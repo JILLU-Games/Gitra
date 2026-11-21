@@ -1,6 +1,7 @@
 import { ArrowRight, KeyRound, Lock, Shield, Users } from "lucide-react";
 
-import { AdminSettingsLayout } from "@/client/components/AdminSettingsLayout";
+import { AdminSettingsLayout, type AdminNavCounts } from "@/client/components/AdminSettingsLayout";
+import { AdminSubNav } from "@/client/components/AdminSubNav";
 
 export type AdminSettingsPageProps = {
   authMode: "demo" | "configured";
@@ -10,6 +11,7 @@ export type AdminSettingsPageProps = {
   totalRepositories: number;
   publicRepositories: number;
   privateRepositories: number;
+  activeTokens?: number;
   origin: string;
 };
 
@@ -21,20 +23,29 @@ export function AdminSettingsPage({
   totalRepositories,
   publicRepositories,
   privateRepositories,
+  activeTokens,
   origin,
 }: AdminSettingsPageProps) {
+  const counts: AdminNavCounts = {
+    users: totalUsers,
+    repositories: totalRepositories,
+    activeTokens,
+  };
+
   return (
-    <AdminSettingsLayout active="settings">
-      <div className="space-y-6">
-        <header className="border-b border-zinc-200 pb-4 dark:border-zinc-800">
-          <h1 className="m-0 text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+    <AdminSettingsLayout active="settings" counts={counts}>
+      <div className="space-y-5">
+        <header className="border-b border-zinc-200 pb-3.5 dark:border-zinc-800">
+          <h1 className="m-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
             Settings Control Panel
           </h1>
-          <p className="m-0 mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
             Instance authentication mode, security policies, and directory overview for this Git
             server.
           </p>
         </header>
+
+        <AdminSubNav active="settings" counts={counts} />
 
         {/* Instance & Auth Configuration */}
         <section className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
@@ -42,17 +53,17 @@ export function AdminSettingsPage({
             Instance &amp; Authentication
           </div>
           <dl className="m-0 divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
-            <div className="flex flex-col justify-between gap-1 px-4 py-3 sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center">
               <dt className="text-zinc-500 dark:text-zinc-400">Server Origin</dt>
               <dd className="m-0 font-mono text-zinc-900 dark:text-zinc-100">{origin}</dd>
             </div>
-            <div className="flex flex-col justify-between gap-1 px-4 py-3 sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center">
               <dt className="text-zinc-500 dark:text-zinc-400">Primary Administrator</dt>
               <dd className="m-0 font-mono font-medium text-zinc-900 dark:text-zinc-100">
                 @{primaryAdminHandle}
               </dd>
             </div>
-            <div className="flex flex-col justify-between gap-1 px-4 py-3 sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center">
               <dt className="text-zinc-500 dark:text-zinc-400">Admin Auth Mode</dt>
               <dd className="m-0 font-mono text-zinc-900 dark:text-zinc-100">
                 {authMode === "configured"
@@ -60,13 +71,13 @@ export function AdminSettingsPage({
                   : "Demo / Live Preview (ADMIN_PASSWORD unset · Quick Demo Login enabled)"}
               </dd>
             </div>
-            <div className="flex flex-col justify-between gap-1 px-4 py-3 sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center">
               <dt className="text-zinc-500 dark:text-zinc-400">User Password Storage</dt>
               <dd className="m-0 font-mono text-zinc-900 dark:text-zinc-100">
                 PBKDF2-SHA256 · 100,000 iterations · 16-byte random salt
               </dd>
             </div>
-            <div className="flex flex-col justify-between gap-1 px-4 py-3 sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center">
               <dt className="text-zinc-500 dark:text-zinc-400">Git Smart HTTP v2 Auth</dt>
               <dd className="m-0 text-zinc-800 dark:text-zinc-200">
                 Public repos allow anonymous clone; private &amp; push require scoped PAT
@@ -109,10 +120,10 @@ export function AdminSettingsPage({
               {publicRepositories} public · {privateRepositories} private
             </p>
             <a
-              href="/admin"
+              href="/admin/repositories"
               className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent-600 no-underline hover:underline dark:text-accent-400"
             >
-              <span>Open Control Panel</span>
+              <span>Manage repositories</span>
               <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
           </div>
@@ -120,9 +131,18 @@ export function AdminSettingsPage({
 
         {/* Security Guardrails */}
         <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="m-0 text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-            Active Security Policies
-          </h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="m-0 text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+              Active Security Policies
+            </h2>
+            <a
+              href="/admin/security"
+              className="inline-flex items-center gap-1 text-xs font-medium text-accent-600 no-underline hover:underline dark:text-accent-400"
+            >
+              <span>Full RBAC &amp; Security</span>
+              <ArrowRight className="h-3 w-3" aria-hidden="true" />
+            </a>
+          </div>
           <ul className="m-0 mt-2.5 space-y-2 pl-0 text-xs text-zinc-600 dark:text-zinc-400">
             <li className="flex items-start gap-2">
               <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden="true" />

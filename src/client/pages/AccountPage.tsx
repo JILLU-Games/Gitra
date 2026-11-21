@@ -101,15 +101,18 @@ export function AccountPage({
   const showSettingsShortcuts = activeSection === "settings";
 
   return (
-    <UserSettingsLayout active={activeSection}>
-      <div className="space-y-6">
+    <UserSettingsLayout
+      active={activeSection}
+      handle={primaryNamespaceSlug ? `@${primaryNamespaceSlug}` : undefined}
+    >
+      <div className="space-y-5">
         {/* Section Header */}
-        <header className="flex flex-col gap-3 border-b border-zinc-200 pb-4 sm:flex-row sm:items-end sm:justify-between dark:border-zinc-800">
+        <header className="flex flex-col gap-2 border-b border-zinc-200 pb-3.5 sm:flex-row sm:items-end sm:justify-between dark:border-zinc-800">
           <div>
-            <h1 className="m-0 text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+            <h1 className="m-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
               {meta.title}
             </h1>
-            <p className="m-0 mt-1 text-xs text-zinc-500 dark:text-zinc-400">{meta.subtitle}</p>
+            <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{meta.subtitle}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
@@ -249,9 +252,11 @@ export function AccountPage({
         {/* Password & Security */}
         {showSecurity ? (
           <section id="security" className="scroll-mt-16">
-            <h2 className="m-0 mb-2.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              Password &amp; Security
-            </h2>
+            {activeSection !== "security" ? (
+              <h2 className="m-0 mb-2.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                Password &amp; Security
+              </h2>
+            ) : null}
             <IslandHost name="change-password" props={{ isPrimaryAdmin, hasPassword }}>
               <ChangePasswordIsland isPrimaryAdmin={isPrimaryAdmin} hasPassword={hasPassword} />
             </IslandHost>
@@ -280,13 +285,17 @@ export function AccountPage({
         {/* Tokens */}
         {showTokens ? (
           <section id="tokens" className="scroll-mt-16">
-            <h2 className="m-0 mb-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              Tokens
-            </h2>
-            <p className="m-0 mb-3 text-xs text-zinc-500 dark:text-zinc-400">
-              Personal access tokens scope to a namespace or a single repo. The plaintext is shown
-              only once at creation.
-            </p>
+            {activeSection === "all" ? (
+              <>
+                <h2 className="m-0 mb-1 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                  Tokens
+                </h2>
+                <p className="m-0 mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+                  Personal access tokens scope to a namespace or a single repo. The plaintext is
+                  shown only once at creation.
+                </p>
+              </>
+            ) : null}
             <IslandHost
               name="tokens"
               props={{ primaryNamespaceSlug, repositories, tokens, readOnly }}

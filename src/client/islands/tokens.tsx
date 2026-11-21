@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { hydrateIsland } from "@/client/hydrate";
-import { Button, Card, EmptyState, ErrorBanner, Input } from "@/client/components/ui";
+import { Button, Card, EmptyState, ErrorBanner } from "@/client/components/ui";
 import { Copy, FolderGit2, KeyRound, Trash2 } from "lucide-react";
 import {
   REPOSITORIES_CHANGED_EVENT,
@@ -205,9 +205,13 @@ export function TokensIsland({
   }
 
   const activeTokens = tokens.filter((t) => !t.revokedAt);
+  const exampleNamespace = primaryNamespaceSlug || "admin";
+  const exampleRepo = repositories[0]
+    ? `${repositories[0].namespaceSlug}/${repositories[0].slug}`
+    : `${exampleNamespace}/app`;
 
   return (
-    <div className="grid gap-8">
+    <div className="space-y-4">
       {error ? <ErrorBanner>{error}</ErrorBanner> : null}
 
       {revealedToken ? (
@@ -223,9 +227,12 @@ export function TokensIsland({
           onDismiss={() => setRevealedToken(null)}
         />
       ) : (
-        <Card>
+        <section className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="border-b border-zinc-200 px-4 py-2.5 text-xs font-semibold text-zinc-900 dark:border-zinc-800 dark:text-zinc-100">
+            Create token
+          </div>
           <form
-            className="grid gap-5"
+            className="space-y-4 p-4"
             onSubmit={(event) => {
               event.preventDefault();
               if (!canSubmit) return;
@@ -247,36 +254,62 @@ export function TokensIsland({
               void handleCreate(payload);
             }}
           >
-            <h3 className="m-0 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-              Create token
-            </h3>
-
-            <ScopeSegmented scope={scope} onChange={setScope} />
-
-            <Input
-              label="Name"
-              type="text"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="ci-deploy"
-              helperText="A label to recognise this token in the list."
-              required
+            <ScopeSegmented
+              scope={scope}
+              exampleNamespace={exampleNamespace}
+              exampleRepo={exampleRepo}
+              onChange={setScope}
             />
-            <Input
-              label="Namespace"
-              type="text"
-              value={namespaceSlug}
-              onChange={(event) => setNamespaceSlug(event.target.value)}
-              placeholder={primaryNamespaceSlug ?? "rachel"}
-              helperText="Defaults to your handle."
-              required
-            />
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="pat-name-input"
+                  className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Token name
+                </label>
+                <input
+                  id="pat-name-input"
+                  type="text"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="ci-deploy"
+                  required
+                  className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                />
+                <p className="m-0 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                  A label to identify this token later.
+                </p>
+              </div>
+              <div>
+                <label
+                  htmlFor="pat-namespace-input"
+                  className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Namespace
+                </label>
+                <input
+                  id="pat-namespace-input"
+                  type="text"
+                  value={namespaceSlug}
+                  onChange={(event) => setNamespaceSlug(event.target.value)}
+                  placeholder={exampleNamespace}
+                  required
+                  className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2.5 font-mono text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                />
+                <p className="m-0 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                  Defaults to your primary handle.
+                </p>
+              </div>
+            </div>
+
             {scope === "repo" ? (
               filteredRepos.length === 0 ? (
                 <EmptyState
                   icon={<FolderGit2 className="h-5 w-5 text-zinc-400" aria-hidden="true" />}
-                  title={`No repositories under @${namespaceSlug.trim() || primaryNamespaceSlug || "namespace"}`}
-                  detail="Repo-scoped tokens become available once a repository exists under this namespace. Switch to namespace scope, or create a repo first."
+                  title={`No repositories under @${namespaceSlug.trim() || exampleNamespace}`}
+                  detail="Repo-scoped tokens become available once a repository exists under this namespace."
                 />
               ) : (
                 <RepoTiles
@@ -296,32 +329,42 @@ export function TokensIsland({
               }}
             />
 
-            <div className="flex justify-end">
-              <Button type="submit" variant="primary" size="md" disabled={!canSubmit}>
-                <KeyRound className="h-4 w-4" aria-hidden="true" />
-                Generate token
-              </Button>
+            <div className="flex items-center justify-between gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+              <p className="m-0 text-[11px] text-zinc-500 dark:text-zinc-400">
+                Plaintext token is displayed once immediately after generation.
+              </p>
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-accent-600 bg-accent-600 px-3 text-xs font-medium text-white transition-colors hover:bg-accent-700 disabled:opacity-50"
+              >
+                <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Generate token</span>
+              </button>
             </div>
           </form>
-        </Card>
+        </section>
       )}
 
-      <section className="grid gap-3">
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-          {tokens.length === 0 ? "Your tokens" : `Active tokens · ${activeTokens.length}`}
-        </h3>
+      <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-2.5 dark:border-zinc-800">
+          <h3 className="m-0 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+            {tokens.length === 0 ? "Your tokens" : "Issued tokens"}
+          </h3>
+          <span className="font-mono text-[11px] text-zinc-500 tabular-nums dark:text-zinc-400">
+            {activeTokens.length} active · {tokens.length} total
+          </span>
+        </div>
         {tokens.length === 0 ? (
-          <p className="m-0 font-mono text-xs text-zinc-500">
-            <span className="select-none">// </span>no tokens yet, create one above
-          </p>
+          <div className="px-4 py-6 text-center font-mono text-xs text-zinc-500 dark:text-zinc-400">
+            No personal access tokens yet. Generate one above.
+          </div>
         ) : (
-          <Card>
-            <ul className="-mx-5 divide-y divide-zinc-200 sm:-mx-6 dark:divide-zinc-800/60">
-              {tokens.map((token) => (
-                <TokenRow key={token.id} token={token} onRevoke={handleRevoke} />
-              ))}
-            </ul>
-          </Card>
+          <ul className="m-0 list-none divide-y divide-zinc-200 p-0 dark:divide-zinc-800">
+            {tokens.map((token) => (
+              <TokenRow key={token.id} token={token} onRevoke={handleRevoke} />
+            ))}
+          </ul>
         )}
       </section>
     </div>
@@ -340,16 +383,16 @@ type RevealPanelProps = {
 function RevealPanel({ token, copied, onCopy, onDismiss }: RevealPanelProps) {
   return (
     <Card variant="accent">
-      <div className="flex flex-col gap-5">
-        <p className="m-0 animate-pulse-soft font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-accent-600 dark:text-accent-400">
+      <div className="flex flex-col gap-4">
+        <p className="m-0 font-mono text-[11px] font-semibold uppercase tracking-wider text-accent-600 dark:text-accent-400">
           One time only · copy now
         </p>
-        <code className="block break-all py-2 text-center font-mono text-base text-zinc-900 select-all [-webkit-text-security:disc] hover:[-webkit-text-security:none] focus-within:[-webkit-text-security:none] sm:text-lg dark:text-zinc-100">
+        <code className="block break-all rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-center font-mono text-sm text-zinc-900 select-all [-webkit-text-security:disc] hover:[-webkit-text-security:none] focus-within:[-webkit-text-security:none] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
           {token}
         </code>
         <div className="flex items-center justify-between gap-3">
-          <Button type="button" variant="primary" size="md" onClick={onCopy}>
-            <Copy className="h-4 w-4" aria-hidden="true" />
+          <Button type="button" variant="primary" size="sm" onClick={onCopy}>
+            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
             {copied ? "Copied" : "Copy token"}
           </Button>
           <Button type="button" variant="ghost" size="sm" onClick={onDismiss}>
@@ -363,18 +406,25 @@ function RevealPanel({ token, copied, onCopy, onDismiss }: RevealPanelProps) {
 
 type ScopeSegmentedProps = {
   scope: Scope;
+  exampleNamespace: string;
+  exampleRepo: string;
   onChange: (next: Scope) => void;
 };
 
-function ScopeSegmented({ scope, onChange }: ScopeSegmentedProps) {
+function ScopeSegmented({
+  scope,
+  exampleNamespace,
+  exampleRepo,
+  onChange,
+}: ScopeSegmentedProps) {
   const baseHalf =
-    "flex flex-1 flex-col items-start gap-1 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40";
-  const activeHalf = "bg-accent-500/10 text-accent-600 dark:text-accent-400";
+    "flex flex-1 items-center justify-between gap-2 px-3 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40";
+  const activeHalf = "bg-accent-500/10 text-accent-700 dark:text-accent-300";
   const inactiveHalf =
-    "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700 dark:hover:bg-zinc-800/40 dark:hover:text-zinc-300";
+    "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/40 dark:hover:text-zinc-200";
   return (
     <div
-      className="flex w-full flex-col overflow-hidden rounded-xl border border-zinc-300 sm:flex-row dark:border-zinc-800/60"
+      className="flex w-full flex-col overflow-hidden rounded-md border border-zinc-200 sm:flex-row dark:border-zinc-800"
       role="radiogroup"
       aria-label="Token scope"
     >
@@ -385,20 +435,18 @@ function ScopeSegmented({ scope, onChange }: ScopeSegmentedProps) {
         role="radio"
         aria-checked={scope === "namespace"}
       >
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest">
-          Namespace
-        </span>
-        <span className="font-mono text-[11px] text-zinc-500">@rachel</span>
+        <span className="font-medium">Namespace scope</span>
+        <span className="font-mono text-[11px] opacity-75">@{exampleNamespace}</span>
       </button>
       <button
         type="button"
-        className={`${baseHalf} border-t border-zinc-300 sm:border-t-0 sm:border-l ${scope === "repo" ? activeHalf : inactiveHalf} dark:border-zinc-800/60`}
+        className={`${baseHalf} border-t border-zinc-200 sm:border-t-0 sm:border-l ${scope === "repo" ? activeHalf : inactiveHalf} dark:border-zinc-800`}
         onClick={() => onChange("repo")}
         role="radio"
         aria-checked={scope === "repo"}
       >
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest">Repo</span>
-        <span className="font-mono text-[11px] text-zinc-500">rachel/site</span>
+        <span className="font-medium">Single repository</span>
+        <span className="font-mono text-[11px] opacity-75">{exampleRepo}</span>
       </button>
     </div>
   );
@@ -415,9 +463,9 @@ type PermissionLevelTilesProps = {
 // pull" state.
 function PermissionLevelTiles({ level, readOnly = false, onChange }: PermissionLevelTilesProps) {
   const tile =
-    "group relative flex cursor-pointer flex-col gap-1 rounded-xl border border-zinc-300 p-4 transition-colors hover:border-zinc-400 has-[:checked]:border-accent-500 has-[:checked]:bg-accent-500/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500/40 dark:border-zinc-800/60 dark:hover:border-zinc-700";
+    "group relative flex cursor-pointer flex-col gap-0.5 rounded-md border border-zinc-200 px-3 py-2.5 transition-colors hover:border-zinc-300 has-[:checked]:border-accent-500 has-[:checked]:bg-accent-500/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500/40 dark:border-zinc-800 dark:hover:border-zinc-700";
   return (
-    <fieldset className="m-0 grid gap-3 border-0 p-0 sm:grid-cols-2">
+    <fieldset className="m-0 grid gap-2.5 border-0 p-0 sm:grid-cols-2">
       <legend className="sr-only">Permission level</legend>
       <label className={tile}>
         <input
@@ -428,10 +476,12 @@ function PermissionLevelTiles({ level, readOnly = false, onChange }: PermissionL
           checked={level === "pull"}
           onChange={() => onChange("pull")}
         />
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-zinc-700 group-has-[:checked]:text-accent-600 dark:text-zinc-300 dark:group-has-[:checked]:text-accent-400">
-          Pull only
+        <span className="text-xs font-medium text-zinc-800 group-has-[:checked]:text-accent-700 dark:text-zinc-200 dark:group-has-[:checked]:text-accent-300">
+          Pull only (read)
         </span>
-        <span className="text-sm text-zinc-600 dark:text-zinc-400">Clone and fetch refs.</span>
+        <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+          Clone and fetch refs over HTTPS.
+        </span>
       </label>
       <label
         className={`${tile} ${readOnly ? "cursor-not-allowed opacity-50" : ""}`}
@@ -446,13 +496,11 @@ function PermissionLevelTiles({ level, readOnly = false, onChange }: PermissionL
           checked={level === "push"}
           onChange={() => onChange("push")}
         />
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-zinc-700 group-has-[:checked]:text-accent-600 dark:text-zinc-300 dark:group-has-[:checked]:text-accent-400">
-          Pull + push
+        <span className="text-xs font-medium text-zinc-800 group-has-[:checked]:text-accent-700 dark:text-zinc-200 dark:group-has-[:checked]:text-accent-300">
+          Pull + push (read-write)
         </span>
-        <span className="text-sm text-zinc-600 dark:text-zinc-400">
-          {readOnly
-            ? "Unavailable for viewer role."
-            : "Clone, fetch, and push commits."}
+        <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+          {readOnly ? "Unavailable for viewer role." : "Clone, fetch, and push commits."}
         </span>
       </label>
     </fieldset>
@@ -467,9 +515,9 @@ type RepoTilesProps = {
 
 function RepoTiles({ repositories, selectedSlug, onChange }: RepoTilesProps) {
   const tile =
-    "group relative flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-zinc-300 px-4 py-3 transition-colors hover:border-zinc-400 has-[:checked]:border-accent-500 has-[:checked]:bg-accent-500/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500/40 dark:border-zinc-800/60 dark:hover:border-zinc-700";
+    "group relative flex cursor-pointer items-center justify-between gap-3 rounded-md border border-zinc-200 px-3 py-2 transition-colors hover:border-zinc-300 has-[:checked]:border-accent-500 has-[:checked]:bg-accent-500/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500/40 dark:border-zinc-800 dark:hover:border-zinc-700";
   return (
-    <fieldset className="m-0 grid max-h-60 gap-2 overflow-y-auto border-0 p-0">
+    <fieldset className="m-0 grid max-h-48 gap-1.5 overflow-y-auto border-0 p-0">
       <legend className="sr-only">Repository</legend>
       {repositories.map((repo) => (
         <label key={repo.id} className={tile}>
@@ -481,11 +529,11 @@ function RepoTiles({ repositories, selectedSlug, onChange }: RepoTilesProps) {
             checked={selectedSlug === repo.slug}
             onChange={() => onChange(repo.slug)}
           />
-          <span className="min-w-0 truncate font-mono text-sm text-zinc-800 group-has-[:checked]:text-accent-600 dark:text-zinc-200 dark:group-has-[:checked]:text-accent-400">
+          <span className="min-w-0 truncate font-mono text-xs text-zinc-800 group-has-[:checked]:text-accent-700 dark:text-zinc-200 dark:group-has-[:checked]:text-accent-300">
             {repo.slug}
           </span>
           <span
-            className={`shrink-0 font-mono text-[10px] uppercase tracking-widest ${
+            className={`shrink-0 font-mono text-[10px] uppercase tracking-wider ${
               repo.visibility === "private"
                 ? "text-amber-700 dark:text-amber-400"
                 : "text-emerald-700 dark:text-emerald-400"
@@ -511,10 +559,10 @@ function TokenRow({ token, onRevoke }: TokenRowProps) {
   if (revoked && token.revokedAt) metaParts.push(`revoked ${formatDate(token.revokedAt)}`);
   if (grants) metaParts.push(grants);
   return (
-    <li className="group flex flex-col items-start justify-between gap-3 px-5 py-3.5 sm:flex-row sm:items-center sm:gap-4 sm:px-6">
+    <li className="group flex flex-col items-start justify-between gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
       <div className="flex w-full min-w-0 flex-col gap-0.5">
         <span
-          className={`text-sm font-medium ${
+          className={`text-xs font-medium ${
             revoked
               ? "text-zinc-500 line-through dark:text-zinc-500"
               : "text-zinc-900 dark:text-zinc-100"
@@ -522,21 +570,23 @@ function TokenRow({ token, onRevoke }: TokenRowProps) {
         >
           {token.name}
         </span>
-        <span className="font-mono text-xs break-words text-zinc-500 sm:truncate">
+        <span className="font-mono text-[11px] break-words text-zinc-500 sm:truncate dark:text-zinc-400">
           {metaParts.join(" · ")}
         </span>
       </div>
-      {revoked ? null : (
-        <Button
+      {revoked ? (
+        <span className="shrink-0 rounded border border-zinc-200 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
+          revoked
+        </span>
+      ) : (
+        <button
           type="button"
-          variant="danger"
-          size="sm"
           onClick={() => void onRevoke(token.id)}
-          className="self-end transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-red-500/30 bg-transparent px-2 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
         >
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
-          Revoke
-        </Button>
+          <Trash2 className="h-3 w-3" aria-hidden="true" />
+          <span>Revoke</span>
+        </button>
       )}
     </li>
   );

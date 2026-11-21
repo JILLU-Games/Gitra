@@ -270,7 +270,18 @@ export function HeaderMenusIsland({
                     className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                   >
                     <Users className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
-                    <span>Users</span>
+                    <span>Users &amp; Accounts</span>
+                  </a>
+                  <a
+                    href="/admin/repositories"
+                    role="menuitem"
+                    className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  >
+                    <FolderGit2
+                      className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
+                      aria-hidden="true"
+                    />
+                    <span>Admin Repositories</span>
                   </a>
                   <a
                     href="/admin/settings"

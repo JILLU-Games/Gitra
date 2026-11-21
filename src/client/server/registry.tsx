@@ -12,6 +12,7 @@ import { HomePage, type HomePageProps } from "@/client/pages/HomePage";
 import { NotFoundPage } from "@/client/pages/NotFoundPage";
 import { OverviewPage, type OverviewPageProps } from "@/client/pages/OverviewPage";
 import { OwnerPage, type OwnerPageProps } from "@/client/pages/OwnerPage";
+import { AdminSecurityPage, type AdminSecurityPageProps } from "@/client/pages/AdminSecurityPage";
 import { AdminSettingsPage, type AdminSettingsPageProps } from "@/client/pages/AdminSettingsPage";
 import { AdminUsersPage, type AdminUsersPageProps } from "@/client/pages/AdminUsersPage";
 import { SystemAdminPage, type SystemAdminPageProps } from "@/client/pages/SystemAdminPage";
@@ -104,21 +105,43 @@ const views: Record<string, ViewDefinition> = {
   },
   "system-admin": {
     kind: "document",
-    title: "Site Administration · git-on-cloudflare",
+    title: "Control Panel · Site Administration · git-on-cloudflare",
     clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.systemAdminPage],
     render: renderWithProps((props: SystemAdminPageProps) => <SystemAdminPage {...props} />),
   },
+  "system-admin-repositories": {
+    kind: "document",
+    title: "Repositories · Control Panel · git-on-cloudflare",
+    clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.systemAdminPage],
+    render: renderWithProps((props: SystemAdminPageProps) => (
+      <SystemAdminPage {...props} activeSection="repositories" />
+    )),
+  },
+  "system-admin-tokens": {
+    kind: "document",
+    title: "Access Tokens · Control Panel · git-on-cloudflare",
+    clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.systemAdminPage],
+    render: renderWithProps((props: SystemAdminPageProps) => (
+      <SystemAdminPage {...props} activeSection="tokens" />
+    )),
+  },
   "system-admin-users": {
     kind: "document",
-    title: "Users · Site Administration · git-on-cloudflare",
+    title: "Users · Control Panel · git-on-cloudflare",
     clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.adminUsersPage],
     render: renderWithProps((props: AdminUsersPageProps) => <AdminUsersPage {...props} />),
   },
   "system-admin-settings": {
     kind: "document",
-    title: "Settings Control Panel · Site Administration · git-on-cloudflare",
+    title: "Instance Settings · Control Panel · git-on-cloudflare",
     clientEntrypoints: [clientEntrypoints.shell],
     render: renderWithProps((props: AdminSettingsPageProps) => <AdminSettingsPage {...props} />),
+  },
+  "system-admin-security": {
+    kind: "document",
+    title: "Security & Policies · Control Panel · git-on-cloudflare",
+    clientEntrypoints: [clientEntrypoints.shell],
+    render: renderWithProps((props: AdminSecurityPageProps) => <AdminSecurityPage {...props} />),
   },
 };
 

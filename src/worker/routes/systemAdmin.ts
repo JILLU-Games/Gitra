@@ -522,10 +522,70 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       return safeRedirect(c, "/", 303);
     }
     const data = await loadSystemAdminData(c, viewer);
-    return renderUiDocumentResponse(c.env, "system-admin", data, {
-      failureBody: "Failed to render admin panel\n",
-      viewer,
-    });
+    const authConfig = resolveAdminAuthConfig(c.env);
+    return renderUiDocumentResponse(
+      c.env,
+      "system-admin",
+      {
+        ...data,
+        activeSection: "overview",
+        authMode: authConfig.mode,
+      },
+      {
+        failureBody: "Failed to render admin panel\n",
+        viewer,
+      }
+    );
+  });
+
+  router.get(`/admin/repositories`, async (c) => {
+    const viewer = await loadViewer(c);
+    if (!viewer) {
+      return safeRedirect(c, "/auth?next=%2Fadmin%2Frepositories");
+    }
+    if (!canAccessAdminPanel(viewer.role)) {
+      return safeRedirect(c, "/", 303);
+    }
+    const data = await loadSystemAdminData(c, viewer);
+    const authConfig = resolveAdminAuthConfig(c.env);
+    return renderUiDocumentResponse(
+      c.env,
+      "system-admin-repositories",
+      {
+        ...data,
+        activeSection: "repositories",
+        authMode: authConfig.mode,
+      },
+      {
+        failureBody: "Failed to render admin repositories page\n",
+        viewer,
+      }
+    );
+  });
+
+  router.get(`/admin/tokens`, async (c) => {
+    const viewer = await loadViewer(c);
+    if (!viewer) {
+      return safeRedirect(c, "/auth?next=%2Fadmin%2Ftokens");
+    }
+    if (!canAccessAdminPanel(viewer.role)) {
+      return safeRedirect(c, "/", 303);
+    }
+    const data = await loadSystemAdminData(c, viewer);
+    const authConfig = resolveAdminAuthConfig(c.env);
+    return renderUiDocumentResponse(
+      c.env,
+      "system-admin-tokens",
+      {
+        ...data,
+        activeSection: "tokens",
+        authMode: authConfig.mode,
+      },
+      {
+        failureBody: "Failed to render admin access tokens page\n",
+        viewer,
+      }
+    );
   });
 
   router.get(`/admin/users`, async (c) => {
@@ -536,13 +596,22 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     if (!canAccessAdminPanel(viewer.role)) {
       return safeRedirect(c, "/", 303);
     }
-    const users = await loadDirectoryUsers(c);
+    const [users, repoRows, patRows] = await Promise.all([
+      loadDirectoryUsers(c),
+      listAllRepositoriesWithNamespaces(c.var.db),
+      listPatsForUser(c.var.db, viewer.userId),
+    ]);
     return renderUiDocumentResponse(
       c.env,
       "system-admin-users",
       {
         primaryNamespaceSlug: resolveAdminAuthConfig(c.env).username,
         users,
+        counts: {
+          users: users.length,
+          repositories: repoRows.length,
+          activeTokens: patRows.filter((p) => !p.revokedAt).length,
+        },
       },
       {
         failureBody: "Failed to render users management page\n",
@@ -559,9 +628,10 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     if (!canAccessAdminPanel(viewer.role)) {
       return safeRedirect(c, "/", 303);
     }
-    const [users, repoRows] = await Promise.all([
+    const [users, repoRows, patRows] = await Promise.all([
       loadDirectoryUsers(c),
       listAllRepositoriesWithNamespaces(c.var.db),
+      listPatsForUser(c.var.db, viewer.userId),
     ]);
     const authConfig = resolveAdminAuthConfig(c.env);
     const url = new URL(c.req.url);
@@ -582,10 +652,47 @@ export function registerSystemAdminRoutes(router: AppRouter) {
         totalRepositories: repoRows.length,
         publicRepositories: repoRows.filter((r) => r.visibility === "public").length,
         privateRepositories: repoRows.filter((r) => r.visibility === "private").length,
+        activeTokens: patRows.filter((p) => !p.revokedAt).length,
         origin,
       },
       {
         failureBody: "Failed to render admin settings control panel\n",
+        viewer,
+      }
+    );
+  });
+
+  router.get(`/admin/security`, async (c) => {
+    const viewer = await loadViewer(c);
+    if (!viewer) {
+      return safeRedirect(c, "/auth?next=%2Fadmin%2Fsecurity");
+    }
+    if (!canAccessAdminPanel(viewer.role)) {
+      return safeRedirect(c, "/", 303);
+    }
+    const [users, repoRows, patRows] = await Promise.all([
+      loadDirectoryUsers(c),
+      listAllRepositoriesWithNamespaces(c.var.db),
+      listPatsForUser(c.var.db, viewer.userId),
+    ]);
+    const authConfig = resolveAdminAuthConfig(c.env);
+    return renderUiDocumentResponse(
+      c.env,
+      "system-admin-security",
+      {
+        authMode: authConfig.mode,
+        primaryAdminHandle: authConfig.username,
+        totalUsers: users.length,
+        disabledUsers: users.filter((u) => u.status === "disabled").length,
+        usersWithPasswords: users.filter((u) => u.isPrimaryAdmin || u.hasPassword).length,
+        counts: {
+          users: users.length,
+          repositories: repoRows.length,
+          activeTokens: patRows.filter((p) => !p.revokedAt).length,
+        },
+      },
+      {
+        failureBody: "Failed to render admin security page\n",
         viewer,
       }
     );
