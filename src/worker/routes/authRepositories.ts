@@ -1,3 +1,4 @@
+import { canWriteRepositories } from "@/shared/admin/panel";
 import { safeParseJsonRequest } from "@/shared/web";
 import { validateSlugForRoute } from "@/shared/slugs";
 import { json, newPrefixedId } from "@/worker/common";
@@ -43,6 +44,10 @@ export function registerAuthRepositoryRoutes(router: AppRouter) {
     if (!viewer) {
       log.info("repo-create:not-authenticated");
       return json({ error: "Unauthorized" }, 401);
+    }
+    if (!canWriteRepositories(viewer.role)) {
+      log.warn("repo-create:viewer-read-only", { userId: viewer.userId, role: viewer.role });
+      return json({ ok: false, reason: "viewer-read-only" } as const, 403);
     }
     const rawBody = await safeParseJsonRequest(c.req.raw);
     const parsedBody = RepositoryCreateRequestSchema.safeParse(rawBody);
@@ -134,6 +139,10 @@ export function registerAuthRepositoryRoutes(router: AppRouter) {
     }
     const viewer = await loadViewer(c);
     if (!viewer) return json({ error: "Unauthorized" }, 401);
+    if (!canWriteRepositories(viewer.role)) {
+      log.warn("repo-visibility:viewer-read-only", { userId: viewer.userId, role: viewer.role });
+      return json({ ok: false, reason: "viewer-read-only" } as const, 403);
+    }
     const repositoryId = c.req.param("repositoryId");
     const rawBody = await safeParseJsonRequest(c.req.raw);
     const parsedBody = RepositoryVisibilityRequestSchema.safeParse(rawBody);

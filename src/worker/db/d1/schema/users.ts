@@ -1,9 +1,8 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-// Global user identity. `tessera_sub` is the verified `sub` claim from
-// tessera; it is opaque, stable, and is the only thing we trust as identity.
-// `preferred_username` from the ID token is treated as a slug candidate at
-// signup and is not stored here.
+// Global user identity. The underlying `tessera_sub` SQL column name is kept
+// for backward compatibility with existing D1 migrations and stores the
+// account's unique local subject identifier (for example `local:admin`).
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
   tesseraSub: text("tessera_sub").notNull().unique(),

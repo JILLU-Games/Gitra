@@ -109,3 +109,74 @@ export const AdminPurgeRequestSchema = z.preprocess(
     confirm: StringOrEmptySchema,
   })
 );
+
+export const AdminLoginRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    username: TrimmedStringSchema,
+    password: StringOrEmptySchema,
+    next: TrimmedStringSchema,
+  })
+);
+
+const DirectoryRoleSchema = z.enum(["admin", "member", "viewer"]);
+const DirectoryStatusSchema = z.enum(["active", "disabled"]);
+
+function parseOptionalRole(value: unknown): "admin" | "member" | "viewer" | undefined {
+  return value === "admin" || value === "member" || value === "viewer" ? value : undefined;
+}
+
+export const AdminNamespaceCreateRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    handle: TrimmedStringSchema,
+    displayName: TrimmedStringSchema,
+    role: z.preprocess((value) => parseOptionalRole(value) ?? "member", DirectoryRoleSchema),
+    status: z.preprocess(
+      (value) => (value === "active" || value === "disabled" ? value : "active"),
+      DirectoryStatusSchema
+    ),
+    password: z.preprocess(
+      (value) => (typeof value === "string" && value.length > 0 ? value : undefined),
+      z.string().optional()
+    ),
+  })
+);
+
+export const AdminNamespacePatchRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    handle: z.preprocess(
+      (value) => (typeof value === "string" ? value.trim() : undefined),
+      z.string().optional()
+    ),
+    displayName: z.preprocess(
+      (value) => (typeof value === "string" ? value.trim() : undefined),
+      z.string().optional()
+    ),
+    role: z.preprocess(parseOptionalRole, DirectoryRoleSchema.optional()),
+    status: z.preprocess(
+      (value) => (value === "active" || value === "disabled" ? value : undefined),
+      DirectoryStatusSchema.optional()
+    ),
+    password: z.preprocess(
+      (value) => (typeof value === "string" && value.length > 0 ? value : undefined),
+      z.string().optional()
+    ),
+  })
+);
+
+export const ChangePasswordRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    currentPassword: StringOrEmptySchema,
+    newPassword: StringOrEmptySchema,
+  })
+);
+
+export const AdminRepositoryDeleteRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    confirm: TrimmedStringSchema,
+  })
+);

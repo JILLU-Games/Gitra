@@ -101,6 +101,24 @@ export function formatWhen(epochSeconds: number, tz: string): string {
   }
 }
 
+/**
+ * Formats an epoch-millisecond timestamp into a concise relative label
+ * (e.g. "just now", "5m ago", "2h ago", "3d ago").
+ */
+export function formatRelativeTime(epochMs: number, nowMs: number = Date.now()): string {
+  const diffSec = Math.max(0, Math.floor((nowMs - epochMs) / 1000));
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 30) return `${diffDays}d ago`;
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths < 12) return `${diffMonths}mo ago`;
+  return `${Math.floor(diffMonths / 12)}y ago`;
+}
+
 export type FileIconName =
   | "code"
   | "database"

@@ -11,6 +11,9 @@ export const SLUG_MAX_LENGTH = 40;
 
 export const RESERVED_SLUGS: readonly string[] = [
   "auth",
+  "user",
+  "explore",
+  "repo",
   "sign-in",
   "sign-out",
   "api",

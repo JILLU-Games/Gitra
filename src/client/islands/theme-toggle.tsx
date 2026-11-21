@@ -36,7 +36,7 @@ export function ThemeToggleIsland(_props: ThemeToggleProps) {
     <button
       type="button"
       data-theme-toggle
-      className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 bg-transparent text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/50"
       aria-label={`Toggle theme (current: ${theme === "dark" ? "Dark" : "Light"})`}
       onClick={() => {
         const nextTheme = theme === "dark" ? "light" : "dark";
@@ -47,8 +47,8 @@ export function ThemeToggleIsland(_props: ThemeToggleProps) {
         } catch {}
       }}
     >
-      <Sun className="icon-light h-5 w-5" aria-hidden="true" />
-      <Moon className="icon-dark h-5 w-5" aria-hidden="true" />
+      <Sun className="icon-light h-4 w-4" aria-hidden="true" />
+      <Moon className="icon-dark h-4 w-4" aria-hidden="true" />
     </button>
   );
 }

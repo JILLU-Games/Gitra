@@ -20,6 +20,7 @@ export type RepositoriesIslandSummary = {
 export type RepositoriesIslandProps = {
   primaryNamespaceSlug?: string;
   repositories: RepositoriesIslandSummary[];
+  readOnly?: boolean;
 };
 
 // Cross-island event used by the tokens island (and any future repo-aware
@@ -59,12 +60,13 @@ type CreateResult =
         | "invalid-visibility"
         | "namespace-not-found"
         | "not-member"
-        | "slug-taken";
+        | "slug-taken"
+        | "viewer-read-only";
     };
 
 type ToggleResult =
   | { ok: true; id: string; visibility: "public" | "private"; previous: "public" | "private" }
-  | { ok: false; reason: "invalid-payload" | "not-found" | "not-member" };
+  | { ok: false; reason: "invalid-payload" | "not-found" | "not-member" | "viewer-read-only" };
 
 function compareRepositoriesByName(
   left: RepositoriesIslandSummary,
@@ -78,6 +80,7 @@ function compareRepositoriesByName(
 export function RepositoriesIsland({
   primaryNamespaceSlug,
   repositories: initialRepos,
+  readOnly = false,
 }: RepositoriesIslandProps) {
   const [repositories, setRepositories] = useState(initialRepos);
   const [showForm, setShowForm] = useState(false);
@@ -133,7 +136,7 @@ export function RepositoriesIsland({
   }
 
   async function handleToggle(repo: RepositoriesIslandSummary) {
-    if (pendingId) return;
+    if (readOnly || pendingId) return;
     const next = repo.visibility === "private" ? "public" : "private";
     if (next === "public") {
       const confirmed = confirm(
@@ -175,9 +178,13 @@ export function RepositoriesIsland({
           <EmptyState
             icon={<FolderGit2 className="h-5 w-5 text-zinc-400" aria-hidden="true" />}
             title="Repositories you own will appear here."
-            detail="Create one below; once it exists, you can use a PAT to clone or push."
+            detail={
+              readOnly
+                ? "Viewer accounts have read-only access to repositories."
+                : "Create one below; once it exists, you can use a PAT to clone or push."
+            }
           />
-          {!showForm ? (
+          {!readOnly && !showForm ? (
             <Button type="button" variant="primary" size="md" onClick={() => setShowForm(true)}>
               <Plus className="h-4 w-4" aria-hidden="true" />
               New repository
@@ -206,26 +213,43 @@ export function RepositoriesIsland({
                     </a>
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      onClick={() => void handleToggle(repo)}
-                      disabled={pendingId === repo.id}
-                      className={`inline-flex items-center transition-opacity hover:opacity-80 disabled:opacity-50 ${
-                        repo.visibility === "private"
-                          ? "text-amber-700 dark:text-amber-400"
-                          : "text-emerald-700 dark:text-emerald-400"
-                      }`}
-                      title={`${repo.visibility === "private" ? "Private" : "Public"} - click to toggle`}
-                      aria-label={`${repo.visibility === "private" ? "Private" : "Public"} repository - click to toggle`}
-                    >
-                      {repo.visibility === "private" ? (
-                        <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-                      ) : (
-                        <Globe className="h-3.5 w-3.5" aria-hidden="true" />
-                      )}
-                    </button>
+                    {readOnly ? (
+                      <span
+                        className={`inline-flex items-center gap-1 font-mono text-xs ${
+                          repo.visibility === "private"
+                            ? "text-amber-700 dark:text-amber-400"
+                            : "text-emerald-700 dark:text-emerald-400"
+                        }`}
+                      >
+                        {repo.visibility === "private" ? (
+                          <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                        ) : (
+                          <Globe className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
+                        <span>{repo.visibility}</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void handleToggle(repo)}
+                        disabled={pendingId === repo.id}
+                        className={`inline-flex items-center transition-opacity hover:opacity-80 disabled:opacity-50 ${
+                          repo.visibility === "private"
+                            ? "text-amber-700 dark:text-amber-400"
+                            : "text-emerald-700 dark:text-emerald-400"
+                        }`}
+                        title={`${repo.visibility === "private" ? "Private" : "Public"} - click to toggle`}
+                        aria-label={`${repo.visibility === "private" ? "Private" : "Public"} repository - click to toggle`}
+                      >
+                        {repo.visibility === "private" ? (
+                          <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                        ) : (
+                          <Globe className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
+                      </button>
+                    )}
                   </td>
-                  <td className="text-right text-xs text-zinc-500">
+                  <td className="text-right text-xs text-zinc-500" suppressHydrationWarning>
                     {formatRelativeTime(repo.updatedAt)}
                   </td>
                 </tr>
@@ -235,7 +259,7 @@ export function RepositoriesIsland({
         </div>
       )}
 
-      {showForm ? (
+      {!readOnly && showForm ? (
         <CreateForm
           primaryNamespaceSlug={primaryNamespaceSlug}
           onCancel={() => setShowForm(false)}
@@ -245,7 +269,7 @@ export function RepositoriesIsland({
             return ok;
           }}
         />
-      ) : repositories.length > 0 ? (
+      ) : !readOnly && repositories.length > 0 ? (
         <div className="flex justify-end">
           <Button type="button" variant="ghost" size="sm" onClick={() => setShowForm(true)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
@@ -269,6 +293,8 @@ function describeCreateReason(reason: Exclude<CreateResult, { ok: true }>["reaso
       return "You are not a member of that namespace.";
     case "slug-taken":
       return "A repository with that slug already exists.";
+    case "viewer-read-only":
+      return "Viewer accounts have read-only access and cannot create repositories.";
   }
 }
 

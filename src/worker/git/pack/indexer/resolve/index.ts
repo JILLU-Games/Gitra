@@ -650,18 +650,22 @@ function ensureResolveCacheContext(
   activeCatalog: ResolveOptions["activeCatalog"],
   limiter: ResolveOptions["limiter"]
 ): CacheContext {
-  const resolvedCacheCtx =
-    cacheCtx ??
-    ({
+  const resolvedCacheCtx: CacheContext =
+    cacheCtx ?? {
       req: new Request("http://localhost"),
       ctx: {
         waitUntil() {},
         passThroughOnException() {},
         props: undefined,
         exports: workerExports,
+        mapVirtualHost() {
+          return "";
+        },
+        tracing: {} as Tracing,
+        abort() {},
       },
       memo: {},
-    } satisfies CacheContext);
+    };
 
   ensureMemo(resolvedCacheCtx, repoId);
   resolvedCacheCtx.memo = resolvedCacheCtx.memo || {};

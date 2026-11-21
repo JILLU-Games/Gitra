@@ -78,6 +78,21 @@ export async function listRepositoriesForUser(
   }));
 }
 
+// All public repositories across all namespaces for the public homepage and
+// `/explore` directory, ordered stably by namespace/slug.
+export async function listPublicRepositoriesWithNamespaces(db: Db): Promise<RepositoryListing[]> {
+  const rows = await db
+    .select({ repository: repositories, namespaceSlug: namespaces.slug })
+    .from(repositories)
+    .innerJoin(namespaces, eq(repositories.namespaceId, namespaces.id))
+    .where(eq(repositories.visibility, "public"))
+    .orderBy(namespaces.slug, repositories.slug);
+  return rows.map((row) => ({
+    repository: row.repository,
+    namespace: { id: row.repository.namespaceId, slug: row.namespaceSlug },
+  }));
+}
+
 // Membership is owner-equivalent in this migration; an `EXISTS` subquery
 // lets the same owner page query include private rows only for members.
 export async function listRepositoriesForNamespace(

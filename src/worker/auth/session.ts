@@ -1,10 +1,15 @@
 import type { Viewer } from "@/client/server/viewer";
 import { newPrefixedId } from "@/worker/common";
-import { findUserById, listNamespacesForUser } from "@/worker/db/d1/dal";
+import {
+  findDirectoryAccountByUserId,
+  findUserById,
+  listNamespacesForUser,
+} from "@/worker/db/d1/dal";
 import type { UserRow } from "@/worker/db/d1/schema";
 import type { AppContext } from "@/worker/routes/hono";
 import { z } from "zod";
 
+import { buildLocalAccountSubject, resolveAdminAuthConfig } from "./adminAuth";
 import { clearSessionCookie, getSessionCookie, setSessionCookie } from "./cookies";
 
 // Session cookie value shape: `goc_sess_<base64url AES-GCM blob>`.
@@ -135,8 +140,25 @@ async function unsealSession(
   return { ok: true, payload: payload.data };
 }
 
+let ephemeralFallbackSecret: string | null = null;
+
+function getEphemeralFallbackSecret(): string {
+  if (!ephemeralFallbackSecret) {
+    ephemeralFallbackSecret = base64UrlEncode(randomBytes(32));
+  }
+  return ephemeralFallbackSecret;
+}
+
 export function loadSessionConfig(env: Env): SessionConfigResult {
-  const secret = env.SESSION_SECRET?.trim();
+  // When SESSION_SECRET is completely unset (for example in Live Preview
+  // without a local `.dev.vars` file), use a cryptographically random
+  // per-isolate signing key so demo sign-in works immediately. An explicitly
+  // empty string still fails closed so misconfigured deployments and tests
+  // surface `missing_session_secret`.
+  if (env.SESSION_SECRET === undefined) {
+    return { ok: true, secret: getEphemeralFallbackSecret() };
+  }
+  const secret = env.SESSION_SECRET.trim();
   if (!secret) return { ok: false, reason: "missing_session_secret" };
   return { ok: true, secret };
 }
@@ -203,6 +225,11 @@ export async function loadViewer(c: AppContext): Promise<Viewer | null> {
 async function loadViewerUncached(c: AppContext): Promise<Viewer | null> {
   const active = await readActiveSession(c);
   if (!active) return null;
+
+  const authConfig = resolveAdminAuthConfig(c.env);
+  const primaryAdminSubject = buildLocalAccountSubject(authConfig.username);
+  const isPrimaryAdmin = active.user.tesseraSub === primaryAdminSubject;
+
   let primaryNamespaceSlug: string | undefined;
   try {
     const namespaces = await listNamespacesForUser(c.var.db, active.user.id);
@@ -210,7 +237,53 @@ async function loadViewerUncached(c: AppContext): Promise<Viewer | null> {
   } catch {
     primaryNamespaceSlug = undefined;
   }
-  return { userId: active.user.id, primaryNamespaceSlug };
+
+  if (isPrimaryAdmin) {
+    let displayName: string | undefined;
+    try {
+      const account = await findDirectoryAccountByUserId(c.env.DB, c.var.db, active.user.id);
+      displayName = account?.displayName;
+    } catch {
+      displayName = undefined;
+    }
+    return {
+      userId: active.user.id,
+      primaryNamespaceSlug,
+      displayName,
+      role: "admin",
+      isPrimaryAdmin: true,
+      hasPassword: false,
+    };
+  }
+
+  try {
+    const account = await findDirectoryAccountByUserId(c.env.DB, c.var.db, active.user.id);
+    if (account) {
+      // Immediately revoke access for disabled directory accounts even if
+      // their sealed session cookie has not yet expired.
+      if (account.status === "disabled") {
+        return null;
+      }
+      return {
+        userId: active.user.id,
+        primaryNamespaceSlug: primaryNamespaceSlug ?? account.slug,
+        displayName: account.displayName,
+        role: account.role,
+        isPrimaryAdmin: false,
+        hasPassword: account.hasPassword,
+      };
+    }
+  } catch {
+    // Fall back safely when directory metadata is unavailable.
+  }
+
+  return {
+    userId: active.user.id,
+    primaryNamespaceSlug,
+    role: "member",
+    isPrimaryAdmin: false,
+    hasPassword: false,
+  };
 }
 
 // Sign-out clears the browser cookie. Because sessions are sealed stateless

@@ -1,3 +1,4 @@
+import { canWriteRepositories } from "@/shared/admin/panel";
 import { safeParseJsonRequest } from "@/shared/web";
 import { validateSlugForRoute } from "@/shared/slugs";
 import { json, newPrefixedId } from "@/worker/common";
@@ -18,39 +19,77 @@ import {
   validatePatName,
   viewerIsNamespaceMember,
 } from "@/worker/auth/pat";
-import type { AppRouter } from "./hono";
+import type { UserSettingsSection } from "@/client/components/UserSettingsLayout";
+import type { AppContext, AppRouter } from "./hono";
 import { renderUiDocumentResponse } from "./uiResponse";
 import { safeRedirect, summarizeTokens } from "./authShared";
 import { PatCreateRequestSchema } from "./requestSchemas";
 
+async function renderUserSettingsView(
+  c: AppContext,
+  activeSection: UserSettingsSection,
+  loginNextPath?: string
+): Promise<Response> {
+  const viewer = await loadViewer(c);
+  if (!viewer) {
+    const authUrl = loginNextPath
+      ? `/auth?next=${encodeURIComponent(loginNextPath)}`
+      : "/auth";
+    return safeRedirect(c, authUrl);
+  }
+  const db = c.var.db;
+  const [namespaces, repositoryRows, tokenRows] = await Promise.all([
+    listNamespacesForUser(db, viewer.userId),
+    listRepositoriesForUser(db, viewer.userId),
+    listPatsForUser(db, viewer.userId),
+  ]);
+  const tokens = await summarizeTokens(db, tokenRows);
+  return renderUiDocumentResponse(
+    c.env,
+    "account",
+    {
+      userId: viewer.userId,
+      primaryNamespaceSlug: viewer.primaryNamespaceSlug,
+      displayName: viewer.displayName,
+      viewerRole: viewer.role,
+      isPrimaryAdmin: viewer.isPrimaryAdmin,
+      hasPassword: viewer.hasPassword,
+      activeSection,
+      namespaces: namespaces.map((ns) => ({ id: ns.id, slug: ns.slug })),
+      repositories: repositoryRows.map((row) => ({
+        id: row.repository.id,
+        slug: row.repository.slug,
+        namespaceSlug: row.namespace.slug,
+        visibility: row.repository.visibility,
+        updatedAt: row.repository.updatedAt,
+      })),
+      tokens,
+    },
+    { failureBody: "Failed to render page\n", viewer }
+  );
+}
+
 export function registerAuthTokenRoutes(router: AppRouter) {
-  router.get(`/auth/account`, async (c) => {
+  // Dedicated Gitea-style /user/* directory routes
+  router.get(`/user`, async (c) => {
     const viewer = await loadViewer(c);
-    if (!viewer) return safeRedirect(c, "/auth");
-    const db = c.var.db;
-    const namespaces = await listNamespacesForUser(db, viewer.userId);
-    const repositoryRows = await listRepositoriesForUser(db, viewer.userId);
-    const tokenRows = await listPatsForUser(db, viewer.userId);
-    const tokens = await summarizeTokens(db, tokenRows);
-    return renderUiDocumentResponse(
-      c.env,
-      "account",
-      {
-        userId: viewer.userId,
-        primaryNamespaceSlug: viewer.primaryNamespaceSlug,
-        namespaces: namespaces.map((ns) => ({ id: ns.id, slug: ns.slug })),
-        repositories: repositoryRows.map((row) => ({
-          id: row.repository.id,
-          slug: row.repository.slug,
-          namespaceSlug: row.namespace.slug,
-          visibility: row.repository.visibility,
-          updatedAt: row.repository.updatedAt,
-        })),
-        tokens,
-      },
-      { failureBody: "Failed to render page\n", viewer }
-    );
+    if (!viewer) return safeRedirect(c, "/auth?next=%2Fuser%2Fprofile");
+    return safeRedirect(c, "/user/profile");
   });
+
+  router.get(`/user/profile`, (c) => renderUserSettingsView(c, "profile", "/user/profile"));
+  router.get(`/user/account`, (c) => renderUserSettingsView(c, "account", "/user/account"));
+  router.get(`/user/accounts`, (c) => renderUserSettingsView(c, "account", "/user/accounts"));
+  router.get(`/user/settings`, (c) => renderUserSettingsView(c, "settings", "/user/settings"));
+  router.get(`/user/settings/security`, (c) =>
+    renderUserSettingsView(c, "security", "/user/settings/security")
+  );
+  router.get(`/user/settings/tokens`, (c) =>
+    renderUserSettingsView(c, "tokens", "/user/settings/tokens")
+  );
+
+  // Backward-compatible combined account hub
+  router.get(`/auth/account`, (c) => renderUserSettingsView(c, "all"));
 
   router.get(`/auth/api/tokens`, async (c) => {
     const viewer = await loadViewer(c);
@@ -97,6 +136,10 @@ export function registerAuthTokenRoutes(router: AppRouter) {
     if (level === null) {
       log.warn("pat:create-invalid-level");
       return json({ error: "Body must include level: 'pull' or 'push'" }, 400);
+    }
+    if (level === "push" && !canWriteRepositories(viewer.role)) {
+      log.warn("pat:create-viewer-push-blocked", { userId: viewer.userId, role: viewer.role });
+      return json({ error: "Viewer accounts can only create read-only (pull) tokens" }, 403);
     }
     const slugValidation = validateSlugForRoute(body.namespaceSlug);
     if (!slugValidation.ok) {

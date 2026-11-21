@@ -8,9 +8,9 @@
 
 @theme {
   --default-transition-duration: 75ms;
-  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
-  --font-display: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --font-sans: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Consolas, "Fira Code", monospace;
+  --font-display: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* Warm zinc overrides -- see Section 4 Neutral Palette */
   --color-zinc-50: #fafaf9;
@@ -437,6 +437,68 @@
 
   html:not(.dark) [data-theme-toggle] .icon-dark {
     display: none;
+  }
+
+  /* Desktop collapsible sidebar states (hydrated pre-paint via document.tsx) */
+  .app-sidebar {
+    width: 13.5rem;
+  }
+
+  .sidebar-collapse-icon-expand {
+    display: none;
+  }
+
+  @media (min-width: 1024px) {
+    html[data-sidebar-collapsed="true"] .app-sidebar {
+      width: 3.5rem;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-sidebar .sidebar-label,
+    html[data-sidebar-collapsed="true"] .app-sidebar .sidebar-section-title,
+    html[data-sidebar-collapsed="true"] .app-sidebar .sidebar-footer-expanded {
+      display: none;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-sidebar .sidebar-nav-link {
+      justify-content: center;
+      padding-left: 0;
+      padding-right: 0;
+    }
+
+    html[data-sidebar-collapsed="true"] .sidebar-collapse-icon-collapse {
+      display: none;
+    }
+
+    html[data-sidebar-collapsed="true"] .sidebar-collapse-icon-expand {
+      display: inline-block;
+    }
+  }
+
+  /* Mobile slide-over drawer */
+  .mobile-sidebar-drawer[data-open="false"] {
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  .mobile-sidebar-drawer[data-open="false"] .mobile-sidebar-backdrop {
+    opacity: 0;
+  }
+
+  .mobile-sidebar-drawer[data-open="false"] .mobile-sidebar-panel {
+    transform: translateX(-100%);
+  }
+
+  .mobile-sidebar-drawer[data-open="true"] {
+    pointer-events: auto;
+    visibility: visible;
+  }
+
+  .mobile-sidebar-drawer[data-open="true"] .mobile-sidebar-backdrop {
+    opacity: 1;
+  }
+
+  .mobile-sidebar-drawer[data-open="true"] .mobile-sidebar-panel {
+    transform: translateX(0);
   }
 }
 

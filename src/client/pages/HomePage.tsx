@@ -1,81 +1,103 @@
-import { ArrowRight } from "lucide-react";
+import { GitBranch, LogIn } from "lucide-react";
 
-export function HomePage() {
+import type { DirectoryRole } from "@/shared/admin/panel";
+import { HomeReposIsland, type HomeRepositoryItem } from "@/client/islands/home-repos";
+import { IslandHost } from "@/client/server/IslandHost";
+
+export type HomePageProps = {
+  signedIn?: boolean;
+  exploreOnly?: boolean;
+  origin?: string;
+  primaryNamespaceSlug?: string;
+  displayName?: string;
+  viewerRole?: DirectoryRole;
+  namespaces?: Array<{ id: string; slug: string }>;
+  repositories?: HomeRepositoryItem[];
+  publicRepositories?: HomeRepositoryItem[];
+};
+
+export function HomePage({
+  signedIn = false,
+  exploreOnly = false,
+  origin = "",
+  primaryNamespaceSlug,
+  displayName,
+  viewerRole = "member",
+  namespaces = [],
+  repositories = [],
+  publicRepositories = [],
+}: HomePageProps) {
   return (
-    <div className="space-y-12 pt-8 sm:pt-12">
-      <section className="animate-slide-up opacity-0" style={{ animationDelay: "0ms" }}>
-        <span className="mb-3 inline-block text-xs font-medium uppercase tracking-widest text-zinc-500">
-          Git hosting on the edge
-        </span>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
-          git-on-cloudflare
-        </h1>
-        <p className="mt-4 max-w-lg text-lg text-zinc-500 dark:text-zinc-400">
-          A full Git Smart HTTP v2 server running entirely on Cloudflare Workers. Clone, push, and
-          browse repositories — at the edge.
-        </p>
-      </section>
-
-      <section className="animate-slide-up opacity-0" style={{ animationDelay: "60ms" }}>
-        <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800/60 bg-white dark:bg-zinc-900/50 p-5 font-mono text-sm sm:text-base">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-red-500/60" />
-            <span className="h-3 w-3 rounded-full bg-amber-500/60" />
-            <span className="h-3 w-3 rounded-full bg-green-500/60" />
+    <div className="space-y-5">
+      {/* Compact Branding Strip (shown on public homepage and Explore) */}
+      {!signedIn ? (
+        <section className="flex flex-col justify-between gap-4 rounded-lg border border-zinc-200 bg-white px-5 py-4 sm:flex-row sm:items-center dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <GitBranch
+                className="h-4 w-4 shrink-0 text-accent-600 dark:text-accent-400"
+                aria-hidden="true"
+              />
+              <h1 className="m-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                git-on-cloudflare
+              </h1>
+            </div>
+            <p className="m-0 mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+              Edge-native Git Smart HTTP v2 hosting on Cloudflare Workers. Explore public
+              repositories below or sign in to create repositories and manage tokens.
+            </p>
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href="/auth"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-600 bg-accent-600 px-3.5 text-xs font-medium whitespace-nowrap text-white no-underline hover:bg-accent-700"
+            >
+              <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Sign in</span>
+            </a>
+          </div>
+        </section>
+      ) : (
+        <header className="flex flex-col justify-between gap-2 border-b border-zinc-200 pb-3 sm:flex-row sm:items-end dark:border-zinc-800">
           <div>
-            <span className="select-none text-zinc-500">$ </span>
-            <span className="text-zinc-800 dark:text-zinc-100">
-              git clone https://git.limic.dev/rachel/git-on-cloudflare
-            </span>
+            <h1 className="m-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+              {exploreOnly ? "Explore Repositories" : "Repositories"}
+            </h1>
+            <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              {exploreOnly
+                ? "Browse all public Git repositories hosted on this instance."
+                : "Browse your repositories, copy HTTPS clone URLs, or switch to public repos."}
+            </p>
           </div>
-        </div>
-      </section>
+        </header>
+      )}
 
-      <section className="animate-slide-up opacity-0" style={{ animationDelay: "120ms" }}>
-        <dl className="grid gap-x-12 gap-y-6 sm:grid-cols-2">
-          <a
-            href="https://git.limic.dev/rachel/git-on-cloudflare"
-            target="_blank"
-            rel="noreferrer"
-            className="group block rounded-xl border border-zinc-200 dark:border-zinc-800/60 bg-white dark:bg-zinc-900/50 p-4 no-underline transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-sm"
-          >
-            <dt className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 group-hover:text-accent-500 dark:group-hover:text-accent-400">
-              Browse source
-            </dt>
-            <dd className="mt-1 flex items-center justify-between text-sm text-zinc-500">
-              <span>
-                Explore the{" "}
-                <span className="text-accent-500 dark:text-accent-400">git-on-cloudflare</span>{" "}
-                repository — code, commits, and trees.
-              </span>
-              <ArrowRight
-                className="ml-2 h-4 w-4 flex-shrink-0 text-zinc-400 transition-transform group-hover:translate-x-0.5"
-                aria-hidden="true"
-              />
-            </dd>
-          </a>
-          <a
-            href="/auth"
-            className="group block rounded-xl border border-zinc-200 dark:border-zinc-800/60 bg-white dark:bg-zinc-900/50 p-4 no-underline transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-sm"
-          >
-            <dt className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 group-hover:text-accent-500 dark:group-hover:text-accent-400">
-              Manage auth
-            </dt>
-            <dd className="mt-1 flex items-center justify-between text-sm text-zinc-500">
-              <span>
-                Configure <span className="text-accent-500 dark:text-accent-400">owners</span> and{" "}
-                <span className="text-accent-500 dark:text-accent-400">access tokens</span> for push
-                access.
-              </span>
-              <ArrowRight
-                className="ml-2 h-4 w-4 flex-shrink-0 text-zinc-400 transition-transform group-hover:translate-x-0.5"
-                aria-hidden="true"
-              />
-            </dd>
-          </a>
-        </dl>
-      </section>
+      <IslandHost
+        name="home-repos"
+        props={{
+          signedIn,
+          exploreOnly,
+          origin,
+          primaryNamespaceSlug,
+          displayName,
+          viewerRole,
+          namespaces,
+          repositories,
+          publicRepositories,
+        }}
+      >
+        <HomeReposIsland
+          signedIn={signedIn}
+          exploreOnly={exploreOnly}
+          origin={origin}
+          primaryNamespaceSlug={primaryNamespaceSlug}
+          displayName={displayName}
+          viewerRole={viewerRole}
+          namespaces={namespaces}
+          repositories={repositories}
+          publicRepositories={publicRepositories}
+        />
+      </IslandHost>
     </div>
   );
 }

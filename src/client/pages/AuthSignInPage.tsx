@@ -1,59 +1,105 @@
-import { ShieldCheck } from "lucide-react";
+import { ArrowRight, LogIn } from "lucide-react";
 
-import { Button, Card, ErrorBanner, PageHeader } from "@/client/components/ui";
+import { Button, Card, ErrorBanner, Input, PageHeader } from "@/client/components/ui";
 
 export type AuthSignInPageProps = {
   errorCode?: string;
+  demoMode?: boolean;
+  demoUsername?: string;
+  demoPassword?: string;
+  nextPath?: string;
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
-  invalid_request: "The sign-in callback was missing required parameters. Start a fresh sign-in.",
-  missing_state:
-    "The sign-in transaction expired before tessera redirected back. Start a fresh sign-in.",
-  invalid_state:
-    "The tab where you started signing in was closed before tessera redirected back. Start a fresh sign-in.",
-  token_exchange_failed:
-    "tessera could not be reached during the token exchange. Try again, then check your network if it persists.",
-  invalid_id_token: "tessera returned an ID token that did not validate. Contact your operator.",
-  oidc_unavailable: "tessera sign-in is not configured for this deployment. Contact your operator.",
+  missing_credentials: "Enter both a username and password to sign in.",
+  invalid_credentials: "Invalid username or password. Check your credentials and try again.",
+  account_disabled: "This account is disabled. Contact an administrator to restore access.",
   session_create_failed:
-    "Could not create your session after sign-in. Try again, then check the worker logs if it persists.",
+    "Could not start a session after sign-in. Try again, then check the worker logs if it persists.",
 };
 
 function describeError(code: string | undefined): string | null {
   if (!code) return null;
-  return ERROR_MESSAGES[code] ?? "Sign-in failed. Start a fresh sign-in.";
+  return ERROR_MESSAGES[code] ?? "Sign-in failed. Try again.";
 }
 
-export function AuthSignInPage({ errorCode }: AuthSignInPageProps) {
+export function AuthSignInPage({
+  errorCode,
+  demoMode = true,
+  demoUsername = "admin",
+  demoPassword = "admin123",
+  nextPath,
+}: AuthSignInPageProps) {
   const errorText = describeError(errorCode);
+
   return (
-    <div className="mx-auto max-w-md py-10">
-      <PageHeader className="!mb-4">
+    <div className="mx-auto max-w-md py-10 sm:py-14">
+      <PageHeader className="!mb-5">
         <div>
-          <h1 className="m-0 font-display text-3xl font-semibold text-zinc-900 dark:text-zinc-100">
+          <h1 className="m-0 font-display text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
             Sign in
           </h1>
-          <p className="m-0 mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-            Authenticate with tessera to manage your namespaces.
+          <p className="m-0 mt-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+            Sign in with your username or <span className="font-mono">@handle</span> and password to
+            access repositories and account settings.
           </p>
         </div>
       </PageHeader>
-      {errorText ? <ErrorBanner>{errorText}</ErrorBanner> : null}
-      <Card>
-        <div className="flex flex-col items-stretch gap-5">
-          <pre className="m-0 overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50/60 p-3 font-mono text-xs leading-relaxed text-zinc-500 dark:border-zinc-800/60 dark:bg-zinc-950/40">
-            <code className="bg-transparent p-0 font-mono text-xs">
-              <span className="select-none">$ </span>tessera authorize{"\n"}
-              <span className="select-none">→ </span>verify id_token{"\n"}
-              <span className="select-none">→ </span>claim @namespace
-            </code>
-          </pre>
-          <Button href="/auth/start" variant="primary">
-            <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-            Continue with tessera
-          </Button>
+
+      {errorText ? (
+        <div className="mb-5">
+          <ErrorBanner>{errorText}</ErrorBanner>
         </div>
+      ) : null}
+
+      <Card>
+        <form method="post" action="/auth/login" className="grid gap-5">
+          {nextPath ? <input type="hidden" name="next" value={nextPath} /> : null}
+          <Input
+            label="Username"
+            id="admin-username"
+            name="username"
+            type="text"
+            autoComplete="username"
+            autoFocus
+            placeholder={demoUsername}
+            required
+          />
+          <Input
+            label="Password"
+            id="admin-password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            placeholder="Enter password"
+            required
+          />
+          <Button type="submit" variant="primary" size="md" className="w-full">
+            <LogIn className="h-4 w-4" aria-hidden="true" />
+            Sign in
+          </Button>
+        </form>
+
+        {demoMode ? (
+          <>
+            <div className="my-6 border-t border-zinc-200 dark:border-zinc-800/70" />
+            <div className="grid gap-3">
+              <form method="post" action="/auth/demo-login">
+                {nextPath ? <input type="hidden" name="next" value={nextPath} /> : null}
+                <Button type="submit" variant="secondary" size="md" className="w-full">
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  Quick Demo Login
+                </Button>
+              </form>
+              <p className="m-0 flex items-center justify-between gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+                <span>Live Preview credentials</span>
+                <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                  {demoUsername} / {demoPassword}
+                </span>
+              </p>
+            </div>
+          </>
+        ) : null}
       </Card>
     </div>
   );

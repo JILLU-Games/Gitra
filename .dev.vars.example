@@ -12,14 +12,9 @@ LOG_LEVEL=debug
 # `wrangler secret put SESSION_SECRET`; never commit a real production value.
 SESSION_SECRET=local-goc-session-secret-change-me
 
-# tessera OIDC issuer override for local dev. Production value lives in
-# wrangler.jsonc.vars (https://auth.limic.dev). Loopback HTTP is allowed for
-# the issuer because tessera dev runs on http://localhost:5174.
-TESSERA_OIDC_ISSUER=http://localhost:5174
-
-# tessera OIDC client credentials. These are runtime/deployment-specific.
-# Production should use `wrangler secret put TESSERA_OIDC_CLIENT_SECRET` (and
-# either `wrangler secret put` or env-specific vars for the client id);
-# never commit a real production value to wrangler.jsonc.vars.
-TESSERA_OIDC_CLIENT_ID=local-goc
-TESSERA_OIDC_CLIENT_SECRET=local-goc-dev-secret-change-me
+# Optional admin login credentials. Leave ADMIN_PASSWORD unset in local dev
+# or Live Preview to enable Mock Mode (default `admin` / `admin123` and the
+# "Quick Demo Login" button). In production, set ADMIN_PASSWORD with
+# `wrangler secret put ADMIN_PASSWORD` to disable demo login.
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=

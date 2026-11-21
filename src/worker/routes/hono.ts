@@ -8,6 +8,7 @@ import type { Limiter } from "@/worker/git/operations/limits";
 import type { Logger, LoggerContext } from "@/worker/common/logger";
 
 import { createLogger } from "@/worker/common/logger";
+import { ensureD1Schema } from "@/worker/db/d1/bootstrap";
 import { createDb } from "@/worker/db/d1/client";
 import { getLimiter } from "@/worker/git/operations/limits";
 import { emitD1Bookmark, readInboundD1Bookmark } from "./d1Bookmark";
@@ -50,10 +51,6 @@ function selectSessionConstraint(
   // classification keeps working if that option is ever flipped.
   const normalizedPath = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
 
-  // Write-shaped GET: OIDC callback writes user/membership rows and then
-  // reads them back in the same request.
-  if (method === "GET" && normalizedPath === "/auth/callback") return { kind: "primary" };
-
   // Git protocol routes lie about read/write through the HTTP verb:
   // upload-pack POST is the fetch path (read-only); receive-pack POST is
   // the push path. The discovery GETs on `info/refs` fall through to the
@@ -95,6 +92,7 @@ export const requestServicesMiddleware = createMiddleware<AppBindings>(async (c,
   // any route runs and `c.var.db` is not allowed to be re-anchored from
   // inside a route. `emitD1Bookmark` runs in `finally` so the bookmark is
   // shipped even when a handler throws and `onError` rewrites `c.res`.
+  await ensureD1Schema(c.env.DB);
   const inboundBookmark = readInboundD1Bookmark(c);
   const decision = selectSessionConstraint(c.req.method, c.req.path, inboundBookmark);
   const anchor: D1SessionBookmark | D1SessionConstraint =

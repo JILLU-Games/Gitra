@@ -8,18 +8,17 @@ export async function findUserById(db: Db, id: string): Promise<UserRow | undefi
   return rows[0];
 }
 
-export async function findUserByTesseraSub(
-  db: Db,
-  tesseraSub: string
-): Promise<UserRow | undefined> {
-  const rows = await db.select().from(users).where(eq(users.tesseraSub, tesseraSub)).limit(1);
+export async function findUserBySubject(db: Db, subject: string): Promise<UserRow | undefined> {
+  const rows = await db.select().from(users).where(eq(users.tesseraSub, subject)).limit(1);
   return rows[0];
 }
 
+// Legacy alias kept for existing D1 schema migration tests.
+export const findUserByTesseraSub = findUserBySubject;
+
 // Insert a fresh user row. Returns the inserted row when this call won the
-// race; returns undefined when an existing row already had the same
-// `tessera_sub`. Callers combine this with `findUserByTesseraSub` to obtain
-// the canonical row in either case (see `auth/session` first-login flow).
+// race; returns undefined when an existing row already had the same subject.
+// Callers combine this with `findUserBySubject` to obtain the canonical row.
 export async function insertUserIfNew(db: Db, row: NewUserRow): Promise<UserRow | undefined> {
   const inserted = await db.insert(users).values(row).onConflictDoNothing().returning();
   return inserted[0];

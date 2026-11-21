@@ -188,29 +188,29 @@ describe("D1 Sessions middleware", () => {
     expect(probe.anchors[0]).toBe(ALWAYS_PRIMARY);
   });
 
-  it("anchors GET /auth/callback on first-primary (write-shaped GET)", async () => {
+  it("anchors POST /auth/login on first-primary", async () => {
     const probe = instrument();
-    const res = await workerExports.default.fetch(
-      "https://example.com/auth/callback?code=&state=",
-      { redirect: "manual" }
-    );
-    // Missing transaction cookie -> redirect to /auth with error. The
-    // middleware decision still fired.
-    expect(res.status).toBe(302);
+    const res = await workerExports.default.fetch("https://example.com/auth/login", {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        Origin: "https://example.com",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ username: "", password: "" }).toString(),
+    });
+    expect(res.status).toBe(303);
     expect(probe.anchors[0]).toBe(ALWAYS_PRIMARY);
   });
 
-  it("anchors GET /auth/callback/ (trailing slash) on first-primary", async () => {
-    // Hono's `strict: false` normalizes the trailing slash before our
-    // middleware sees `c.req.path`. The defensive normalize in the
-    // selector backs that up so the classification still holds if the
-    // option is ever flipped.
+  it("anchors POST /auth/demo-login/ (trailing slash) on first-primary", async () => {
     const probe = instrument();
-    const res = await workerExports.default.fetch(
-      "https://example.com/auth/callback/?code=&state=",
-      { redirect: "manual" }
-    );
-    expect(res.status).toBe(302);
+    const res = await workerExports.default.fetch("https://example.com/auth/demo-login/", {
+      method: "POST",
+      redirect: "manual",
+      headers: { Origin: "https://example.com" },
+    });
+    expect(res.status).toBe(303);
     expect(probe.anchors[0]).toBe(ALWAYS_PRIMARY);
   });
 
