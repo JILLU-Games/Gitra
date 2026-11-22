@@ -8,7 +8,9 @@ import { handleRefsApi } from "./ui/refsApi";
 import type { AppRouter } from "./hono";
 
 export function registerUiRoutes(router: AppRouter) {
-  // Owner repos list
+  // Explicit profile route (prevents /admin control panel collision for @admin)
+  router.get(`/profile/:owner`, handleOwnerOverview);
+  // Owner repos list & .vibtools profile view
   router.get(`/:owner`, handleOwnerOverview);
   // Repo overview page
   router.get(`/:owner/:repo`, handleRepoOverview);

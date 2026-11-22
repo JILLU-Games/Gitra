@@ -12,30 +12,34 @@ export type ErrorPageProps = {
 
 export function ErrorPage({ message, stack, owner, repo, refEnc, path }: ErrorPageProps) {
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col items-center gap-4 py-10 text-center">
-        <span className="inline-grid h-14 w-14 place-items-center rounded-full bg-red-50 dark:bg-red-900/20">
-          <TriangleAlert className="h-7 w-7 text-red-500 dark:text-red-400" aria-hidden="true" />
+    <div className="mx-auto max-w-lg space-y-6 py-10">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <span className="inline-grid h-12 w-12 place-items-center rounded-md border border-red-500/30 bg-red-500/10">
+          <TriangleAlert className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
         </span>
         <div>
-          <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-red-500 dark:text-red-400">
+          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-red-600 dark:text-red-400">
             Error
           </span>
-          <h2 className="m-0 font-display text-2xl font-bold tracking-tight">
+          <h1 className="m-0 text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
             Something went wrong
-          </h2>
+          </h1>
           {message ? (
-            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{message}</p>
+            <p className="m-0 mt-2 text-sm text-zinc-600 dark:text-zinc-400">{message}</p>
           ) : null}
         </div>
       </div>
       {stack ? (
-        <details className="rounded-2xl border border-zinc-200 dark:border-zinc-800/60 bg-white dark:bg-zinc-900/50 p-4">
-          <summary className="cursor-pointer select-none">Stack trace</summary>
-          <pre className="mt-3 overflow-auto whitespace-pre-wrap">{stack}</pre>
+        <details className="rounded-md border border-zinc-200 bg-white p-3.5 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+          <summary className="cursor-pointer font-medium text-zinc-700 select-none dark:text-zinc-300">
+            Stack trace
+          </summary>
+          <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-3 font-mono text-[11px] text-zinc-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200">
+            {stack}
+          </pre>
         </details>
       ) : null}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center justify-center gap-2.5">
         <Button href="/">Home</Button>
         {owner && repo ? (
           <Button variant="secondary" href={`/${owner}/${repo}`}>

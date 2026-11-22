@@ -253,8 +253,7 @@ async function resolveGitRoute(
 }
 
 type ResolveGitRouteResult =
-  | { kind: "ok"; route: RepositoryRoute }
-  | { kind: "response"; response: Response };
+  { kind: "ok"; route: RepositoryRoute } | { kind: "response"; response: Response };
 
 async function resolveGitRouteForRequest(
   c: AppContext,
@@ -378,8 +377,7 @@ async function gateGitPush(
 }
 
 type GitAuthorizationResult =
-  | { kind: "ok"; cacheCtx: CacheContext }
-  | { kind: "response"; response: Response };
+  { kind: "ok"; cacheCtx: CacheContext } | { kind: "response"; response: Response };
 
 async function authorizeGitRouteForRequest(
   c: AppContext,

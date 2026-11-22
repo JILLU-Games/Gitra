@@ -35,8 +35,7 @@ export type AppRouter = Hono<AppBindings>;
 export type AppContext<Path extends string = string> = Context<AppBindings, Path>;
 
 type SessionConstraintDecision =
-  | { kind: "primary" }
-  | { kind: "read"; anchor: D1SessionBookmark | D1SessionConstraint };
+  { kind: "primary" } | { kind: "read"; anchor: D1SessionBookmark | D1SessionConstraint };
 
 // Centralized read/write classification. The selector runs once before
 // `next()` and the chosen anchor cannot be changed mid-route: every route

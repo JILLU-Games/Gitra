@@ -39,6 +39,9 @@ export const RepositoryCreateRequestSchema = z.preprocess(
     namespaceSlug: LowercaseSlugInputSchema,
     slug: LowercaseSlugInputSchema,
     visibility: NullableRepositoryVisibilitySchema,
+    description: StringOrEmptySchema,
+    initializeReadme: z.preprocess((value) => value === true, z.boolean()),
+    initializeProfileReadme: z.preprocess((value) => value === true, z.boolean()),
   })
 );
 
@@ -46,6 +49,56 @@ export const RepositoryVisibilityRequestSchema = z.preprocess(
   objectOrEmpty,
   z.object({
     visibility: NullableRepositoryVisibilitySchema,
+  })
+);
+
+export const RepositoryPatchRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    visibility: z.preprocess(
+      (value) =>
+        value === undefined ? undefined : value === "public" || value === "private" ? value : null,
+      RepositoryVisibilitySchema.nullable().optional()
+    ),
+    description: z.preprocess(
+      (value) => (typeof value === "string" ? value : undefined),
+      z.string().optional()
+    ),
+    pinned: z.preprocess(
+      (value) => (typeof value === "boolean" ? value : undefined),
+      z.boolean().optional()
+    ),
+  })
+);
+
+export const ProfileReadmeUpdateRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    content: StringOrEmptySchema,
+    message: TrimmedStringSchema,
+  })
+);
+
+export const RepoFileUpdateRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    path: TrimmedStringSchema,
+    content: StringOrEmptySchema,
+    message: TrimmedStringSchema,
+    ref: TrimmedStringSchema,
+  })
+);
+
+export const ProfileMetaUpdateRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    displayName: z.preprocess(
+      (value) => (typeof value === "string" ? value : undefined),
+      z.string().optional()
+    ),
+    bio: StringOrEmptySchema,
+    location: TrimmedStringSchema,
+    website: TrimmedStringSchema,
   })
 );
 
@@ -116,6 +169,7 @@ export const AdminLoginRequestSchema = z.preprocess(
     username: TrimmedStringSchema,
     password: StringOrEmptySchema,
     next: TrimmedStringSchema,
+    account: TrimmedStringSchema.optional(),
   })
 );
 

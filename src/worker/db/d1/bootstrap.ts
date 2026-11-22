@@ -113,7 +113,9 @@ const ensuredDatabases = new WeakMap<D1Database, Promise<void>>();
 
 async function runSchemaCheck(db: D1Database): Promise<void> {
   const existing = await db
-    .prepare(`SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'users' LIMIT 1`)
+    .prepare(
+      `SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'users' LIMIT 1`
+    )
     .first<{ present: number }>();
   if (existing) return;
   await db.batch(BOOTSTRAP_STATEMENTS.map((sql) => db.prepare(sql)));

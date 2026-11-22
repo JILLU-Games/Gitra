@@ -92,9 +92,10 @@ export function RemoveUserModal({ user, onClose, onRemoved }: RemoveUserModalPro
           ) : null}
 
           <p className="m-0 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
-            Permanently remove <strong className="text-zinc-900 dark:text-zinc-100">{user.displayName}</strong>{" "}
-            (<span className="font-mono text-zinc-900 dark:text-zinc-100">@{user.slug}</span>)?
-            This deletes the namespace record, memberships, and scoped grants immediately.
+            Permanently remove{" "}
+            <strong className="text-zinc-900 dark:text-zinc-100">{user.displayName}</strong> (
+            <span className="font-mono text-zinc-900 dark:text-zinc-100">@{user.slug}</span>)? This
+            deletes the namespace record, memberships, and scoped grants immediately.
             {user.repoCount > 0
               ? ` This namespace currently holds ${user.repoCount} ${user.repoCount === 1 ? "repository" : "repositories"}.`
               : ""}

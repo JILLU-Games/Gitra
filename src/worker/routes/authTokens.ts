@@ -1,14 +1,16 @@
 import { canWriteRepositories } from "@/shared/admin/panel";
 import { safeParseJsonRequest } from "@/shared/web";
-import { validateSlugForRoute } from "@/shared/slugs";
+import { validateRepoSlugForRoute, validateSlugForRoute } from "@/shared/slugs";
 import { json, newPrefixedId } from "@/worker/common";
 import {
   findNamespaceBySlug,
   findRepositoryByNamespaceAndSlug,
+  getNamespaceProfileMeta,
   insertPatWithGrants,
   listNamespacesForUser,
   listPatsForUser,
   listRepositoriesForUser,
+  listRepositoryMetaMap,
   revokePatById,
 } from "@/worker/db/d1/dal";
 import { sameOriginViolation } from "@/worker/auth/origin";
@@ -32,9 +34,7 @@ async function renderUserSettingsView(
 ): Promise<Response> {
   const viewer = await loadViewer(c);
   if (!viewer) {
-    const authUrl = loginNextPath
-      ? `/auth?next=${encodeURIComponent(loginNextPath)}`
-      : "/auth";
+    const authUrl = loginNextPath ? `/auth?next=${encodeURIComponent(loginNextPath)}` : "/auth";
     return safeRedirect(c, authUrl);
   }
   const db = c.var.db;
@@ -43,7 +43,18 @@ async function renderUserSettingsView(
     listRepositoriesForUser(db, viewer.userId),
     listPatsForUser(db, viewer.userId),
   ]);
-  const tokens = await summarizeTokens(db, tokenRows);
+  const primaryNs =
+    namespaces.find((ns) => ns.slug === viewer.primaryNamespaceSlug) ?? namespaces[0];
+  const [tokens, profileMeta, repoMeta] = await Promise.all([
+    summarizeTokens(db, tokenRows),
+    primaryNs
+      ? getNamespaceProfileMeta(c.env.DB, primaryNs.id)
+      : Promise.resolve({ bio: "", location: "", website: "" }),
+    listRepositoryMetaMap(
+      c.env.DB,
+      repositoryRows.map((row) => row.repository.id)
+    ),
+  ]);
   return renderUiDocumentResponse(
     c.env,
     "account",
@@ -51,6 +62,9 @@ async function renderUserSettingsView(
       userId: viewer.userId,
       primaryNamespaceSlug: viewer.primaryNamespaceSlug,
       displayName: viewer.displayName,
+      bio: profileMeta.bio,
+      location: profileMeta.location,
+      website: profileMeta.website,
       viewerRole: viewer.role,
       isPrimaryAdmin: viewer.isPrimaryAdmin,
       hasPassword: viewer.hasPassword,
@@ -61,6 +75,8 @@ async function renderUserSettingsView(
         slug: row.repository.slug,
         namespaceSlug: row.namespace.slug,
         visibility: row.repository.visibility,
+        description: repoMeta.get(row.repository.id)?.description ?? "",
+        pinned: repoMeta.get(row.repository.id)?.pinned ?? false,
         updatedAt: row.repository.updatedAt,
       })),
       tokens,
@@ -148,7 +164,7 @@ export function registerAuthTokenRoutes(router: AppRouter) {
     }
     let repoSlug: string | null = null;
     if (body.scope === "repo") {
-      const repoSlugValidation = validateSlugForRoute(body.repoSlug);
+      const repoSlugValidation = validateRepoSlugForRoute(body.repoSlug);
       if (!repoSlugValidation.ok) {
         log.warn("pat:create-invalid-repo-slug", { reason: repoSlugValidation.reason });
         return json({ error: "Invalid repo slug" }, 400);

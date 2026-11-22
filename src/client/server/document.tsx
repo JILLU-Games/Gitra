@@ -27,7 +27,7 @@ export function Document({ title, assets, needsHighlight = false, children }: Do
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
         {needsHighlight && initialHighlightThemeHref ? (
@@ -44,7 +44,7 @@ export function Document({ title, assets, needsHighlight = false, children }: Do
           <link key={href} rel="stylesheet" href={href} />
         ))}
       </head>
-      <body className="min-h-screen text-zinc-900 dark:text-zinc-100">
+      <body className="min-h-screen bg-white text-zinc-900 dark:bg-canvas dark:text-zinc-100">
         {children}
         {assets.moduleScripts.map((src) => (
           <script key={src} type="module" src={src}></script>

@@ -7,12 +7,23 @@ import { registerAuthRoutes } from "./routes/auth";
 import { requestServicesMiddleware, type AppBindings, type AppContext } from "./routes/hono";
 import { renderUiDocumentResponse } from "./routes/uiResponse";
 import { loadViewer } from "./auth/session";
+import { DEFAULT_DEMO_USER_USERNAME, isDemoModeEnabled } from "./auth/adminAuth";
+import { ensureDemoTestUserSeeded } from "./auth/demoSeed";
+import { createDb } from "./db/d1/client";
 import {
+  findNamespaceBySlug,
   listNamespacesForUser,
   listPublicRepositoriesWithNamespaces,
   listRepositoriesForUser,
+  listRepositoryMetaMap,
 } from "./db/d1/dal";
-import { json } from "./common";
+import {
+  buildEscapedErrorHtmlDocument,
+  getErrorMessage,
+  getErrorStack,
+  resolveErrorStatus,
+} from "@/client/server/error";
+import { createLogger, json } from "./common";
 import { handleRepoTaskQueue } from "./tasks/queue";
 
 const app = new Hono<AppBindings>({ strict: false });
@@ -34,19 +45,38 @@ function resolveRequestOrigin(c: AppContext): string {
   return forwardedHost && forwardedProto ? `${forwardedProto}://${forwardedHost}` : url.origin;
 }
 
+async function ensureDemoWorkspaceOnPublicEntry(c: AppContext): Promise<void> {
+  if (!isDemoModeEnabled(c.env)) return;
+  const existing = await findNamespaceBySlug(c.var.db, DEFAULT_DEMO_USER_USERNAME);
+  if (existing) return;
+  const primaryDb = createDb(c.env.DB.withSession("first-primary"));
+  await ensureDemoTestUserSeeded({
+    env: c.env,
+    db: primaryDb,
+    limiter: c.var.limiter,
+    log: c.var.logFor({ service: "DemoSeed" }),
+  });
+}
+
 app.get("/", async (c) => {
+  await ensureDemoWorkspaceOnPublicEntry(c);
   const viewer = await loadViewer(c);
   const origin = resolveRequestOrigin(c);
   const publicRows = await listPublicRepositoriesWithNamespaces(c.var.db);
-  const publicRepositories = publicRows.map((row) => ({
-    id: row.repository.id,
-    slug: row.repository.slug,
-    namespaceSlug: row.namespace.slug,
-    visibility: row.repository.visibility,
-    updatedAt: row.repository.updatedAt,
-  }));
 
   if (!viewer) {
+    const publicMeta = await listRepositoryMetaMap(
+      c.env.DB,
+      publicRows.map((row) => row.repository.id)
+    );
+    const publicRepositories = publicRows.map((row) => ({
+      id: row.repository.id,
+      slug: row.repository.slug,
+      namespaceSlug: row.namespace.slug,
+      visibility: row.repository.visibility,
+      description: publicMeta.get(row.repository.id)?.description ?? "",
+      updatedAt: row.repository.updatedAt,
+    }));
     return renderUiDocumentResponse(
       c.env,
       "home",
@@ -63,6 +93,21 @@ app.get("/", async (c) => {
     listRepositoriesForUser(c.var.db, viewer.userId),
     listNamespacesForUser(c.var.db, viewer.userId),
   ]);
+  const allRepoIds = Array.from(
+    new Set([
+      ...publicRows.map((row) => row.repository.id),
+      ...repositoryRows.map((row) => row.repository.id),
+    ])
+  );
+  const repoMeta = await listRepositoryMetaMap(c.env.DB, allRepoIds);
+  const publicRepositories = publicRows.map((row) => ({
+    id: row.repository.id,
+    slug: row.repository.slug,
+    namespaceSlug: row.namespace.slug,
+    visibility: row.repository.visibility,
+    description: repoMeta.get(row.repository.id)?.description ?? "",
+    updatedAt: row.repository.updatedAt,
+  }));
 
   return renderUiDocumentResponse(
     c.env,
@@ -79,6 +124,7 @@ app.get("/", async (c) => {
         slug: row.repository.slug,
         namespaceSlug: row.namespace.slug,
         visibility: row.repository.visibility,
+        description: repoMeta.get(row.repository.id)?.description ?? "",
         updatedAt: row.repository.updatedAt,
       })),
       publicRepositories,
@@ -88,14 +134,20 @@ app.get("/", async (c) => {
 });
 
 app.get("/explore", async (c) => {
+  await ensureDemoWorkspaceOnPublicEntry(c);
   const viewer = await loadViewer(c);
   const origin = resolveRequestOrigin(c);
   const publicRows = await listPublicRepositoriesWithNamespaces(c.var.db);
+  const publicMeta = await listRepositoryMetaMap(
+    c.env.DB,
+    publicRows.map((row) => row.repository.id)
+  );
   const publicRepositories = publicRows.map((row) => ({
     id: row.repository.id,
     slug: row.repository.slug,
     namespaceSlug: row.namespace.slug,
     visibility: row.repository.visibility,
+    description: publicMeta.get(row.repository.id)?.description ?? "",
     updatedAt: row.repository.updatedAt,
   }));
 
@@ -136,21 +188,79 @@ async function renderNotFound(c: AppContext): Promise<Response> {
 
 app.notFound((c) => renderNotFound(c));
 
-function errorStatus(error: Error): number {
-  if ("status" in error && typeof error.status === "number") {
-    return error.status;
+function wantsJsonErrorResponse(c: AppContext): boolean {
+  const pathname = new URL(c.req.url).pathname;
+  if (
+    pathname.includes("/api/") ||
+    pathname.includes("/commits/fragments/") ||
+    /\/commit\/[^/]+\/diff$/.test(pathname) ||
+    pathname.endsWith("/info/refs") ||
+    pathname.endsWith("/git-upload-pack") ||
+    pathname.endsWith("/git-receive-pack") ||
+    /\/admin\/(status|storage|debug-state|compaction|pack-refs|refs-kv|purge)$/.test(pathname)
+  ) {
+    return true;
   }
-  return 500;
+
+  const accept = (c.req.header("accept") || "").toLowerCase();
+  if (accept.includes("text/html")) {
+    return false;
+  }
+  if (accept.includes("application/json")) {
+    return true;
+  }
+  return c.req.method !== "GET" && c.req.method !== "HEAD";
 }
 
-app.onError((error) => {
-  // The previous router converted uncaught handler failures into JSON. Most
-  // routes catch expected failures themselves, but keep this last-resort shape
-  // stable for truly unexpected errors.
-  const status = errorStatus(error);
-  return json({ error: error.message || "Internal Server Error" }, status, {
-    "Content-Type": "application/json; charset=utf-8",
-  });
+app.onError(async (error, c) => {
+  const status = resolveErrorStatus(error);
+  const message = getErrorMessage(error);
+  const pathname = new URL(c.req.url).pathname;
+  const log =
+    typeof c.var.logFor === "function"
+      ? c.var.logFor({ service: "Worker" })
+      : createLogger(c.env.LOG_LEVEL, { service: "Worker" });
+  log.error("worker:unhandled-error", { status, path: pathname, error: message });
+
+  if (wantsJsonErrorResponse(c)) {
+    return json({ error: message || "Internal Server Error" }, status, {
+      "Content-Type": "application/json; charset=utf-8",
+    });
+  }
+
+  const debug = String(c.env.LOG_LEVEL || "").toLowerCase() === "debug";
+  const publicMessage =
+    status >= 500 && !debug
+      ? "An unexpected internal error occurred. Please try again shortly."
+      : message;
+  const stack = debug ? getErrorStack(error) : undefined;
+  const viewer = await loadViewer(c).catch(() => null);
+
+  try {
+    return await renderUiDocumentResponse(
+      c.env,
+      "error",
+      {
+        title: "Error · git-on-cloudflare",
+        message: publicMessage,
+        stack,
+      },
+      {
+        status,
+        failureBody: buildEscapedErrorHtmlDocument("Error · git-on-cloudflare", publicMessage),
+        failureStatus: status,
+        viewer,
+      }
+    );
+  } catch {
+    return new Response(buildEscapedErrorHtmlDocument("Error · git-on-cloudflare", publicMessage), {
+      status,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+      },
+    });
+  }
 });
 
 export default {

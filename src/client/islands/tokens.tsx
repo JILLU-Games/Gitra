@@ -102,8 +102,10 @@ export function TokensIsland({
   const [level, setLevel] = useState<Level>("pull");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [revealedToken, setRevealedToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
 
   // SSR-side `namespaceSlug` is already canonicalized lowercase; the
   // namespace input is user-typed and can carry stray case/whitespace.
@@ -124,6 +126,7 @@ export function TokensIsland({
   useEffect(() => {
     if (!revealedToken) return;
     setCopied(false);
+    setCopyError(false);
   }, [revealedToken]);
 
   // Subscribe to repository creates/visibility changes from the
@@ -150,6 +153,11 @@ export function TokensIsland({
   async function refresh() {
     try {
       const res = await fetch("/auth/api/tokens", { credentials: "same-origin" });
+      if (res.status === 401) {
+        setSessionExpired(true);
+        setError("Session expired — please sign in again.");
+        return;
+      }
       if (!res.ok) return;
       const body = (await res.json()) as { tokens: TokensIslandSummary[] };
       setTokens(body.tokens);
@@ -161,6 +169,7 @@ export function TokensIsland({
   async function handleCreate(payload: CreatePayload) {
     setSubmitting(true);
     setError(null);
+    setSessionExpired(false);
     try {
       const res = await fetch("/auth/api/tokens", {
         method: "POST",
@@ -168,6 +177,11 @@ export function TokensIsland({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (res.status === 401) {
+        setSessionExpired(true);
+        setError("Session expired — please sign in again.");
+        return;
+      }
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         setError(body.error ?? "Could not create token");
@@ -188,11 +202,18 @@ export function TokensIsland({
 
   async function handleRevoke(id: string) {
     if (!confirm("Revoke this token? This cannot be undone.")) return;
+    setError(null);
+    setSessionExpired(false);
     try {
       const res = await fetch(`/auth/api/tokens/${encodeURIComponent(id)}`, {
         method: "DELETE",
         credentials: "same-origin",
       });
+      if (res.status === 401) {
+        setSessionExpired(true);
+        setError("Session expired — please sign in again.");
+        return;
+      }
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         setError(body.error ?? "Could not revoke token");
@@ -212,22 +233,43 @@ export function TokensIsland({
 
   return (
     <div className="space-y-4">
-      {error ? <ErrorBanner>{error}</ErrorBanner> : null}
+      {error ? (
+        <ErrorBanner>
+          {error}
+          {sessionExpired ? (
+            <>
+              {" "}
+              <a href="/auth" className="font-medium underline">
+                Sign in
+              </a>
+            </>
+          ) : null}
+        </ErrorBanner>
+      ) : null}
 
       {revealedToken ? (
         <RevealPanel
           token={revealedToken}
           copied={copied}
+          copyError={copyError}
           onCopy={() => {
-            navigator.clipboard?.writeText(revealedToken).then(
+            setCopyError(false);
+            if (!navigator.clipboard?.writeText) {
+              setCopyError(true);
+              return;
+            }
+            navigator.clipboard.writeText(revealedToken).then(
               () => setCopied(true),
-              () => setCopied(false)
+              () => {
+                setCopied(false);
+                setCopyError(true);
+              }
             );
           }}
           onDismiss={() => setRevealedToken(null)}
         />
       ) : (
-        <section className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
           <div className="border-b border-zinc-200 px-4 py-2.5 text-xs font-semibold text-zinc-900 dark:border-zinc-800 dark:text-zinc-100">
             Create token
           </div>
@@ -346,17 +388,17 @@ export function TokensIsland({
         </section>
       )}
 
-      <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-2.5 dark:border-zinc-800">
           <h3 className="m-0 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
             {tokens.length === 0 ? "Your tokens" : "Issued tokens"}
           </h3>
-          <span className="font-mono text-[11px] text-zinc-500 tabular-nums dark:text-zinc-400">
+          <span className="text-[11px] text-zinc-500 tabular-nums dark:text-zinc-400">
             {activeTokens.length} active · {tokens.length} total
           </span>
         </div>
         {tokens.length === 0 ? (
-          <div className="px-4 py-6 text-center font-mono text-xs text-zinc-500 dark:text-zinc-400">
+          <div className="px-4 py-6 text-center text-xs text-zinc-500 dark:text-zinc-400">
             No personal access tokens yet. Generate one above.
           </div>
         ) : (
@@ -374,22 +416,28 @@ export function TokensIsland({
 type RevealPanelProps = {
   token: string;
   copied: boolean;
+  copyError: boolean;
   onCopy: () => void;
   onDismiss: () => void;
 };
 
 // `-webkit-text-security: disc` masks the plaintext while keeping it
 // selectable; hover/focus-within reveals it for visual verification.
-function RevealPanel({ token, copied, onCopy, onDismiss }: RevealPanelProps) {
+function RevealPanel({ token, copied, copyError, onCopy, onDismiss }: RevealPanelProps) {
   return (
     <Card variant="accent">
       <div className="flex flex-col gap-4">
-        <p className="m-0 font-mono text-[11px] font-semibold uppercase tracking-wider text-accent-600 dark:text-accent-400">
+        <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-accent-600 dark:text-accent-400">
           One time only · copy now
         </p>
         <code className="block break-all rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-center font-mono text-sm text-zinc-900 select-all [-webkit-text-security:disc] hover:[-webkit-text-security:none] focus-within:[-webkit-text-security:none] dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
           {token}
         </code>
+        {copyError ? (
+          <p role="alert" className="m-0 text-xs text-amber-700 dark:text-amber-300">
+            Clipboard unavailable — select and copy the token above manually.
+          </p>
+        ) : null}
         <div className="flex items-center justify-between gap-3">
           <Button type="button" variant="primary" size="sm" onClick={onCopy}>
             <Copy className="h-3.5 w-3.5" aria-hidden="true" />
@@ -411,12 +459,7 @@ type ScopeSegmentedProps = {
   onChange: (next: Scope) => void;
 };
 
-function ScopeSegmented({
-  scope,
-  exampleNamespace,
-  exampleRepo,
-  onChange,
-}: ScopeSegmentedProps) {
+function ScopeSegmented({ scope, exampleNamespace, exampleRepo, onChange }: ScopeSegmentedProps) {
   const baseHalf =
     "flex flex-1 items-center justify-between gap-2 px-3 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40";
   const activeHalf = "bg-accent-500/10 text-accent-700 dark:text-accent-300";
@@ -533,7 +576,7 @@ function RepoTiles({ repositories, selectedSlug, onChange }: RepoTilesProps) {
             {repo.slug}
           </span>
           <span
-            className={`shrink-0 font-mono text-[10px] uppercase tracking-wider ${
+            className={`shrink-0 text-[11px] font-medium capitalize ${
               repo.visibility === "private"
                 ? "text-amber-700 dark:text-amber-400"
                 : "text-emerald-700 dark:text-emerald-400"
@@ -575,7 +618,7 @@ function TokenRow({ token, onRevoke }: TokenRowProps) {
         </span>
       </div>
       {revoked ? (
-        <span className="shrink-0 rounded border border-zinc-200 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
+        <span className="shrink-0 rounded-md border border-zinc-200 px-1.5 py-0.5 text-[11px] font-medium text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
           revoked
         </span>
       ) : (

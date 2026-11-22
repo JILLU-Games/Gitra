@@ -67,11 +67,7 @@ async function requireAdminApiViewer(
   return { ok: true, viewer };
 }
 
-async function resolveDefaultBranch(
-  env: Env,
-  limiter: Limiter,
-  doName: string
-): Promise<string> {
+async function resolveDefaultBranch(env: Env, limiter: Limiter, doName: string): Promise<string> {
   try {
     const stub = getRepoStub(env, doName);
     const head = await limiter.run("do:system-admin-head", async () => await stub.getHead());
@@ -227,8 +223,7 @@ async function handleCreateDirectoryUser(c: AppContext): Promise<Response> {
       return json(
         {
           ok: false,
-          reason:
-            pwValidation.reason === "too-short" ? "password-too-short" : "password-too-long",
+          reason: pwValidation.reason === "too-short" ? "password-too-short" : "password-too-long",
         } as const,
         400
       );
@@ -377,8 +372,7 @@ async function handlePatchDirectoryUser(c: AppContext, namespaceId: string): Pro
       return json(
         {
           ok: false,
-          reason:
-            pwValidation.reason === "too-short" ? "password-too-short" : "password-too-long",
+          reason: pwValidation.reason === "too-short" ? "password-too-short" : "password-too-long",
         } as const,
         400
       );

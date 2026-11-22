@@ -3,3 +3,4 @@ export * from "./namespaces";
 export * from "./repositories";
 export * from "./tokens";
 export * from "./adminDirectory";
+export * from "./workspaceMeta";

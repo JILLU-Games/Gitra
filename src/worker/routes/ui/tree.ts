@@ -1,17 +1,18 @@
-import type { TreeEntry } from "@/worker/git";
-import { isSymlinkMode, isTreeMode, readPath } from "@/worker/git";
-import {
-  isValidRef,
-  isValidPath,
-  bytesToText,
-  getFileIconName,
-  getHighlightLangsForBlobSmart,
-  type FileIconName,
-} from "@/shared/web";
+import { readPath } from "@/worker/git";
+import { isValidRef, isValidPath, bytesToText, getHighlightLangsForBlobSmart } from "@/shared/web";
 import { renderUiView } from "@/client/server/render";
-import { handleError } from "@/client/server/error";
+import { getErrorMessage, handleError, isGitReadMissError } from "@/client/server/error";
 import { buildCacheKeyFrom, cacheOrLoadJSONForRequestWithTTL } from "@/worker/cache";
-import { badRequest, isRequestPrivate, loadUiRepoActivity, resolveUiRepoAccess } from "./helpers";
+import {
+  badRequest,
+  canViewerManageRepo,
+  formatSortedTreeEntries,
+  isRequestPrivate,
+  loadUiRepoActivity,
+  markRequestPrivate,
+  resolveUiRepoAccess,
+  type UiTreeEntry,
+} from "./helpers";
 import type { AppContext } from "../hono";
 import { renderUiDocumentResponse } from "../uiResponse";
 import type { ReadPathResult } from "@/worker/git";
@@ -23,6 +24,10 @@ export async function handleTree(c: AppContext<"/:owner/:repo/tree">) {
   const access = await resolveUiRepoAccess(c, owner, repo);
   if (access.kind === "response") return access.response;
   const { route, cacheCtx } = access;
+  const canManageRepo = canViewerManageRepo(access);
+  if (canManageRepo) {
+    markRequestPrivate(cacheCtx);
+  }
   const repoId = route.doName;
   const isPrivate = isRequestPrivate(cacheCtx);
   const u = new URL(c.req.url);
@@ -45,11 +50,17 @@ export async function handleTree(c: AppContext<"/:owner/:repo/tree">) {
     });
   }
 
+  const treeLog = c.var.logFor({ service: "UiTree", repoId });
   const loadTree = async (): Promise<ReadPathResult | null> => {
     try {
       return await readPath(env, repoId, ref, path, cacheCtx);
-    } catch {
-      return null;
+    } catch (error) {
+      if (isGitReadMissError(error)) {
+        treeLog.debug("tree:read-path-miss", { ref, path });
+        return null;
+      }
+      treeLog.warn("tree:read-path-failed", { ref, path, error: getErrorMessage(error) });
+      throw error;
     }
   };
   const cacheKeyTree = buildCacheKeyFrom(c.req.raw, "/_cache/tree", {
@@ -57,85 +68,62 @@ export async function handleTree(c: AppContext<"/:owner/:repo/tree">) {
     ref,
     path,
   });
-  const result = await cacheOrLoadJSONForRequestWithTTL<ReadPathResult | null>(
-    cacheCtx,
-    cacheKeyTree,
-    loadTree,
-    (value) => (value && value.type === "tree" ? 60 : 300)
-  );
-
-  // Handle missing tree/blob result gracefully (path not found inside an
-  // existing repo). Repo-not-found is already handled by `resolveUiRepoAccess`
-  // upstream.
-  if (!result) {
-    try {
-      const errHtml = await renderUiView(
-        env,
-        "error",
-        {
-          title: `${owner}/${repo} · Tree`,
-          message: "Not found",
-          owner,
-          repo,
-          refEnc: encodeURIComponent(ref),
-          path,
-        },
-        { viewer: access.viewer }
-      );
-      if (errHtml) {
-        return new Response(errHtml, {
-          status: 404,
-          headers: {
-            "Content-Type": "text/html; charset=utf-8",
-            "Cache-Control": isPrivate ? "no-store" : "no-store, no-cache, must-revalidate",
-          },
-        });
-      }
-    } catch {}
-    return new Response("Not found\n", { status: 404 });
-  }
 
   try {
-    if (result.type === "tree") {
-      // Format tree entries as structured data
-      let entries: Array<{
-        name: string;
-        href: string;
-        isDir: boolean;
-        isSymlink: boolean;
-        iconName: FileIconName;
-        shortOid: string;
-        size: string;
-      }> = [];
-      if (result.type === "tree" && result.entries) {
-        const sorted = result.entries.sort((a: TreeEntry, b: TreeEntry) => {
-          const aIsDir = isTreeMode(a.mode);
-          const bIsDir = isTreeMode(b.mode);
-          if (aIsDir !== bIsDir) return aIsDir ? -1 : 1;
-          return a.name.localeCompare(b.name);
-        });
-        entries = sorted.map((e: TreeEntry) => {
-          const isDir = isTreeMode(e.mode);
-          // Git stores symlinks as blobs with mode 120000. Keep their file-like
-          // navigation behavior, but give browsers a distinct tree icon.
-          const isSymlink = isSymlinkMode(e.mode);
-          return {
-            name: e.name,
-            href: isDir
-              ? `/${owner}/${repo}/tree?ref=${encodeURIComponent(ref)}&path=${encodeURIComponent(
-                  (path ? path + "/" : "") + e.name
-                )}`
-              : `/${owner}/${repo}/blob?ref=${encodeURIComponent(ref)}&path=${encodeURIComponent(
-                  (path ? path + "/" : "") + e.name
-                )}`,
-            isDir,
-            isSymlink,
-            iconName: isSymlink ? "symlink" : isDir ? "folder" : getFileIconName(e.name),
-            shortOid: e.oid ? e.oid.slice(0, 7) : "",
-            size: "", // Size not available in tree entries, would need separate lookup
-          };
+    const result = await cacheOrLoadJSONForRequestWithTTL<ReadPathResult | null>(
+      cacheCtx,
+      cacheKeyTree,
+      loadTree,
+      (value) => (value && value.type === "tree" ? 60 : 300)
+    );
+
+    // Handle missing tree/blob result gracefully (path not found inside an
+    // existing repo). Repo-not-found is already handled by `resolveUiRepoAccess`
+    // upstream.
+    if (!result) {
+      try {
+        const errHtml = await renderUiView(
+          env,
+          "error",
+          {
+            title: `${owner}/${repo} · Tree`,
+            message: "Not found",
+            owner,
+            repo,
+            refEnc: encodeURIComponent(ref),
+            path,
+          },
+          { viewer: access.viewer }
+        );
+        if (errHtml) {
+          return new Response(errHtml, {
+            status: 404,
+            headers: {
+              "Content-Type": "text/html; charset=utf-8",
+              "Cache-Control": isPrivate ? "no-store" : "no-store, no-cache, must-revalidate",
+            },
+          });
+        }
+      } catch (renderError) {
+        treeLog.warn("tree:not-found-render-failed", {
+          ref,
+          path,
+          error: getErrorMessage(renderError),
         });
       }
+      return new Response("Not found\n", { status: 404 });
+    }
+    if (result.type === "tree") {
+      const entries: UiTreeEntry[] =
+        result.type === "tree" && result.entries
+          ? formatSortedTreeEntries({
+              owner,
+              repo,
+              ref,
+              basePath: path,
+              entries: result.entries,
+            })
+          : [];
       // Generate breadcrumbs and parent link
       const parts = (path || "").split("/").filter(Boolean);
       // Truncate ref if too long (e.g., commit hashes)
@@ -169,6 +157,8 @@ export async function handleTree(c: AppContext<"/:owner/:repo/tree">) {
           title: `${path || "root"} · ${owner}/${repo}`,
           owner,
           repo,
+          visibility: route.visibility,
+          canManageRepo,
           refEnc: encodeURIComponent(ref),
           progress,
           breadcrumbs,
@@ -197,6 +187,8 @@ export async function handleTree(c: AppContext<"/:owner/:repo/tree">) {
           title: `${title} · ${owner}/${repo}`,
           owner,
           repo,
+          visibility: route.visibility,
+          canManageRepo,
           refEnc: encodeURIComponent(ref),
           progress,
           fileName: title,

@@ -19,10 +19,12 @@ import {
 
 import {
   buildGitCloneUrl,
+  buildNamespaceProfileHref,
   canAccessAdminPanel,
   canWriteRepositories,
   type DirectoryRole,
 } from "@/shared/admin/panel";
+import { PROFILE_README_PATH, PROFILE_REPO_SLUG } from "@/shared/slugs";
 import { formatRelativeTime } from "@/shared/web";
 import { hydrateIsland } from "@/client/hydrate";
 
@@ -31,6 +33,7 @@ export type HomeRepositoryItem = {
   slug: string;
   namespaceSlug: string;
   visibility: "public" | "private";
+  description?: string;
   updatedAt: number;
 };
 
@@ -53,6 +56,7 @@ type CreateRepoResponse =
       namespaceSlug: string;
       slug: string;
       visibility: "public" | "private";
+      description?: string;
       updatedAt: number;
     }
   | { ok: false; reason: string };
@@ -81,20 +85,31 @@ export function HomeReposIsland({
 
   const [showCreate, setShowCreate] = useState(false);
   const [newSlug, setNewSlug] = useState("");
+  const [newDescription, setNewDescription] = useState("");
   const [newVisibility, setNewVisibility] = useState<"public" | "private">("public");
+  const [initReadme, setInitReadme] = useState(false);
+  const [initProfileReadme, setInitProfileReadme] = useState(true);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const isProfileSlug = newSlug.trim().toLowerCase() === PROFILE_REPO_SLUG;
 
   const sourceList = activeFeed === "public" ? publicRepositories : repositories;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return sourceList.filter((repo) => {
-      if (activeFeed === "mine" && visibilityFilter !== "all" && repo.visibility !== visibilityFilter) {
+      if (
+        activeFeed === "mine" &&
+        visibilityFilter !== "all" &&
+        repo.visibility !== visibilityFilter
+      ) {
         return false;
       }
       if (!q) return true;
-      return `${repo.namespaceSlug}/${repo.slug}`.toLowerCase().includes(q);
+      return (
+        `${repo.namespaceSlug}/${repo.slug}`.toLowerCase().includes(q) ||
+        (repo.description ?? "").toLowerCase().includes(q)
+      );
     });
   }, [sourceList, activeFeed, query, visibilityFilter]);
 
@@ -118,14 +133,18 @@ export function HomeReposIsland({
     setCreating(true);
     setCreateError(null);
     try {
+      const normalizedSlug = newSlug.trim().toLowerCase();
       const response = await fetch("/auth/api/repositories", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           namespaceSlug: primaryNamespaceSlug,
-          slug: newSlug.trim().toLowerCase(),
+          slug: normalizedSlug,
           visibility: newVisibility,
+          description: newDescription.trim(),
+          initializeReadme: normalizedSlug !== PROFILE_REPO_SLUG ? initReadme : false,
+          initializeProfileReadme: normalizedSlug === PROFILE_REPO_SLUG ? initProfileReadme : false,
         }),
       });
       const body = (await response.json().catch(() => null)) as CreateRepoResponse | null;
@@ -135,7 +154,7 @@ export function HomeReposIsland({
           reason === "slug-taken"
             ? "A repository with that slug already exists in this namespace."
             : reason === "invalid-slug"
-              ? "Use lowercase letters, digits, and internal dashes (1–40 chars)."
+              ? "Use lowercase letters, digits, hyphens/dots, or .vibtools (1–40 chars)."
               : `Could not create repository (${reason}).`
         );
         return;
@@ -148,6 +167,7 @@ export function HomeReposIsland({
             slug: body.slug,
             namespaceSlug: body.namespaceSlug,
             visibility: body.visibility,
+            description: body.description ?? "",
             updatedAt: body.updatedAt,
           },
         ].sort((a, b) =>
@@ -156,6 +176,8 @@ export function HomeReposIsland({
       );
       setActiveFeed("mine");
       setNewSlug("");
+      setNewDescription("");
+      setInitReadme(false);
       setShowCreate(false);
     } catch (error) {
       setCreateError(String(error));
@@ -276,18 +298,27 @@ export function HomeReposIsland({
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="flex-1">
-              <label
-                htmlFor="home-new-repo-slug"
-                className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
-              >
-                Repository name ({primaryNamespaceSlug}/<span className="font-mono">slug</span>)
-              </label>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label
+                  htmlFor="home-new-repo-slug"
+                  className="block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Repository name ({primaryNamespaceSlug}/<span className="font-mono">slug</span>)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setNewSlug(PROFILE_REPO_SLUG)}
+                  className="rounded border border-zinc-200 px-1.5 py-0.5 font-mono text-[10px] text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                >
+                  Use {PROFILE_REPO_SLUG}
+                </button>
+              </div>
               <input
                 id="home-new-repo-slug"
                 type="text"
                 value={newSlug}
                 onChange={(event) => setNewSlug(event.target.value)}
-                placeholder="edge-worker"
+                placeholder="edge-worker or .vibtools"
                 required
                 className="h-8 w-full rounded-md border border-zinc-300 bg-zinc-50 px-2.5 font-mono text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
               />
@@ -328,6 +359,40 @@ export function HomeReposIsland({
               </button>
             </div>
           </div>
+          <div className="mt-2.5 grid gap-2.5 sm:grid-cols-[1fr_auto] sm:items-center">
+            <input
+              type="text"
+              value={newDescription}
+              onChange={(event) => setNewDescription(event.target.value)}
+              maxLength={200}
+              placeholder="Optional description..."
+              aria-label="Repository description"
+              className="h-8 w-full rounded-md border border-zinc-300 bg-zinc-50 px-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+            />
+            {isProfileSlug ? (
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={initProfileReadme}
+                  onChange={(event) => setInitProfileReadme(event.target.checked)}
+                />
+                <span>
+                  Initialize <code className="font-mono">{PROFILE_README_PATH}</code>
+                </span>
+              </label>
+            ) : (
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={initReadme}
+                  onChange={(event) => setInitReadme(event.target.checked)}
+                />
+                <span>
+                  Initialize with <code className="font-mono">README.md</code>
+                </span>
+              </label>
+            )}
+          </div>
           {createError ? (
             <p className="m-0 mt-2 text-xs text-red-600 dark:text-red-400">{createError}</p>
           ) : null}
@@ -365,7 +430,7 @@ export function HomeReposIsland({
                   className="flex flex-col justify-between gap-2.5 px-4 py-3 transition-colors hover:bg-zinc-50/70 sm:flex-row sm:items-center dark:hover:bg-zinc-800/30"
                 >
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 font-mono text-sm font-medium">
                       {isPrivate ? (
                         <Lock
                           className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
@@ -377,16 +442,29 @@ export function HomeReposIsland({
                           aria-hidden="true"
                         />
                       )}
-                      <a
-                        href={`/${repo.namespaceSlug}/${repo.slug}`}
-                        className="truncate font-mono text-sm font-medium text-zinc-900 no-underline hover:text-accent-600 dark:text-zinc-100 dark:hover:text-accent-400"
-                      >
-                        <span className="text-zinc-500 dark:text-zinc-400">
-                          {repo.namespaceSlug}/
+                      <div className="flex min-w-0 items-center truncate">
+                        <a
+                          href={buildNamespaceProfileHref(repo.namespaceSlug)}
+                          className="text-zinc-500 no-underline hover:text-accent-600 dark:text-zinc-400 dark:hover:text-accent-400"
+                        >
+                          {repo.namespaceSlug}
+                        </a>
+                        <span className="mx-0.5 text-zinc-400" aria-hidden="true">
+                          /
                         </span>
-                        <span>{repo.slug}</span>
-                      </a>
+                        <a
+                          href={`/${repo.namespaceSlug}/${repo.slug}`}
+                          className="truncate text-zinc-900 no-underline hover:text-accent-600 dark:text-zinc-100 dark:hover:text-accent-400"
+                        >
+                          {repo.slug}
+                        </a>
+                      </div>
                     </div>
+                    {repo.description ? (
+                      <p className="m-0 mt-1 line-clamp-1 text-xs text-zinc-600 dark:text-zinc-300">
+                        {repo.description}
+                      </p>
+                    ) : null}
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
                       <span className="capitalize">{repo.visibility}</span>
                       <span aria-hidden="true">·</span>
@@ -523,7 +601,7 @@ export function HomeReposIsland({
               {namespaces.map((ns) => (
                 <a
                   key={ns.id}
-                  href={`/${ns.slug}`}
+                  href={buildNamespaceProfileHref(ns.slug)}
                   className="inline-flex items-center rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 font-mono text-xs text-zinc-700 no-underline hover:border-accent-500/40 hover:text-accent-600 dark:border-zinc-700 dark:bg-zinc-950/60 dark:text-zinc-300 dark:hover:text-accent-400"
                 >
                   @{ns.slug}

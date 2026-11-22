@@ -287,11 +287,11 @@ describe("D1 Sessions middleware", () => {
   });
 
   it("does not emit when the route never touches D1", async () => {
-    // Anonymous `GET /` calls `loadViewer` which short-circuits before
+    // Anonymous `GET /auth` calls `loadViewer` which short-circuits before
     // hitting D1 because there is no session cookie. The session opens
     // but no queries run and `getBookmark()` returns null.
     const probe = instrument();
-    const res = await workerExports.default.fetch("https://example.com/");
+    const res = await workerExports.default.fetch("https://example.com/auth");
     expect(res.status).toBe(200);
     expect(probe.anchors).toHaveLength(1);
     expect(probe.sessionPrepareCalls).toBe(0);

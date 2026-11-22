@@ -58,12 +58,12 @@ const views: Record<string, ViewDefinition> = {
   },
   owner: {
     kind: "document",
-    clientEntrypoints: [clientEntrypoints.shell],
+    clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.ownerPage],
     render: renderWithProps((props: OwnerPageProps) => <OwnerPage {...props} />),
   },
   overview: {
     kind: "document",
-    clientEntrypoints: [clientEntrypoints.shell],
+    clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.overviewPage],
     render: renderWithProps((props: OverviewPageProps) => <OverviewPage {...props} />),
   },
   tree: {

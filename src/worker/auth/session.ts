@@ -35,8 +35,7 @@ type SessionPayload = z.infer<typeof SessionPayloadSchema>;
 export type ActiveSession = { user: UserRow; payload: SessionPayload };
 
 export type SessionConfigResult =
-  | { ok: true; secret: string }
-  | { ok: false; reason: "missing_session_secret" };
+  { ok: true; secret: string } | { ok: false; reason: "missing_session_secret" };
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();

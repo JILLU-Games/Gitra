@@ -26,7 +26,6 @@ import {
   type DirectoryStatus,
 } from "@/shared/admin/panel";
 import { formatRelativeTime } from "@/shared/web";
-import { AdminSubNav } from "@/client/components/AdminSubNav";
 import { hydrateIsland } from "@/client/hydrate";
 import { RemoveUserModal } from "./RemoveUserModal";
 import type { AdminUsersIslandProps } from "./types";
@@ -102,9 +101,7 @@ export function AdminUsersIsland({
   }
 
   function handleUserUpdated(updated: AdminNamespaceEntry, issuedPassword?: string) {
-    setUsers((prev) =>
-      sortUsers(prev.map((item) => (item.id === updated.id ? updated : item)))
-    );
+    setUsers((prev) => sortUsers(prev.map((item) => (item.id === updated.id ? updated : item))));
     if (issuedPassword) {
       setIssuedCredentials({
         handle: updated.slug,
@@ -196,14 +193,8 @@ export function AdminUsersIsland({
         </button>
       </header>
 
-      {/* Admin sub-navigation (mobile) */}
-      <AdminSubNav active="users" counts={{ users: counts.total }} />
-
       {/* Compact Metrics Strip */}
-      <div
-        className="grid grid-cols-1 gap-3 sm:grid-cols-3"
-        aria-label="User directory metrics"
-      >
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3" aria-label="User directory metrics">
         <div className="rounded-lg border border-zinc-200 bg-white px-3.5 py-3 dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
             <span>Total Users</span>
@@ -240,7 +231,10 @@ export function AdminUsersIsland({
         <div className="rounded-lg border border-zinc-200 bg-white px-3.5 py-3 dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
             <span>Primary Admin</span>
-            <Shield className="h-3.5 w-3.5 text-accent-600 dark:text-accent-400" aria-hidden="true" />
+            <Shield
+              className="h-3.5 w-3.5 text-accent-600 dark:text-accent-400"
+              aria-hidden="true"
+            />
           </div>
           <div className="mt-1.5 flex items-baseline justify-between gap-2">
             <span className="truncate font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100">

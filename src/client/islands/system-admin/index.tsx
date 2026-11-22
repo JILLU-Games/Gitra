@@ -20,7 +20,6 @@ import {
   type AdminRepositoryEntry,
   type AdminTokenEntry,
 } from "@/shared/admin/panel";
-import { AdminSubNav } from "@/client/components/AdminSubNav";
 import { hydrateIsland } from "@/client/hydrate";
 import { RepositoriesSection } from "./RepositoriesSection";
 import { TokensSection } from "./TokensSection";
@@ -44,12 +43,6 @@ export function SystemAdminIsland({
     [repositories, namespaces, tokens]
   );
   const roleCounts = useMemo(() => computeUserRoleCounts(namespaces), [namespaces]);
-
-  const navCounts = {
-    users: metrics.totalNamespaces,
-    repositories: metrics.totalRepositories,
-    activeTokens: metrics.activeTokens,
-  };
 
   function handleTokenCreated(token: AdminTokenEntry) {
     setTokens((prev) => [token, ...prev]);
@@ -102,7 +95,7 @@ export function SystemAdminIsland({
               repositories.
             </p>
           </div>
-          <div className="flex items-center gap-2 font-mono text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap font-mono text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
             <span>{metrics.totalRepositories} total</span>
             <span>·</span>
             <span>{metrics.publicRepositories} public</span>
@@ -110,8 +103,6 @@ export function SystemAdminIsland({
             <span>{metrics.privateRepositories} private</span>
           </div>
         </header>
-
-        <AdminSubNav active="repositories" counts={navCounts} />
 
         <RepositoriesSection
           origin={origin}
@@ -138,14 +129,12 @@ export function SystemAdminIsland({
               Issue and revoke Personal Access Tokens for Git Smart HTTP clone, pull, and push.
             </p>
           </div>
-          <div className="flex items-center gap-2 font-mono text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap font-mono text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
             <span>{metrics.activeTokens} active</span>
             <span>·</span>
             <span>{metrics.totalTokens} total</span>
           </div>
         </header>
-
-        <AdminSubNav active="tokens" counts={navCounts} />
 
         <TokensSection
           namespaces={namespaces}
@@ -191,11 +180,9 @@ export function SystemAdminIsland({
         </div>
       </header>
 
-      <AdminSubNav active="overview" counts={navCounts} />
-
       {/* Compact KPI Strip */}
       <div
-        className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+        className="grid grid-cols-1 gap-3 md:grid-cols-3"
         aria-label="Workspace metrics overview"
       >
         <a
@@ -299,15 +286,9 @@ export function SystemAdminIsland({
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     {repo.visibility === "private" ? (
-                      <Lock
-                        className="h-3.5 w-3.5 shrink-0 text-amber-500"
-                        aria-hidden="true"
-                      />
+                      <Lock className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden="true" />
                     ) : (
-                      <Globe
-                        className="h-3.5 w-3.5 shrink-0 text-zinc-400"
-                        aria-hidden="true"
-                      />
+                      <Globe className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden="true" />
                     )}
                     <a
                       href={`/${repo.namespaceSlug}/${repo.slug}`}

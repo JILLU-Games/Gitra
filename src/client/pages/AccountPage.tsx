@@ -1,7 +1,7 @@
-import { ArrowUpRight, FolderGit2, KeyRound, Lock, Shield, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, FolderGit2, KeyRound, Lock, ShieldCheck } from "lucide-react";
 
 import {
-  canAccessAdminPanel,
+  buildNamespaceProfileHref,
   canWriteRepositories,
   type DirectoryRole,
 } from "@/shared/admin/panel";
@@ -11,6 +11,7 @@ import {
   type UserSettingsSection,
 } from "@/client/components/UserSettingsLayout";
 import { ChangePasswordIsland } from "@/client/islands/change-password";
+import { ProfileSettingsIsland } from "@/client/islands/profile-settings";
 import { RepositoriesIsland } from "@/client/islands/repositories";
 import { TokensIsland, type TokensIslandSummary } from "@/client/islands/tokens";
 import { IslandHost } from "@/client/server/IslandHost";
@@ -32,6 +33,9 @@ export type AccountPageProps = {
   userId: string;
   primaryNamespaceSlug?: string;
   displayName?: string;
+  bio?: string;
+  location?: string;
+  website?: string;
   viewerRole?: DirectoryRole;
   isPrimaryAdmin?: boolean;
   hasPassword?: boolean;
@@ -77,6 +81,9 @@ export function AccountPage({
   userId,
   primaryNamespaceSlug,
   displayName,
+  bio = "",
+  location = "",
+  website = "",
   viewerRole = "member",
   isPrimaryAdmin = false,
   hasPassword = false,
@@ -86,7 +93,6 @@ export function AccountPage({
   tokens,
 }: AccountPageProps) {
   const handle = primaryNamespaceSlug ? `@${primaryNamespaceSlug}` : "Identity not yet claimed";
-  const isAdmin = canAccessAdminPanel(viewerRole);
   const readOnly = !canWriteRepositories(viewerRole);
   const meta = SECTION_META[activeSection];
 
@@ -115,31 +121,22 @@ export function AccountPage({
             <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{meta.subtitle}</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            {primaryNamespaceSlug ? (
+          {primaryNamespaceSlug ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
               <a
-                href={`/${primaryNamespaceSlug}`}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 no-underline hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                href={buildNamespaceProfileHref(primaryNamespaceSlug)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium whitespace-nowrap text-zinc-700 no-underline hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >
-                <span>Public page</span>
+                <span>Public profile</span>
                 <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
               </a>
-            ) : null}
-            {isAdmin ? (
-              <a
-                href="/admin"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-500/35 bg-accent-500/10 px-2.5 text-xs font-medium text-accent-700 no-underline hover:bg-accent-500/15 dark:text-accent-300"
-              >
-                <Shield className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Site Administration</span>
-              </a>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </header>
 
         {/* Identity / Profile Summary Card */}
         {showProfileCard ? (
-          <section className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+          <section className="rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
             <div className="border-b border-zinc-200 px-4 py-2.5 text-xs font-semibold text-zinc-800 dark:border-zinc-800 dark:text-zinc-200">
               Identity
             </div>
@@ -158,7 +155,7 @@ export function AccountPage({
               </div>
               <div className="px-4 py-3 sm:border-r sm:border-zinc-200 dark:sm:border-zinc-800">
                 <dt className="text-zinc-500 dark:text-zinc-400">Role</dt>
-                <dd className="m-0 mt-1 font-mono text-xs font-medium text-zinc-800 dark:text-zinc-200">
+                <dd className="m-0 mt-1 text-xs font-medium capitalize text-zinc-800 dark:text-zinc-200">
                   {viewerRole}
                 </dd>
               </div>
@@ -175,36 +172,59 @@ export function AccountPage({
           </section>
         ) : null}
 
+        {/* Public Profile Editor (Display Name, Bio, Location, Website) */}
+        {primaryNamespaceSlug &&
+        (activeSection === "profile" || activeSection === "settings" || activeSection === "all") ? (
+          <IslandHost
+            name="profile-settings"
+            props={{
+              namespaceSlug: primaryNamespaceSlug,
+              initialDisplayName: displayName || "",
+              initialBio: bio,
+              initialLocation: location,
+              initialWebsite: website,
+            }}
+          >
+            <ProfileSettingsIsland
+              namespaceSlug={primaryNamespaceSlug}
+              initialDisplayName={displayName || ""}
+              initialBio={bio}
+              initialLocation={location}
+              initialWebsite={website}
+            />
+          </IslandHost>
+        ) : null}
+
         {/* Settings hub quick cards */}
         {showSettingsShortcuts ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <a
               href="/user/account"
-              className="block rounded-lg border border-zinc-200 bg-white p-3.5 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+              className="block rounded-md border border-zinc-200 bg-white p-3.5 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
             >
               <div className="flex items-center justify-between text-xs font-medium text-zinc-900 dark:text-zinc-100">
                 <span>Repositories</span>
                 <FolderGit2 className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
               </div>
-              <p className="m-0 mt-1 font-mono text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+              <p className="m-0 mt-1 text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
                 {repositories.length} owned
               </p>
             </a>
             <a
               href="/user/settings/tokens"
-              className="block rounded-lg border border-zinc-200 bg-white p-3.5 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+              className="block rounded-md border border-zinc-200 bg-white p-3.5 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
             >
               <div className="flex items-center justify-between text-xs font-medium text-zinc-900 dark:text-zinc-100">
                 <span>Access Tokens</span>
                 <KeyRound className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
               </div>
-              <p className="m-0 mt-1 font-mono text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+              <p className="m-0 mt-1 text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
                 {tokens.filter((t) => !t.revokedAt).length} active
               </p>
             </a>
             <a
               href="/user/settings/security"
-              className="block rounded-lg border border-zinc-200 bg-white p-3.5 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+              className="block rounded-md border border-zinc-200 bg-white p-3.5 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
             >
               <div className="flex items-center justify-between text-xs font-medium text-zinc-900 dark:text-zinc-100">
                 <span>Security</span>
@@ -238,7 +258,7 @@ export function AccountPage({
                 {namespaces.map((ns) => (
                   <a
                     key={ns.id}
-                    href={`/${ns.slug}`}
+                    href={buildNamespaceProfileHref(ns.slug)}
                     className="inline-flex items-center rounded-md border border-zinc-200 bg-white px-2.5 py-1 font-mono text-xs text-zinc-700 no-underline transition-colors hover:border-accent-500/40 hover:text-accent-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:text-accent-400"
                   >
                     @{ns.slug}

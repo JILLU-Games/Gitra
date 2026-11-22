@@ -22,6 +22,8 @@ type Breadcrumb = {
 export type TreePageProps = {
   owner: string;
   repo: string;
+  visibility?: "public" | "private";
+  canManageRepo?: boolean;
   refEnc: string;
   entries: TreeEntry[];
   breadcrumbs?: Breadcrumb[];
@@ -31,10 +33,10 @@ export type TreePageProps = {
 
 function getTreeEntryIconClass(entry: TreeEntry): string {
   if (entry.isDir) {
-    return "text-amber-600 dark:text-amber-400";
+    return "text-accent-600 dark:text-accent-400";
   }
   if (entry.isSymlink) {
-    return "text-accent-500 dark:text-accent-400";
+    return "text-zinc-500 dark:text-zinc-300";
   }
   return "text-zinc-500 dark:text-zinc-400";
 }
@@ -42,6 +44,8 @@ function getTreeEntryIconClass(entry: TreeEntry): string {
 export function TreePage({
   owner,
   repo,
+  visibility,
+  canManageRepo = false,
   refEnc,
   entries,
   breadcrumbs,
@@ -50,7 +54,14 @@ export function TreePage({
 }: TreePageProps) {
   return (
     <>
-      <RepoNav owner={owner} repo={repo} refEnc={refEnc} currentTab="browse" />
+      <RepoNav
+        owner={owner}
+        repo={repo}
+        refEnc={refEnc}
+        visibility={visibility}
+        currentTab="browse"
+        canManageRepo={canManageRepo}
+      />
       <ProgressBanner progress={progress} />
       <div>
         <span className="mb-1 inline-block text-xs font-semibold uppercase tracking-wider text-accent-500 dark:text-accent-400">
@@ -58,7 +69,7 @@ export function TreePage({
         </span>
         <h2 className="font-display tracking-tight">Tree</h2>
         <Breadcrumbs items={breadcrumbs} parentHref={parentHref} />
-        <table className="mt-4 overflow-hidden rounded-2xl border border-zinc-200 shadow-xs dark:border-zinc-800/60">
+        <table className="mt-4 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-800">
           <thead>
             <tr>
               <th>Name</th>
@@ -76,7 +87,9 @@ export function TreePage({
                     />{" "}
                     <a href={entry.href}>{entry.name}</a>
                   </td>
-                  <td className="text-zinc-500 dark:text-zinc-400">{entry.shortOid}</td>
+                  <td className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                    {entry.shortOid}
+                  </td>
                 </tr>
               ))
             ) : (

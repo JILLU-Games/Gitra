@@ -22,6 +22,8 @@ type PagerModel = {
 export type CommitsPageProps = {
   owner: string;
   repo: string;
+  visibility?: "public" | "private";
+  canManageRepo?: boolean;
   ref: string;
   refEnc: string;
   commits: CommitView[];
@@ -32,6 +34,8 @@ export type CommitsPageProps = {
 export function CommitsPage({
   owner,
   repo,
+  visibility,
+  canManageRepo = false,
   ref,
   refEnc,
   commits,
@@ -50,7 +54,14 @@ export function CommitsPage({
 
   return (
     <div>
-      <RepoNav owner={owner} repo={repo} refEnc={refEnc} currentTab="commits" />
+      <RepoNav
+        owner={owner}
+        repo={repo}
+        refEnc={refEnc}
+        visibility={visibility}
+        currentTab="commits"
+        canManageRepo={canManageRepo}
+      />
       <ProgressBanner progress={progress} />
       <span className="mb-1 inline-block text-xs font-semibold uppercase tracking-wider text-accent-500 dark:text-accent-400">
         History

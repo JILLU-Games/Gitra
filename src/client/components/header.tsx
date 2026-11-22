@@ -16,15 +16,15 @@ export function Header({ currentView, viewer }: HeaderProps) {
   const isExploreActive = currentView === "explore";
 
   return (
-    <header className="sticky top-0 z-50 h-12 w-full shrink-0 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between gap-6 px-4 sm:px-6">
-        {/* Left Zone: Brand + concise single-line Gitea-style links */}
+    <header className="sticky top-0 z-50 h-12 w-full shrink-0 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between gap-4 px-3 sm:gap-6 sm:px-5 lg:px-6">
+        {/* Left Zone: Brand + concise single-line links */}
         <div className="flex min-w-0 items-center gap-6">
           <a
             href="/"
-            className="flex shrink-0 items-center gap-2 text-sm font-semibold whitespace-nowrap text-zinc-900 no-underline hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-zinc-200"
+            className="flex shrink-0 items-center gap-2 text-sm font-semibold whitespace-nowrap text-zinc-950 no-underline transition-colors hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-white"
           >
-            <span className="inline-grid h-7 w-7 shrink-0 place-items-center rounded-md border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950/60">
+            <span className="inline-grid h-7 w-7 shrink-0 place-items-center rounded-md border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
               <GitBranch
                 className="h-4 w-4 text-accent-600 dark:text-accent-400"
                 strokeWidth={2}
@@ -40,10 +40,10 @@ export function Header({ currentView, viewer }: HeaderProps) {
                 <a
                   href="/"
                   aria-current={isHomeActive ? "page" : undefined}
-                  className={`text-xs font-medium whitespace-nowrap no-underline transition-colors ${
+                  className={`text-[13px] font-medium whitespace-nowrap no-underline transition-colors ${
                     isHomeActive
                       ? "text-zinc-950 dark:text-white"
-                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      : "text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100"
                   }`}
                 >
                   Repositories
@@ -51,10 +51,10 @@ export function Header({ currentView, viewer }: HeaderProps) {
                 <a
                   href="/explore"
                   aria-current={isExploreActive ? "page" : undefined}
-                  className={`text-xs font-medium whitespace-nowrap no-underline transition-colors ${
+                  className={`text-[13px] font-medium whitespace-nowrap no-underline transition-colors ${
                     isExploreActive
                       ? "text-zinc-950 dark:text-white"
-                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      : "text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100"
                   }`}
                 >
                   Explore
@@ -64,10 +64,10 @@ export function Header({ currentView, viewer }: HeaderProps) {
               <a
                 href="/explore"
                 aria-current={isExploreActive || isHomeActive ? "page" : undefined}
-                className={`text-xs font-medium whitespace-nowrap no-underline transition-colors ${
+                className={`text-[13px] font-medium whitespace-nowrap no-underline transition-colors ${
                   isExploreActive || isHomeActive
                     ? "text-zinc-950 dark:text-white"
-                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    : "text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100"
                 }`}
               >
                 Explore

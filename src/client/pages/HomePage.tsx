@@ -31,7 +31,7 @@ export function HomePage({
     <div className="space-y-5">
       {/* Compact Branding Strip (shown on public homepage and Explore) */}
       {!signedIn ? (
-        <section className="flex flex-col justify-between gap-4 rounded-lg border border-zinc-200 bg-white px-5 py-4 sm:flex-row sm:items-center dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="flex flex-col justify-between gap-4 rounded-md border border-zinc-200 bg-white px-5 py-4 sm:flex-row sm:items-center dark:border-zinc-800 dark:bg-zinc-900">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <GitBranch

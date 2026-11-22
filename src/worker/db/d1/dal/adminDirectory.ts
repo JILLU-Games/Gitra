@@ -93,9 +93,7 @@ export async function ensureNamespaceDirectoryMetaTable(d1: D1Database): Promise
 
     // Fast-path when only password_hash is missing on an already upgraded table.
     if (hasViewerRole && hasDisplayName && hasLastActive && !hasPasswordHash) {
-      await d1
-        .prepare(`ALTER TABLE namespace_directory_meta ADD COLUMN password_hash text`)
-        .run();
+      await d1.prepare(`ALTER TABLE namespace_directory_meta ADD COLUMN password_hash text`).run();
       return;
     }
 
@@ -299,7 +297,11 @@ export async function findDirectoryAccountByUserId(
   userId: string
 ): Promise<DirectoryAuthAccount | null> {
   await ensureNamespaceDirectoryMetaTable(d1);
-  const nsRows = await db.select().from(namespaces).where(eq(namespaces.createdBy, userId)).limit(1);
+  const nsRows = await db
+    .select()
+    .from(namespaces)
+    .where(eq(namespaces.createdBy, userId))
+    .limit(1);
   const ns = nsRows[0];
   if (!ns) return null;
 
@@ -379,10 +381,7 @@ export async function updateNamespaceHandle(
 
   if (createdByUserId !== protectedUserId) {
     try {
-      await db
-        .update(users)
-        .set({ tesseraSub: newSubject })
-        .where(eq(users.id, createdByUserId));
+      await db.update(users).set({ tesseraSub: newSubject }).where(eq(users.id, createdByUserId));
     } catch {
       // Ignore subject collision if a user record with that subject already exists.
     }

@@ -309,18 +309,15 @@ describe("system admin panel & dedicated users management APIs", () => {
     const primaryAdmin = listed.users.find((u) => u.isPrimaryAdmin);
     expect(primaryAdmin).toBeTruthy();
 
-    const updatePrimaryName = await SELF.fetch(
-      `${ORIGIN}/admin/api/users/${primaryAdmin!.id}`,
-      {
-        method: "PATCH",
-        headers: {
-          Cookie: cookie,
-          Origin: ORIGIN,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ displayName: "Primary Admin" }),
-      }
-    );
+    const updatePrimaryName = await SELF.fetch(`${ORIGIN}/admin/api/users/${primaryAdmin!.id}`, {
+      method: "PATCH",
+      headers: {
+        Cookie: cookie,
+        Origin: ORIGIN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ displayName: "Primary Admin" }),
+    });
     expect(updatePrimaryName.status).toBe(200);
 
     const blockDisableRes = await SELF.fetch(`${ORIGIN}/admin/api/users/${primaryAdmin!.id}`, {
@@ -384,32 +381,26 @@ describe("system admin panel & dedicated users management APIs", () => {
     expect(createRepoRes.status).toBe(200);
     const createdRepo = (await createRepoRes.json()) as { ok: true; id: string };
 
-    const badConfirmRes = await SELF.fetch(
-      `${ORIGIN}/admin/api/repositories/${createdRepo.id}`,
-      {
-        method: "DELETE",
-        headers: {
-          Cookie: cookie,
-          Origin: ORIGIN,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ confirm: "wrong/slug" }),
-      }
-    );
+    const badConfirmRes = await SELF.fetch(`${ORIGIN}/admin/api/repositories/${createdRepo.id}`, {
+      method: "DELETE",
+      headers: {
+        Cookie: cookie,
+        Origin: ORIGIN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ confirm: "wrong/slug" }),
+    });
     expect(badConfirmRes.status).toBe(400);
 
-    const deleteRes = await SELF.fetch(
-      `${ORIGIN}/admin/api/repositories/${createdRepo.id}`,
-      {
-        method: "DELETE",
-        headers: {
-          Cookie: cookie,
-          Origin: ORIGIN,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ confirm: "admin/temp-cleanup" }),
-      }
-    );
+    const deleteRes = await SELF.fetch(`${ORIGIN}/admin/api/repositories/${createdRepo.id}`, {
+      method: "DELETE",
+      headers: {
+        Cookie: cookie,
+        Origin: ORIGIN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ confirm: "admin/temp-cleanup" }),
+    });
     expect(deleteRes.status).toBe(200);
 
     const overviewRes = await SELF.fetch(`${ORIGIN}/admin/api/overview`, {

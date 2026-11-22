@@ -9,7 +9,14 @@ import {
 import { isValidPath, formatWhen, OID_RE } from "@/shared/web";
 import { handleError } from "@/client/server/error";
 import { buildCacheKeyFrom, cacheOrLoadJSONForRequestWithTTL } from "@/worker/cache";
-import { badRequest, isRequestPrivate, loadUiRepoActivity, resolveUiRepoAccess } from "./helpers";
+import {
+  badRequest,
+  canViewerManageRepo,
+  isRequestPrivate,
+  loadUiRepoActivity,
+  markRequestPrivate,
+  resolveUiRepoAccess,
+} from "./helpers";
 import { isValidRef } from "@/shared/web";
 import type { AppContext } from "../hono";
 import { renderUiDocumentResponse } from "../uiResponse";
@@ -21,6 +28,10 @@ export async function handleCommits(c: AppContext<"/:owner/:repo/commits">) {
   const access = await resolveUiRepoAccess(c, owner, repo);
   if (access.kind === "response") return access.response;
   const { route, cacheCtx } = access;
+  const canManageRepo = canViewerManageRepo(access);
+  if (canManageRepo) {
+    markRequestPrivate(cacheCtx);
+  }
   const repoId = route.doName;
   const isPrivate = isRequestPrivate(cacheCtx);
   const u = new URL(c.req.url);
@@ -104,6 +115,8 @@ export async function handleCommits(c: AppContext<"/:owner/:repo/commits">) {
         title: `Commits on ${ref} · ${owner}/${repo}`,
         owner,
         repo,
+        visibility: route.visibility,
+        canManageRepo,
         ref,
         refEnc,
         commits: list,
@@ -245,6 +258,10 @@ export async function handleCommit(c: AppContext<"/:owner/:repo/commit/:oid">) {
   const access = await resolveUiRepoAccess(c, owner, repo);
   if (access.kind === "response") return access.response;
   const { route, cacheCtx } = access;
+  const canManageRepo = canViewerManageRepo(access);
+  if (canManageRepo) {
+    markRequestPrivate(cacheCtx);
+  }
   const isPrivate = isRequestPrivate(cacheCtx);
   if (!OID_RE.test(oid)) {
     return badRequest(env, "Invalid commit OID", "Commit id must be 40-hex", {
@@ -281,6 +298,8 @@ export async function handleCommit(c: AppContext<"/:owner/:repo/commit/:oid">) {
         title: `${commit.oid.slice(0, 7)} · ${owner}/${repo}`,
         owner,
         repo,
+        visibility: route.visibility,
+        canManageRepo,
         commitOid: commit.oid,
         refEnc: encodeURIComponent(commit.oid),
         progress,

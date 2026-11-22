@@ -9,16 +9,15 @@ type CardProps = {
   className?: string;
 } & Omit<ComponentProps<"div">, "children" | "className">;
 
-const base = "rounded-lg p-4 sm:p-5";
+const base = "rounded-md p-4";
 
 const variantStyles: Record<CardVariant, string> = {
-  default:
-    "border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60",
-  accent:
-    "border border-accent-500/30 bg-white dark:bg-zinc-900/70",
+  default: "border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900",
+  accent: "border border-accent-500/35 bg-white dark:bg-zinc-900",
 };
 
-const interactiveStyles = "hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors cursor-pointer";
+const interactiveStyles =
+  "hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors cursor-pointer";
 
 export function Card({
   variant = "default",

@@ -66,8 +66,7 @@ export type AdminUserRoleCounts = {
 };
 
 export type PasswordValidationResult =
-  | { ok: true; password: string }
-  | { ok: false; reason: "too-short" | "too-long" };
+  { ok: true; password: string } | { ok: false; reason: "too-short" | "too-long" };
 
 export const DISPLAY_NAME_MAX_LENGTH = 80;
 export const PASSWORD_MIN_LENGTH = 8;
@@ -180,6 +179,126 @@ export function buildGitCloneUrl(origin: string, namespaceSlug: string, repoSlug
 }
 
 /**
+ * Resolves the public profile URL for a namespace. Because `/admin` hosts Site
+ * Administration, the `admin` namespace uses `/profile/admin` while all other
+ * namespaces use their top-level `/:owner` path.
+ */
+export function buildNamespaceProfileHref(namespaceSlug: string): string {
+  return namespaceSlug === "admin" ? "/profile/admin" : `/${encodeURIComponent(namespaceSlug)}`;
+}
+
+/**
+ * Generates a starter `profile/README.md` template modeled after GitHub Org
+ * `.github/profile/README.md` files for `.vibtools` repositories.
+ */
+export function buildDefaultProfileReadmeTemplate(
+  namespaceSlug: string,
+  displayName?: string
+): string {
+  const heading =
+    displayName && displayName.trim().length > 0 ? displayName.trim() : `@${namespaceSlug}`;
+  return [
+    `# ${heading}`,
+    "",
+    `Welcome to **@${namespaceSlug}** — building and hosting projects on \`git-on-cloudflare\`.`,
+    "",
+    "## Highlights",
+    "",
+    "- **Core stack:** Cloudflare Workers, Durable Objects, R2 packs, and D1 metadata",
+    "- **Repositories:** Browse public repositories below or clone directly over HTTPS",
+    "",
+    "## Getting Started",
+    "",
+    "```bash",
+    `git clone https://example.com/${namespaceSlug}/<repo>.git`,
+    "```",
+    "",
+  ].join("\n");
+}
+
+export const REPO_DESCRIPTION_MAX_LENGTH = 200;
+export const PROFILE_BIO_MAX_LENGTH = 200;
+export const PROFILE_LOCATION_MAX_LENGTH = 60;
+export const PROFILE_WEBSITE_MAX_LENGTH = 160;
+
+function normalizeSingleLineText(raw: string, maxLen: number): string {
+  return raw
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLen);
+}
+
+export function sanitizeRepoDescription(raw: string): string {
+  return normalizeSingleLineText(raw, REPO_DESCRIPTION_MAX_LENGTH);
+}
+
+export function sanitizeProfileBio(raw: string): string {
+  return normalizeSingleLineText(raw, PROFILE_BIO_MAX_LENGTH);
+}
+
+export function sanitizeProfileLocation(raw: string): string {
+  return normalizeSingleLineText(raw, PROFILE_LOCATION_MAX_LENGTH);
+}
+
+/**
+ * Sanitizes an optional profile website URL, accepting only http/https schemes.
+ */
+export function sanitizeProfileWebsite(raw: string): string {
+  const trimmed = normalizeSingleLineText(raw, PROFILE_WEBSITE_MAX_LENGTH);
+  if (!trimmed) return "";
+  if (
+    /^(javascript|data|vbscript|file|mailto|tel):/i.test(trimmed) ||
+    (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) && !/^https?:\/\//i.test(trimmed))
+  ) {
+    return "";
+  }
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return "";
+    }
+    if (!parsed.hostname || !parsed.hostname.includes(".")) {
+      return "";
+    }
+    return parsed.toString().replace(/\/$/, "") === parsed.origin
+      ? parsed.origin
+      : parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Generates a starter `README.md` when creating a regular repository with
+ * "Initialize with README.md" enabled.
+ */
+export function buildDefaultRepoReadmeTemplate(
+  namespaceSlug: string,
+  repoSlug: string,
+  description?: string
+): string {
+  const cleanDesc = description ? sanitizeRepoDescription(description) : "";
+  const lines = [`# ${repoSlug}`, ""];
+  if (cleanDesc) {
+    lines.push(cleanDesc, "");
+  } else {
+    lines.push(`Repository hosted under \`@${namespaceSlug}\`.`, "");
+  }
+  lines.push(
+    "## Getting Started",
+    "",
+    "```bash",
+    `# Clone this repository`,
+    `git clone <clone-url>`,
+    "```",
+    ""
+  );
+  return lines.join("\n");
+}
+
+/**
  * Maps compact admin UI scope choices (`read` / `read-write`) to the D1 PAT
  * grant level (`pull` / `push`).
  */
@@ -199,10 +318,7 @@ export function formatPatScopeLabel(level: PatGrantLevel): AdminTokenScope {
  * - The currently signed-in primary admin cannot be disabled, demoted, or removed.
  * - Any non-primary user entry can be edited, toggled, or removed with confirmation.
  */
-export function canToggleNamespaceStatus(entry: {
-  id: string;
-  isPrimaryAdmin: boolean;
-}): boolean {
+export function canToggleNamespaceStatus(entry: { id: string; isPrimaryAdmin: boolean }): boolean {
   return !entry.isPrimaryAdmin;
 }
 

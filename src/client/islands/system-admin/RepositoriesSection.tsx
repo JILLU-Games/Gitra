@@ -19,6 +19,7 @@ import {
   type AdminNamespaceEntry,
   type AdminRepositoryEntry,
 } from "@/shared/admin/panel";
+import { PROFILE_REPO_SLUG } from "@/shared/slugs";
 
 type RepositoriesSectionProps = {
   origin: string;
@@ -42,8 +43,7 @@ type CreateRepoResponse =
   | { ok: false; reason: string };
 
 type ToggleVisibilityResponse =
-  | { ok: true; id: string; visibility: "public" | "private" }
-  | { ok: false; reason: string };
+  { ok: true; id: string; visibility: "public" | "private" } | { ok: false; reason: string };
 
 type DeleteRepoResponse = { ok: true; id: string } | { ok: false; reason: string };
 
@@ -89,14 +89,16 @@ export function RepositoriesSection({
     setError(null);
     const chosenNs = namespaceSlug || defaultNs;
     try {
+      const normalizedSlug = slug.trim().toLowerCase();
       const response = await fetch("/auth/api/repositories", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           namespaceSlug: chosenNs,
-          slug: slug.trim().toLowerCase(),
+          slug: normalizedSlug,
           visibility,
+          initializeProfileReadme: normalizedSlug === PROFILE_REPO_SLUG,
         }),
       });
       const body = (await response.json().catch(() => null)) as CreateRepoResponse | null;
@@ -106,7 +108,7 @@ export function RepositoriesSection({
           reason === "slug-taken"
             ? "A repository with that slug already exists."
             : reason === "invalid-slug"
-              ? "Use lowercase letters, digits, and internal dashes (1–40 chars)."
+              ? "Use lowercase letters, digits, hyphens/dots, or .vibtools (1–40 chars)."
               : `Could not create repository (${reason}).`
         );
         return;
@@ -232,8 +234,8 @@ export function RepositoriesSection({
           onSubmit={(event) => void handleCreate(event)}
           className="border-b border-zinc-200 bg-zinc-50/70 px-3.5 py-3 dark:border-zinc-800 dark:bg-zinc-950/40"
         >
-          <div className="grid gap-2.5 sm:grid-cols-12 sm:items-end">
-            <div className="sm:col-span-3">
+          <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-12 md:items-end">
+            <div className="md:col-span-3">
               <label
                 htmlFor="admin-repo-ns"
                 className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
@@ -257,7 +259,7 @@ export function RepositoriesSection({
                 )}
               </select>
             </div>
-            <div className="sm:col-span-5">
+            <div className="md:col-span-4">
               <label
                 htmlFor="admin-repo-slug"
                 className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
@@ -269,12 +271,12 @@ export function RepositoriesSection({
                 type="text"
                 value={slug}
                 onChange={(event) => setSlug(event.target.value)}
-                placeholder="service-api"
+                placeholder="service-api or .vibtools"
                 required
                 className="h-8 w-full rounded-md border border-zinc-300 bg-white px-2.5 font-mono text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
               />
             </div>
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 md:col-span-2">
               <label
                 htmlFor="admin-repo-vis"
                 className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
@@ -293,7 +295,7 @@ export function RepositoriesSection({
                 <option value="private">private</option>
               </select>
             </div>
-            <div className="flex items-center gap-1.5 sm:col-span-2 sm:justify-end">
+            <div className="flex items-center gap-1.5 sm:col-span-2 md:col-span-3 md:justify-end">
               <button
                 type="submit"
                 disabled={creating || !slug.trim()}
@@ -363,7 +365,10 @@ export function RepositoriesSection({
                         href={`/${repo.namespaceSlug}/${repo.slug}`}
                         className="inline-flex items-center gap-1.5 font-mono text-xs font-medium text-zinc-900 no-underline hover:text-accent-600 dark:text-zinc-100 dark:hover:text-accent-400"
                       >
-                        <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden="true" />
+                        <FolderGit2
+                          className="h-3.5 w-3.5 shrink-0 text-zinc-400"
+                          aria-hidden="true"
+                        />
                         <span>
                           {repo.namespaceSlug}/{repo.slug}
                         </span>

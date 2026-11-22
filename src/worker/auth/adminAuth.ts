@@ -15,6 +15,9 @@ import { validateSlugForRoute } from "@/shared/slugs";
 
 export const DEFAULT_DEMO_ADMIN_USERNAME = "admin";
 export const DEFAULT_DEMO_ADMIN_PASSWORD = "admin123";
+export const DEFAULT_DEMO_USER_USERNAME = "alex-dev";
+export const DEFAULT_DEMO_USER_PASSWORD = "devuser123";
+export const DEFAULT_DEMO_USER_DISPLAY_NAME = "Alex Rivera";
 export const DEFAULT_POST_LOGIN_REDIRECT = "/";
 
 export type AdminAuthEnv = {

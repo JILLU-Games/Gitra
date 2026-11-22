@@ -69,7 +69,9 @@ function SidebarNavGroup({
             >
               <Icon
                 className={`h-4 w-4 shrink-0 ${
-                  active ? "text-accent-600 dark:text-accent-400" : "text-zinc-500 dark:text-zinc-400"
+                  active
+                    ? "text-accent-600 dark:text-accent-400"
+                    : "text-zinc-500 dark:text-zinc-400"
                 }`}
                 aria-hidden="true"
               />
@@ -174,7 +176,10 @@ export function Sidebar({ currentView, viewer }: SidebarProps) {
               href="/"
               className="flex items-center gap-2 text-sm font-semibold text-zinc-900 no-underline dark:text-zinc-100"
             >
-              <GitBranch className="h-4 w-4 text-accent-600 dark:text-accent-400" aria-hidden="true" />
+              <GitBranch
+                className="h-4 w-4 text-accent-600 dark:text-accent-400"
+                aria-hidden="true"
+              />
               <span>git-on-cloudflare</span>
             </a>
             <button

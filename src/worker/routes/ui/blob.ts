@@ -1,3 +1,4 @@
+import { canWriteRepositories } from "@/shared/admin/panel";
 import { readPath } from "@/worker/git";
 import {
   isValidRef,
@@ -8,7 +9,13 @@ import {
   getHighlightLangsForBlobSmart,
 } from "@/shared/web";
 import { handleError } from "@/client/server/error";
-import { badRequest, isRequestPrivate, resolveUiRepoAccess } from "./helpers";
+import {
+  badRequest,
+  canViewerManageRepo,
+  isRequestPrivate,
+  markRequestPrivate,
+  resolveUiRepoAccess,
+} from "./helpers";
 import type { AppContext } from "../hono";
 import { renderUiDocumentResponse } from "../uiResponse";
 
@@ -19,8 +26,11 @@ export async function handleBlob(c: AppContext<"/:owner/:repo/blob">) {
   const access = await resolveUiRepoAccess(c, owner, repo);
   if (access.kind === "response") return access.response;
   const { route, cacheCtx } = access;
+  const canManageRepo = canViewerManageRepo(access);
+  if (canManageRepo) {
+    markRequestPrivate(cacheCtx);
+  }
   const repoId = route.doName;
-  const isPrivate = isRequestPrivate(cacheCtx);
   const u = new URL(c.req.url);
   const ref = u.searchParams.get("ref") || "main";
   const path = u.searchParams.get("path") || "";
@@ -74,6 +84,7 @@ export async function handleBlob(c: AppContext<"/:owner/:repo/blob">) {
 
     // Too large to render inline
     if (result.tooLarge) {
+      const isPrivate = isRequestPrivate(cacheCtx);
       const sizeStr = formatSize(result.size || 0);
       const viewRawHref = `/${owner}/${repo}/raw?oid=${encodeURIComponent(result.oid)}&view=1&name=${encodeURIComponent(fileName)}`;
       const rawHref = `/${owner}/${repo}/raw?oid=${encodeURIComponent(result.oid)}&download=1&name=${encodeURIComponent(fileName)}`;
@@ -84,9 +95,15 @@ export async function handleBlob(c: AppContext<"/:owner/:repo/blob">) {
           title: `${fileName} · ${owner}/${repo}`,
           owner,
           repo,
+          visibility: route.visibility,
+          canManageRepo,
+          repositoryId: route.repositoryId,
+          filePath: path,
+          refShort: ref,
           refEnc: encodeURIComponent(ref),
           fileName,
           tooLarge: true,
+          canEditFile: false,
           sizeStr,
           viewRawHref,
           rawHref,
@@ -103,6 +120,20 @@ export async function handleBlob(c: AppContext<"/:owner/:repo/blob">) {
 
     // Binary vs text
     const isBinary = detectBinary(result.content);
+    const isCommitSha = /^[0-9a-f]{40}$/i.test(ref);
+    const canEditFile = Boolean(
+      viewer &&
+      canWriteRepositories(viewer.role) &&
+      access.showActivityBanner &&
+      !isBinary &&
+      Boolean(path) &&
+      !isCommitSha
+    );
+    if (canEditFile) {
+      markRequestPrivate(cacheCtx);
+    }
+    const isPrivate = isRequestPrivate(cacheCtx);
+
     const size = result.content.byteLength;
     const viewRawHref = `/${owner}/${repo}/raw?oid=${encodeURIComponent(result.oid)}&view=1&name=${encodeURIComponent(fileName)}`;
     const rawHref = `/${owner}/${repo}/raw?oid=${encodeURIComponent(result.oid)}&download=1&name=${encodeURIComponent(fileName)}`;
@@ -110,8 +141,14 @@ export async function handleBlob(c: AppContext<"/:owner/:repo/blob">) {
       title: `${fileName} · ${owner}/${repo}`,
       owner,
       repo,
+      visibility: route.visibility,
+      canManageRepo,
+      repositoryId: route.repositoryId,
+      filePath: path,
+      refShort: ref,
       refEnc: encodeURIComponent(ref),
       fileName,
+      canEditFile,
       viewRawHref,
       breadcrumbs,
       parentHref,

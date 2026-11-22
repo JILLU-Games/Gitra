@@ -41,10 +41,7 @@ function describeChangePasswordError(reason?: string): string {
   }
 }
 
-export function ChangePasswordIsland({
-  isPrimaryAdmin,
-  hasPassword,
-}: ChangePasswordIslandProps) {
+export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePasswordIslandProps) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -55,7 +52,7 @@ export function ChangePasswordIsland({
 
   if (isPrimaryAdmin) {
     return (
-      <div className="flex items-start gap-2.5 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+      <div className="flex items-start gap-2.5 rounded-md border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
         <ShieldCheck
           className="mt-0.5 h-4 w-4 shrink-0 text-accent-600 dark:text-accent-400"
           aria-hidden="true"
@@ -66,14 +63,8 @@ export function ChangePasswordIsland({
           </p>
           <p className="m-0 mt-0.5 leading-relaxed">
             Primary admin sign-in uses <span className="font-mono">ADMIN_PASSWORD</span> (or Live
-            Preview demo credentials when unset). To manage passwords for other users, visit{" "}
-            <a
-              href="/admin/users"
-              className="font-medium text-accent-600 underline hover:text-accent-700 dark:text-accent-400 dark:hover:text-accent-300"
-            >
-              Admin → Users
-            </a>
-            .
+            Preview demo credentials when unset). Directory account passwords are managed inside
+            Site Administration.
           </p>
         </div>
       </div>
@@ -82,11 +73,11 @@ export function ChangePasswordIsland({
 
   if (!hasPassword) {
     return (
-      <div className="flex items-start gap-2.5 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+      <div className="flex items-start gap-2.5 rounded-md border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
         <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" aria-hidden="true" />
         <p className="m-0 leading-relaxed">
           No local password is set for this account yet. Ask an administrator to assign an initial
-          password in <span className="font-mono">/admin/users</span>.
+          password.
         </p>
       </div>
     );
@@ -153,7 +144,7 @@ export function ChangePasswordIsland({
   }
 
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="rounded-md border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       <form onSubmit={handleSubmit} className="space-y-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>

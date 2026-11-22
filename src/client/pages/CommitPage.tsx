@@ -27,6 +27,8 @@ type DiffSummary = {
 export type CommitPageProps = {
   owner: string;
   repo: string;
+  visibility?: "public" | "private";
+  canManageRepo?: boolean;
   commitOid: string;
   refEnc: string;
   commitShort: string;
@@ -47,6 +49,8 @@ export type CommitPageProps = {
 export function CommitPage({
   owner,
   repo,
+  visibility,
+  canManageRepo = false,
   commitOid,
   refEnc,
   commitShort,
@@ -65,7 +69,14 @@ export function CommitPage({
 }: CommitPageProps) {
   return (
     <div>
-      <RepoNav owner={owner} repo={repo} refEnc={refEnc} currentTab="commits" />
+      <RepoNav
+        owner={owner}
+        repo={repo}
+        refEnc={refEnc}
+        visibility={visibility}
+        currentTab="commits"
+        canManageRepo={canManageRepo}
+      />
       <span className="mb-1 inline-block text-xs font-semibold uppercase tracking-wider text-accent-500 dark:text-accent-400">
         Commit Detail
       </span>

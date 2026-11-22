@@ -52,6 +52,8 @@ export async function handleAdminPage(c: AppContext<"/:owner/:repo/admin">) {
       title: `Admin · ${owner}/${repo}`,
       owner,
       repo,
+      visibility: route.visibility,
+      canManageRepo: true,
       refEnc,
       head,
       refs,

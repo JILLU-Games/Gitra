@@ -1,4 +1,4 @@
-import { ArrowRight, LogIn } from "lucide-react";
+import { ArrowRight, LogIn, User } from "lucide-react";
 
 import { Button, Card, ErrorBanner, Input, PageHeader } from "@/client/components/ui";
 
@@ -7,6 +7,8 @@ export type AuthSignInPageProps = {
   demoMode?: boolean;
   demoUsername?: string;
   demoPassword?: string;
+  demoUserUsername?: string;
+  demoUserPassword?: string;
   nextPath?: string;
 };
 
@@ -28,6 +30,8 @@ export function AuthSignInPage({
   demoMode = true,
   demoUsername = "admin",
   demoPassword = "admin123",
+  demoUserUsername = "alex-dev",
+  demoUserPassword = "devuser123",
   nextPath,
 }: AuthSignInPageProps) {
   const errorText = describeError(errorCode);
@@ -36,10 +40,10 @@ export function AuthSignInPage({
     <div className="mx-auto max-w-md py-10 sm:py-14">
       <PageHeader className="!mb-5">
         <div>
-          <h1 className="m-0 font-display text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+          <h1 className="m-0 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
             Sign in
           </h1>
-          <p className="m-0 mt-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+          <p className="m-0 mt-1.5 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
             Sign in with your username or <span className="font-mono">@handle</span> and password to
             access repositories and account settings.
           </p>
@@ -83,20 +87,39 @@ export function AuthSignInPage({
         {demoMode ? (
           <>
             <div className="my-6 border-t border-zinc-200 dark:border-zinc-800/70" />
-            <div className="grid gap-3">
-              <form method="post" action="/auth/demo-login">
-                {nextPath ? <input type="hidden" name="next" value={nextPath} /> : null}
-                <Button type="submit" variant="secondary" size="md" className="w-full">
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                  Quick Demo Login
-                </Button>
-              </form>
-              <p className="m-0 flex items-center justify-between gap-3 text-xs text-zinc-500 dark:text-zinc-400">
-                <span>Live Preview credentials</span>
-                <span className="font-mono text-zinc-700 dark:text-zinc-300">
-                  {demoUsername} / {demoPassword}
-                </span>
-              </p>
+            <div className="grid gap-2.5">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <form method="post" action="/auth/demo-login">
+                  {nextPath ? <input type="hidden" name="next" value={nextPath} /> : null}
+                  <input type="hidden" name="account" value="admin" />
+                  <Button type="submit" variant="secondary" size="md" className="w-full">
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    Quick Demo Login
+                  </Button>
+                </form>
+                <form method="post" action="/auth/demo-login">
+                  <input type="hidden" name="next" value={nextPath ?? "/user/profile"} />
+                  <input type="hidden" name="account" value="user" />
+                  <Button type="submit" variant="secondary" size="md" className="w-full">
+                    <User className="h-4 w-4" aria-hidden="true" />
+                    Demo User Panel
+                  </Button>
+                </form>
+              </div>
+              <div className="space-y-1 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
+                <p className="m-0 flex items-center justify-between gap-3">
+                  <span>Admin demo account</span>
+                  <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                    {`${demoUsername} / ${demoPassword}`}
+                  </span>
+                </p>
+                <p className="m-0 flex items-center justify-between gap-3">
+                  <span>Test user (Users Panel)</span>
+                  <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                    {`${demoUserUsername} / ${demoUserPassword}`}
+                  </span>
+                </p>
+              </div>
             </div>
           </>
         ) : null}

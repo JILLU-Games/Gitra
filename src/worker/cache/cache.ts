@@ -157,6 +157,15 @@ export async function cachePutJSON(
   }
 }
 
+export async function cacheDeleteJSON(keyReq: Request): Promise<void> {
+  try {
+    const cache = await getZoneCache();
+    await cache.delete(keyReq);
+  } catch {
+    // best-effort only
+  }
+}
+
 /**
  * Build a cache key for a git object.
  * Git objects are content-addressable and immutable, so we can use long TTLs.

@@ -1,7 +1,6 @@
 import { ArrowRight, KeyRound, Lock, Shield, Users } from "lucide-react";
 
 import { AdminSettingsLayout, type AdminNavCounts } from "@/client/components/AdminSettingsLayout";
-import { AdminSubNav } from "@/client/components/AdminSubNav";
 
 export type AdminSettingsPageProps = {
   authMode: "demo" | "configured";
@@ -45,41 +44,50 @@ export function AdminSettingsPage({
           </p>
         </header>
 
-        <AdminSubNav active="settings" counts={counts} />
-
         {/* Instance & Auth Configuration */}
-        <section className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
           <div className="border-b border-zinc-200 px-4 py-2.5 text-xs font-semibold text-zinc-800 dark:border-zinc-800 dark:text-zinc-200">
             Instance &amp; Authentication
           </div>
           <dl className="m-0 divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
-            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center">
-              <dt className="text-zinc-500 dark:text-zinc-400">Server Origin</dt>
-              <dd className="m-0 font-mono text-zinc-900 dark:text-zinc-100">{origin}</dd>
+            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
+              <dt className="shrink-0 text-zinc-500 dark:text-zinc-400">Server Origin</dt>
+              <dd className="m-0 break-all font-mono text-zinc-900 sm:text-right dark:text-zinc-100">
+                {origin}
+              </dd>
             </div>
-            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center">
-              <dt className="text-zinc-500 dark:text-zinc-400">Primary Administrator</dt>
-              <dd className="m-0 font-mono font-medium text-zinc-900 dark:text-zinc-100">
+            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
+              <dt className="shrink-0 text-zinc-500 dark:text-zinc-400">Primary Administrator</dt>
+              <dd className="m-0 font-mono font-medium text-zinc-900 sm:text-right dark:text-zinc-100">
                 @{primaryAdminHandle}
               </dd>
             </div>
-            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center">
-              <dt className="text-zinc-500 dark:text-zinc-400">Admin Auth Mode</dt>
-              <dd className="m-0 font-mono text-zinc-900 dark:text-zinc-100">
-                {authMode === "configured"
-                  ? "Configured (ADMIN_PASSWORD set · Demo Login disabled)"
-                  : "Demo / Live Preview (ADMIN_PASSWORD unset · Quick Demo Login enabled)"}
+            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
+              <dt className="shrink-0 text-zinc-500 dark:text-zinc-400">Admin Auth Mode</dt>
+              <dd className="m-0 break-words text-zinc-900 sm:text-right dark:text-zinc-100">
+                {authMode === "configured" ? (
+                  <>
+                    Configured (<code className="font-mono">ADMIN_PASSWORD</code> set · Demo Login
+                    disabled)
+                  </>
+                ) : (
+                  <>
+                    Demo / Live Preview (<code className="font-mono">ADMIN_PASSWORD</code> unset ·
+                    Quick Demo Login enabled)
+                  </>
+                )}
               </dd>
             </div>
-            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center">
-              <dt className="text-zinc-500 dark:text-zinc-400">User Password Storage</dt>
-              <dd className="m-0 font-mono text-zinc-900 dark:text-zinc-100">
-                PBKDF2-SHA256 · 100,000 iterations · 16-byte random salt
+            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
+              <dt className="shrink-0 text-zinc-500 dark:text-zinc-400">User Password Storage</dt>
+              <dd className="m-0 break-words text-zinc-900 sm:text-right dark:text-zinc-100">
+                <code className="font-mono">PBKDF2-SHA256</code> · 100,000 iterations · 16-byte
+                random salt
               </dd>
             </div>
-            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center">
-              <dt className="text-zinc-500 dark:text-zinc-400">Git Smart HTTP v2 Auth</dt>
-              <dd className="m-0 text-zinc-800 dark:text-zinc-200">
+            <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
+              <dt className="shrink-0 text-zinc-500 dark:text-zinc-400">Git Smart HTTP v2 Auth</dt>
+              <dd className="m-0 break-words text-zinc-800 sm:text-right dark:text-zinc-200">
                 Public repos allow anonymous clone; private &amp; push require scoped PAT
               </dd>
             </div>
@@ -87,13 +95,13 @@ export function AdminSettingsPage({
         </section>
 
         {/* Directory & Repository Summary */}
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="rounded-md border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300">
               <span>User Directory</span>
               <Users className="h-4 w-4 text-zinc-400" aria-hidden="true" />
             </div>
-            <p className="m-0 mt-2 font-mono text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+            <p className="m-0 mt-2 text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
               {totalUsers}
             </p>
             <p className="m-0 mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -108,12 +116,12 @@ export function AdminSettingsPage({
             </a>
           </div>
 
-          <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="rounded-md border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-300">
               <span>Repositories</span>
               <Shield className="h-4 w-4 text-zinc-400" aria-hidden="true" />
             </div>
-            <p className="m-0 mt-2 font-mono text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+            <p className="m-0 mt-2 text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
               {totalRepositories}
             </p>
             <p className="m-0 mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -130,7 +138,7 @@ export function AdminSettingsPage({
         </section>
 
         {/* Security Guardrails */}
-        <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="rounded-md border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between gap-2">
             <h2 className="m-0 text-xs font-semibold text-zinc-800 dark:text-zinc-200">
               Active Security Policies

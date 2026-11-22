@@ -2,6 +2,8 @@ export const clientEntrypoints = {
   styles: "src/client/entries/styles.ts",
   shell: "src/client/entries/shell.ts",
   homePage: "src/client/entries/home-page.ts",
+  ownerPage: "src/client/entries/owner-page.ts",
+  overviewPage: "src/client/entries/overview-page.ts",
   treePage: "src/client/entries/tree-page.ts",
   blobPage: "src/client/entries/blob-page.ts",
   commitPage: "src/client/entries/commit-page.ts",

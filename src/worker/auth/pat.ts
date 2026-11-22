@@ -70,8 +70,7 @@ export function generatePatPlaintext(): GeneratedPat {
 }
 
 export type ParsePatResult =
-  | { ok: true; publicPrefix: string; secret: string }
-  | { ok: false; reason: "malformed" };
+  { ok: true; publicPrefix: string; secret: string } | { ok: false; reason: "malformed" };
 
 // Validate basic shape and split a plaintext into its public prefix + secret
 // segments. We never compare segments; the verifier hashes the full
@@ -96,8 +95,7 @@ export async function hashPatPlaintext(plaintext: string): Promise<string> {
 const PAT_NAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9 _-]{0,38}[A-Za-z0-9])?$/;
 
 export type PatNameValidation =
-  | { ok: true; name: string }
-  | { ok: false; reason: "format" | "length" };
+  { ok: true; name: string } | { ok: false; reason: "format" | "length" };
 
 export function validatePatName(input: string): PatNameValidation {
   if (typeof input !== "string") return { ok: false, reason: "format" };

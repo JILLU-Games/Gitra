@@ -161,8 +161,7 @@ export async function updatePatLastUsedAt(db: Db, patId: string, now: number): P
 }
 
 export type RevokePatResult =
-  | { ok: true }
-  | { ok: false; reason: "not-found" | "not-owner" | "already-revoked" };
+  { ok: true } | { ok: false; reason: "not-found" | "not-owner" | "already-revoked" };
 
 // Revoke a PAT but only when the caller owns it. Returning a tagged union
 // keeps the route handler in charge of HTTP status mapping (404 vs 403 vs

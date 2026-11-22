@@ -1,8 +1,14 @@
-import { canAccessAdminPanel, validateUserPassword } from "@/shared/admin/panel";
+import {
+  canAccessAdminPanel,
+  sanitizeDisplayName,
+  validateUserPassword,
+} from "@/shared/admin/panel";
 import { safeParseJsonRequest } from "@/shared/web";
 import {
   buildLocalAccountSubject,
   DEFAULT_DEMO_ADMIN_PASSWORD,
+  DEFAULT_DEMO_USER_PASSWORD,
+  DEFAULT_DEMO_USER_USERNAME,
   DEFAULT_POST_LOGIN_REDIRECT,
   deriveNamespaceSlugForAdmin,
   isDemoModeEnabled,
@@ -10,7 +16,7 @@ import {
   sanitizeNextRedirect,
   verifyAdminCredentials,
 } from "@/worker/auth/adminAuth";
-import { ensureDemoRepositoriesSeeded } from "@/worker/auth/demoSeed";
+import { ensureDemoRepositoriesSeeded, ensureDemoTestUserSeeded } from "@/worker/auth/demoSeed";
 import { sameOriginViolation } from "@/worker/auth/origin";
 import { hashPassword, verifyPassword } from "@/worker/auth/passwords";
 import {
@@ -27,14 +33,21 @@ import {
   findDirectoryAccountBySlug,
   findDirectoryAccountByUserId,
   findNamespaceBySlug,
+  findNamespaceDirectoryMeta,
   findUserBySubject,
   insertMembershipIfMissing,
   insertUserIfNew,
   touchDirectoryLastActive,
   updateDirectoryPasswordHash,
+  upsertNamespaceDirectoryMeta,
+  upsertNamespaceProfileMeta,
 } from "@/worker/db/d1/dal";
 import type { AppContext, AppRouter } from "./hono";
-import { AdminLoginRequestSchema, ChangePasswordRequestSchema } from "./requestSchemas";
+import {
+  AdminLoginRequestSchema,
+  ChangePasswordRequestSchema,
+  ProfileMetaUpdateRequestSchema,
+} from "./requestSchemas";
 import { safeRedirect } from "./authShared";
 import { renderUiDocumentResponse } from "./uiResponse";
 
@@ -50,6 +63,7 @@ async function readLoginPayload(c: AppContext): Promise<{
   username: string;
   password: string;
   next: string;
+  account?: string;
 }> {
   const contentType = c.req.header("content-type")?.toLowerCase() ?? "";
   if (contentType.includes("application/json")) {
@@ -182,6 +196,8 @@ export function registerAuthLoginRoutes(router: AppRouter) {
           demoMode,
           demoUsername: demoMode ? authConfig.username : undefined,
           demoPassword: demoMode ? DEFAULT_DEMO_ADMIN_PASSWORD : undefined,
+          demoUserUsername: demoMode ? DEFAULT_DEMO_USER_USERNAME : undefined,
+          demoUserPassword: demoMode ? DEFAULT_DEMO_USER_PASSWORD : undefined,
           nextPath: nextPath !== DEFAULT_POST_LOGIN_REDIRECT ? nextPath : undefined,
         },
         { failureBody: "Failed to render page\n", viewer: null }
@@ -228,6 +244,14 @@ export function registerAuthLoginRoutes(router: AppRouter) {
 
     // 2. Directory user account lookup by handle (`@slug` or `slug`)
     const normalizedHandle = body.username.trim().replace(/^@+/, "").toLowerCase();
+    if (normalizedHandle === DEFAULT_DEMO_USER_USERNAME && isDemoModeEnabled(c.env)) {
+      await ensureDemoTestUserSeeded({
+        env: c.env,
+        db: c.var.db,
+        limiter: c.var.limiter,
+        log,
+      });
+    }
     const account = normalizedHandle
       ? await findDirectoryAccountBySlug(c.env.DB, c.var.db, normalizedHandle)
       : null;
@@ -327,6 +351,73 @@ export function registerAuthLoginRoutes(router: AppRouter) {
     return json({ ok: true } as const);
   });
 
+  // PUT /auth/api/profile: allow signed-in users to edit their display name,
+  // bio, location, and website metadata on their primary namespace profile.
+  router.put(`/auth/api/profile`, async (c) => {
+    const log = c.var.logFor({ service: "UserProfile" });
+    const violation = sameOriginViolation(c);
+    if (violation) {
+      log.warn("profile:same-origin-violation");
+      return violation;
+    }
+
+    const viewer = await loadViewer(c);
+    if (!viewer) return json({ ok: false, reason: "unauthorized" } as const, 401);
+
+    if (!viewer.primaryNamespaceSlug) {
+      return json({ ok: false, reason: "namespace-not-found" } as const, 404);
+    }
+
+    const namespace = await findNamespaceBySlug(c.var.db, viewer.primaryNamespaceSlug);
+    if (!namespace) {
+      return json({ ok: false, reason: "namespace-not-found" } as const, 404);
+    }
+
+    const rawBody = await safeParseJsonRequest(c.req.raw);
+    const parsed = ProfileMetaUpdateRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return json({ ok: false, reason: "invalid-payload" } as const, 400);
+    }
+
+    const now = Date.now();
+    const existingMeta = await findNamespaceDirectoryMeta(c.env.DB, namespace.id);
+    const nextDisplayName = sanitizeDisplayName(
+      parsed.data.displayName ?? viewer.displayName ?? namespace.slug,
+      namespace.slug
+    );
+    const role = viewer.isPrimaryAdmin ? "admin" : (existingMeta?.role ?? viewer.role);
+    const status = viewer.isPrimaryAdmin ? "active" : (existingMeta?.status ?? "active");
+
+    await upsertNamespaceDirectoryMeta(c.env.DB, namespace.id, {
+      displayName: nextDisplayName,
+      role,
+      status,
+      lastActiveAt: existingMeta?.last_active_at ?? now,
+      now,
+    });
+
+    const profileMeta = await upsertNamespaceProfileMeta(c.env.DB, namespace.id, {
+      bio: parsed.data.bio,
+      location: parsed.data.location,
+      website: parsed.data.website,
+      now,
+    });
+
+    log.info("profile:updated", {
+      userId: viewer.userId,
+      namespaceId: namespace.id,
+      slug: namespace.slug,
+    });
+
+    return json({
+      ok: true,
+      displayName: nextDisplayName,
+      bio: profileMeta.bio,
+      location: profileMeta.location,
+      website: profileMeta.website,
+    } as const);
+  });
+
   // POST /auth/demo-login: one-click Live Preview / Mock Mode admin sign-in.
   // Automatically disabled whenever `ADMIN_PASSWORD` is configured in env.
   router.post(`/auth/demo-login`, async (c) => {
@@ -344,6 +435,38 @@ export function registerAuthLoginRoutes(router: AppRouter) {
 
     const body = await readLoginPayload(c);
     const nextPath = sanitizeNextRedirect(body.next);
+    const targetAccount = body.account === "user" ? "user" : "admin";
+
+    const testUser = await ensureDemoTestUserSeeded({
+      env: c.env,
+      db: c.var.db,
+      limiter: c.var.limiter,
+      log,
+    });
+
+    if (targetAccount === "user") {
+      const sessionConfig = loadSessionConfig(c.env);
+      if (!sessionConfig.ok) {
+        log.warn("auth:demo-user-session-config-missing", { reason: sessionConfig.reason });
+        return authErrorRedirect(c, "session_create_failed", nextPath);
+      }
+      const now = Date.now();
+      await touchDirectoryLastActive(c.env.DB, testUser.namespaceId, now);
+      try {
+        await createSessionForUser(c.env, c, testUser.userId, now);
+      } catch (error) {
+        log.error("auth:demo-user-session-create-failed", { error: String(error) });
+        return authErrorRedirect(c, "session_create_failed", nextPath);
+      }
+      const destination =
+        nextPath === "/admin" || nextPath.startsWith("/admin/") ? "/user/profile" : nextPath;
+      log.info("auth:demo-user-login-success", {
+        userId: testUser.userId,
+        namespaceSlug: testUser.namespaceSlug,
+      });
+      return safeRedirect(c, destination, 303);
+    }
+
     const config = resolveAdminAuthConfig(c.env);
 
     const sessionResult = await provisionAdminSession({

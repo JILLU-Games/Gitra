@@ -23,7 +23,7 @@ export function AppLayout({ children, currentView, viewer }: AppLayoutProps) {
         <Header currentView={currentView} viewer={viewer ?? null} />
         <main
           id="main-content"
-          className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 min-w-0"
+          className="mx-auto w-full max-w-6xl min-w-0 flex-1 px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6"
         >
           {children}
         </main>

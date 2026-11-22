@@ -192,7 +192,7 @@ export function RepositoriesIsland({
           ) : null}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-zinc-300 dark:border-zinc-800/60">
+        <div className="overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
           <table>
             <thead>
               <tr>
@@ -207,7 +207,7 @@ export function RepositoriesIsland({
                   <td>
                     <a
                       href={`/${repo.namespaceSlug}/${repo.slug}`}
-                      className="font-mono text-sm text-zinc-900 no-underline hover:text-accent-600 dark:text-zinc-100 dark:hover:text-accent-400"
+                      className="text-sm font-medium text-accent-600 no-underline hover:underline dark:text-accent-400"
                     >
                       {repo.namespaceSlug}/{repo.slug}
                     </a>
@@ -215,7 +215,7 @@ export function RepositoriesIsland({
                   <td>
                     {readOnly ? (
                       <span
-                        className={`inline-flex items-center gap-1 font-mono text-xs ${
+                        className={`inline-flex items-center gap-1 text-xs font-medium capitalize ${
                           repo.visibility === "private"
                             ? "text-amber-700 dark:text-amber-400"
                             : "text-emerald-700 dark:text-emerald-400"
@@ -284,7 +284,7 @@ export function RepositoriesIsland({
 function describeCreateReason(reason: Exclude<CreateResult, { ok: true }>["reason"]): string {
   switch (reason) {
     case "invalid-slug":
-      return "Slug must be lowercase letters, digits, and dashes (1-40 chars).";
+      return "Slug must be lowercase letters, digits, hyphens/dots, or .vibtools (1-40 chars).";
     case "invalid-visibility":
       return "Pick a visibility option.";
     case "namespace-not-found":
@@ -355,8 +355,8 @@ function CreateForm({ primaryNamespaceSlug, onCancel, onSubmit }: CreateFormProp
           type="text"
           value={slug}
           onChange={(event) => setSlug(event.target.value)}
-          placeholder="site"
-          helperText="Lowercase ASCII, dashes between letters/digits. 1-40 chars."
+          placeholder="site or .vibtools"
+          helperText="Lowercase ASCII, hyphens/dots, or .vibtools for namespace profile. 1-40 chars."
           required
         />
         <VisibilityTiles visibility={visibility} onChange={setVisibility} />
@@ -383,7 +383,7 @@ type VisibilityTilesProps = {
 // page reads as one cohesive control language.
 function VisibilityTiles({ visibility, onChange }: VisibilityTilesProps) {
   const tile =
-    "group relative flex cursor-pointer flex-col gap-1 rounded-xl border border-zinc-300 p-4 transition-colors hover:border-zinc-400 has-[:checked]:border-accent-500 has-[:checked]:bg-accent-500/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500/40 dark:border-zinc-800/60 dark:hover:border-zinc-700";
+    "group relative flex cursor-pointer flex-col gap-1 rounded-md border border-zinc-200 p-3.5 transition-colors hover:border-zinc-300 has-[:checked]:border-accent-500 has-[:checked]:bg-accent-500/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500/40 dark:border-zinc-800 dark:hover:border-zinc-700";
   return (
     <fieldset className="m-0 grid gap-3 border-0 p-0 sm:grid-cols-2">
       <legend className="sr-only">Visibility</legend>
@@ -396,11 +396,11 @@ function VisibilityTiles({ visibility, onChange }: VisibilityTilesProps) {
           checked={visibility === "private"}
           onChange={() => onChange("private")}
         />
-        <span className="flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-zinc-700 group-has-[:checked]:text-accent-600 dark:text-zinc-300 dark:group-has-[:checked]:text-accent-400">
-          <Lock className="h-3 w-3" aria-hidden="true" />
+        <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800 group-has-[:checked]:text-accent-600 dark:text-zinc-200 dark:group-has-[:checked]:text-accent-400">
+          <Lock className="h-3.5 w-3.5" aria-hidden="true" />
           Private
         </span>
-        <span className="text-sm text-zinc-600 dark:text-zinc-400">
+        <span className="text-xs text-zinc-600 dark:text-zinc-400">
           Only namespace members can read.
         </span>
       </label>
@@ -413,11 +413,11 @@ function VisibilityTiles({ visibility, onChange }: VisibilityTilesProps) {
           checked={visibility === "public"}
           onChange={() => onChange("public")}
         />
-        <span className="flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-widest text-zinc-700 group-has-[:checked]:text-accent-600 dark:text-zinc-300 dark:group-has-[:checked]:text-accent-400">
-          <Globe className="h-3 w-3" aria-hidden="true" />
+        <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800 group-has-[:checked]:text-accent-600 dark:text-zinc-200 dark:group-has-[:checked]:text-accent-400">
+          <Globe className="h-3.5 w-3.5" aria-hidden="true" />
           Public
         </span>
-        <span className="text-sm text-zinc-600 dark:text-zinc-400">Anyone can read.</span>
+        <span className="text-xs text-zinc-600 dark:text-zinc-400">Anyone can read.</span>
       </label>
     </fieldset>
   );

@@ -1,5 +1,6 @@
 import { readBlobStream, readPath } from "@/worker/git";
-import { isValidRef, isValidPath, OID_RE, getContentTypeFromName } from "@/shared/web";
+import { getErrorMessage, isGitReadMissError, resolveErrorStatus } from "@/client/server/error";
+import { isValidRef, isValidPath, OID_RE, getContentTypeFromName, isHttpError } from "@/shared/web";
 import { isRequestPrivate, resolveUiRepoAccess } from "./helpers";
 import type { AppContext } from "../hono";
 
@@ -60,21 +61,20 @@ export async function handleRawPath(c: AppContext<"/:owner/:repo/rawpath">) {
   }
 
   // Basic hotlink protection: require same-origin Referer
-  try {
-    const referer = c.req.raw.headers.get("referer") || "";
-    const allowed = (() => {
-      try {
-        const r = new URL(referer);
-        return r.host === url.host;
-      } catch {
-        return false;
-      }
-    })();
-    if (!allowed) {
-      return new Response("Hotlinking not allowed\n", { status: 403 });
+  const referer = c.req.raw.headers.get("referer") || "";
+  let allowedReferer = false;
+  if (referer) {
+    try {
+      allowedReferer = new URL(referer).host === url.host;
+    } catch {
+      allowedReferer = false;
     }
-  } catch {}
+  }
+  if (!allowedReferer) {
+    return new Response("Hotlinking not allowed\n", { status: 403 });
+  }
 
+  const rawLog = c.var.logFor({ service: "RawUi", repoId: route.doName });
   try {
     const repoId = route.doName;
     const result = await readPath(env, repoId, ref, path, cacheCtx);
@@ -88,7 +88,18 @@ export async function handleRawPath(c: AppContext<"/:owner/:repo/rawpath">) {
     if (download) headers.set("Content-Disposition", `attachment; filename="${name}"`);
     else headers.set("Content-Disposition", `inline; filename="${name}"`);
     return new Response(streamResponse.body, { status: streamResponse.status, headers });
-  } catch {
-    return new Response("Not found\n", { status: 404 });
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    if (isGitReadMissError(error)) {
+      rawLog.debug("rawpath:read-miss", { ref, path });
+      return new Response("Not found\n", { status: 404 });
+    }
+    if (isHttpError(error)) {
+      rawLog.warn("rawpath:http-error", { status: error.status, ref, path, error: errorMessage });
+      return new Response(error.expose ? `${errorMessage}\n` : "Error\n", { status: error.status });
+    }
+    const status = resolveErrorStatus(error);
+    rawLog.warn("rawpath:read-failed", { status, ref, path, error: errorMessage });
+    return new Response(status === 404 ? "Not found\n" : "Internal Server Error\n", { status });
   }
 }

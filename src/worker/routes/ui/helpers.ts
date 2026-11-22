@@ -1,12 +1,19 @@
 import type { CacheContext } from "@/worker/cache";
 import type { DebugPackState, DebugStateSnapshot } from "@/worker/do/repo/debug";
-import type { HeadInfo, Ref } from "@/worker/git";
+import type { HeadInfo, Ref, TreeEntry } from "@/worker/git";
 import type { PackRefIndexStatus } from "@/shared/git/types";
 import type { Viewer } from "@/client/server/viewer";
-import { getHeadAndRefs } from "@/worker/git";
+import { canWriteRepositories } from "@/shared/admin/panel";
+import { getHeadAndRefs, isSymlinkMode, isTreeMode } from "@/worker/git";
 import { shortRefName } from "@/shared/git/ref-display";
-import { formatSize, HttpError, isValidOwnerRepo } from "@/shared/web";
-import { handleError } from "@/client/server/error";
+import {
+  formatSize,
+  getFileIconName,
+  HttpError,
+  isValidOwnerRepo,
+  type FileIconName,
+} from "@/shared/web";
+import { getErrorMessage, handleError } from "@/client/server/error";
 import { buildCacheKeyFrom, cacheOrLoadJSONForRequest } from "@/worker/cache";
 import { isRequestPrivate, markRequestPrivate } from "@/worker/cache/policy";
 import { loadSessionMembership } from "@/worker/auth/sessionMembership";
@@ -59,6 +66,57 @@ export function formatFromNowShort(deltaMs: number): string {
   return `in ${s}s`;
 }
 
+export type UiTreeEntry = {
+  name: string;
+  href: string;
+  isDir: boolean;
+  isSymlink: boolean;
+  iconName: FileIconName;
+  shortOid: string;
+  size: string;
+};
+
+export function resolveRequestOrigin(req: Request): string {
+  const url = new URL(req.url);
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost =
+    req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || req.headers.get("host")?.trim();
+  return forwardedHost && forwardedProto ? `${forwardedProto}://${forwardedHost}` : url.origin;
+}
+
+export function formatSortedTreeEntries(args: {
+  owner: string;
+  repo: string;
+  ref: string;
+  basePath: string;
+  entries: TreeEntry[];
+}): UiTreeEntry[] {
+  const sorted = [...args.entries].sort((a: TreeEntry, b: TreeEntry) => {
+    const aIsDir = isTreeMode(a.mode);
+    const bIsDir = isTreeMode(b.mode);
+    if (aIsDir !== bIsDir) return aIsDir ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return sorted.map((e: TreeEntry) => {
+    const isDir = isTreeMode(e.mode);
+    // Git stores symlinks as blobs with mode 120000. Keep their file-like
+    // navigation behavior, but give browsers a distinct tree icon.
+    const isSymlink = isSymlinkMode(e.mode);
+    const fullPath = (args.basePath ? args.basePath + "/" : "") + e.name;
+    return {
+      name: e.name,
+      href: isDir
+        ? `/${args.owner}/${args.repo}/tree?ref=${encodeURIComponent(args.ref)}&path=${encodeURIComponent(fullPath)}`
+        : `/${args.owner}/${args.repo}/blob?ref=${encodeURIComponent(args.ref)}&path=${encodeURIComponent(fullPath)}`,
+      isDir,
+      isSymlink,
+      iconName: isSymlink ? "symlink" : isDir ? "folder" : getFileIconName(e.name),
+      shortOid: e.oid ? e.oid.slice(0, 7) : "",
+      size: "",
+    };
+  });
+}
+
 // Re-export the cache-policy predicates so existing UI handlers don't need
 // to know they live in the cache layer. The lower Git/protocol modules
 // import directly from `@/worker/cache/policy`.
@@ -67,17 +125,25 @@ export { isRequestPrivate, markRequestPrivate };
 export async function loadHeadAndRefsCached(
   env: Env,
   cacheCtx: CacheContext,
-  repoId: string
+  repoId: string,
+  cacheVersion?: string
 ): Promise<{ head: HeadInfo | undefined; refs: Ref[] } | null> {
   const loader = async (): Promise<{ head: HeadInfo | undefined; refs: Ref[] } | null> => {
     try {
       const res = await getHeadAndRefs(env, repoId, cacheCtx);
       return { head: res.head, refs: res.refs };
-    } catch {
+    } catch (error) {
+      createLogger(env.LOG_LEVEL, { service: "UiHelpers", repoId }).warn(
+        "helpers:head-refs-failed",
+        { error: getErrorMessage(error) }
+      );
       return null;
     }
   };
-  const cacheKeyRefs = buildCacheKeyFrom(cacheCtx.req, "/_cache/refs", { repo: repoId });
+  const cacheKeyRefs = buildCacheKeyFrom(cacheCtx.req, "/_cache/refs", {
+    repo: repoId,
+    v: cacheVersion,
+  });
   return cacheOrLoadJSONForRequest<{ head: HeadInfo | undefined; refs: Ref[] }>(
     cacheCtx,
     cacheKeyRefs,
@@ -211,6 +277,12 @@ export async function resolveUiRepoAccess(
   }
   markRequestPrivate(cacheCtx);
   return { kind: "ok", route, cacheCtx, viewer: membership.viewer, showActivityBanner: true };
+}
+
+export function canViewerManageRepo(access: Extract<UiRepoAccess, { kind: "ok" }>): boolean {
+  return Boolean(
+    access.viewer && canWriteRepositories(access.viewer.role) && access.showActivityBanner
+  );
 }
 
 export async function loadUiRepoActivity(
@@ -467,9 +539,10 @@ export function computeCompactionStatus(compactionData: CompactionData | undefin
   if (compactionData?.running) {
     compactionStatus = "Running";
     if (compactionData.startedAt) {
-      try {
-        compactionStartedAt = new Date(compactionData.startedAt).toLocaleString();
-      } catch {}
+      const parsed = new Date(compactionData.startedAt);
+      if (!Number.isNaN(parsed.getTime())) {
+        compactionStartedAt = parsed.toLocaleString();
+      }
     }
   } else if (compactionData?.queued) {
     compactionStatus = "Queued";

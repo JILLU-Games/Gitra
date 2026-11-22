@@ -22,10 +22,7 @@ export function initSidebarShell(): void {
         delete root.dataset.sidebarCollapsed;
       }
       collapseBtn.setAttribute("aria-expanded", String(!collapsed));
-      collapseBtn.setAttribute(
-        "aria-label",
-        collapsed ? "Expand sidebar" : "Collapse sidebar"
-      );
+      collapseBtn.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
       collapseBtn.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
     };
 
@@ -41,9 +38,14 @@ export function initSidebarShell(): void {
   }
 
   if (drawer && openBtn) {
-    const setDrawerOpen = (open: boolean) => {
+    const syncDrawerDom = (open: boolean) => {
       drawer.dataset.open = open ? "true" : "false";
       openBtn.setAttribute("aria-expanded", String(open));
+      document.body.style.overflow = open ? "hidden" : "";
+    };
+
+    const setDrawerOpen = (open: boolean) => {
+      syncDrawerDom(open);
       if (open) {
         closeBtn?.focus();
       } else {
@@ -57,14 +59,20 @@ export function initSidebarShell(): void {
 
     drawer.querySelectorAll<HTMLAnchorElement>("[data-sidebar-link]").forEach((link) => {
       link.addEventListener("click", () => {
-        drawer.dataset.open = "false";
-        openBtn.setAttribute("aria-expanded", "false");
+        syncDrawerDom(false);
       });
     });
 
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && drawer.dataset.open === "true") {
         setDrawerOpen(false);
+      }
+    });
+
+    const desktopMedia = window.matchMedia("(min-width: 640px)");
+    desktopMedia.addEventListener("change", (event) => {
+      if (event.matches && drawer.dataset.open === "true") {
+        syncDrawerDom(false);
       }
     });
   }

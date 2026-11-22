@@ -17,10 +17,12 @@ import {
 } from "lucide-react";
 
 import {
+  buildNamespaceProfileHref,
   canAccessAdminPanel,
   canWriteRepositories,
   type DirectoryRole,
 } from "@/shared/admin/panel";
+import { PROFILE_README_PATH, PROFILE_REPO_SLUG } from "@/shared/slugs";
 import { hydrateIsland } from "@/client/hydrate";
 
 export type HeaderMenusIslandProps = {
@@ -54,9 +56,13 @@ export function HeaderMenusIsland({
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const [repoSlug, setRepoSlug] = useState("");
+  const [repoDescription, setRepoDescription] = useState("");
   const [repoVisibility, setRepoVisibility] = useState<"public" | "private">("public");
+  const [initReadme, setInitReadme] = useState(false);
+  const [initProfileReadme, setInitProfileReadme] = useState(true);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const isProfileSlug = repoSlug.trim().toLowerCase() === PROFILE_REPO_SLUG;
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -87,14 +93,18 @@ export function HeaderMenusIsland({
     setCreating(true);
     setCreateError(null);
     try {
+      const normalizedSlug = repoSlug.trim().toLowerCase();
       const response = await fetch("/auth/api/repositories", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           namespaceSlug,
-          slug: repoSlug.trim().toLowerCase(),
+          slug: normalizedSlug,
           visibility: repoVisibility,
+          description: repoDescription.trim(),
+          initializeReadme: normalizedSlug !== PROFILE_REPO_SLUG ? initReadme : false,
+          initializeProfileReadme: normalizedSlug === PROFILE_REPO_SLUG ? initProfileReadme : false,
         }),
       });
       const body = (await response.json().catch(() => null)) as CreateRepoResult | null;
@@ -104,7 +114,7 @@ export function HeaderMenusIsland({
           reason === "slug-taken"
             ? "A repository with that name already exists in this namespace."
             : reason === "invalid-slug"
-              ? "Use lowercase letters, numbers, and internal hyphens (1–40 chars)."
+              ? "Use lowercase letters, numbers, internal hyphens/dots, or .vibtools (1–40 chars)."
               : reason === "viewer-read-only"
                 ? "Viewer accounts have read-only access."
                 : `Could not create repository (${reason ?? "error"}).`
@@ -151,11 +161,16 @@ export function HeaderMenusIsland({
                     setOpenMenu(null);
                     setCreateError(null);
                     setRepoSlug("");
+                    setRepoDescription("");
+                    setInitReadme(false);
                     setCreateModalOpen(true);
                   }}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 >
-                  <FolderGit2 className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
+                  <FolderGit2
+                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
+                    aria-hidden="true"
+                  />
                   <span>New Repository</span>
                 </button>
                 {isAdmin ? (
@@ -164,7 +179,10 @@ export function HeaderMenusIsland({
                     role="menuitem"
                     className="flex w-full items-center gap-2 px-3 py-2 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                   >
-                    <Users className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
+                    <Users
+                      className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
+                      aria-hidden="true"
+                    />
                     <span>Manage Users</span>
                   </a>
                 ) : null}
@@ -212,20 +230,39 @@ export function HeaderMenusIsland({
               </div>
 
               <div className="py-1">
+                {namespaceSlug ? (
+                  <a
+                    href={buildNamespaceProfileHref(namespaceSlug)}
+                    role="menuitem"
+                    className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  >
+                    <User
+                      className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
+                      aria-hidden="true"
+                    />
+                    <span>Public Profile Page</span>
+                  </a>
+                ) : null}
                 <a
                   href="/user/profile"
                   role="menuitem"
                   className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 >
-                  <User className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
-                  <span>Profile</span>
+                  <SlidersHorizontal
+                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
+                    aria-hidden="true"
+                  />
+                  <span>Profile Settings</span>
                 </a>
                 <a
                   href="/user/account"
                   role="menuitem"
                   className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 >
-                  <FolderGit2 className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
+                  <FolderGit2
+                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
+                    aria-hidden="true"
+                  />
                   <span>Account &amp; Repos</span>
                 </a>
                 <a
@@ -233,7 +270,10 @@ export function HeaderMenusIsland({
                   role="menuitem"
                   className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 >
-                  <Settings className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
+                  <Settings
+                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
+                    aria-hidden="true"
+                  />
                   <span>Settings</span>
                 </a>
                 <a
@@ -241,7 +281,10 @@ export function HeaderMenusIsland({
                   role="menuitem"
                   className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 >
-                  <Lock className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
+                  <Lock
+                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
+                    aria-hidden="true"
+                  />
                   <span>Password &amp; Security</span>
                 </a>
                 <a
@@ -249,7 +292,10 @@ export function HeaderMenusIsland({
                   role="menuitem"
                   className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 >
-                  <KeyRound className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
+                  <KeyRound
+                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
+                    aria-hidden="true"
+                  />
                   <span>Access Tokens</span>
                 </a>
               </div>
@@ -269,7 +315,10 @@ export function HeaderMenusIsland({
                     role="menuitem"
                     className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                   >
-                    <Users className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
+                    <Users
+                      className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
+                      aria-hidden="true"
+                    />
                     <span>Users &amp; Accounts</span>
                   </a>
                   <a
@@ -304,7 +353,10 @@ export function HeaderMenusIsland({
                     role="menuitem"
                     className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                   >
-                    <LogOut className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
+                    <LogOut
+                      className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
+                      aria-hidden="true"
+                    />
                     <span>Sign Out</span>
                   </button>
                 </form>
@@ -362,12 +414,21 @@ export function HeaderMenusIsland({
               ) : null}
 
               <div>
-                <label
-                  htmlFor="header-repo-slug"
-                  className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
-                >
-                  Repository Name
-                </label>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <label
+                    htmlFor="header-repo-slug"
+                    className="block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                  >
+                    Repository Name
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setRepoSlug(PROFILE_REPO_SLUG)}
+                    className="rounded border border-zinc-200 px-1.5 py-0.5 font-mono text-[10px] text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  >
+                    Use {PROFILE_REPO_SLUG}
+                  </button>
+                </div>
                 <div className="flex items-center rounded-md border border-zinc-200 bg-white focus-within:border-accent-500 dark:border-zinc-700 dark:bg-zinc-950">
                   <span className="border-r border-zinc-200 bg-zinc-50 px-2.5 py-2 font-mono text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
                     {namespaceSlug}/
@@ -378,16 +439,66 @@ export function HeaderMenusIsland({
                     value={repoSlug}
                     onChange={(e) => setRepoSlug(e.target.value)}
                     disabled={creating}
-                    placeholder="my-service"
+                    placeholder="my-service or .vibtools"
                     autoFocus
                     required
                     className="h-9 min-w-0 flex-1 bg-transparent px-2.5 font-mono text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100"
                   />
                 </div>
                 <p className="m-0 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  Lowercase letters, digits, and internal hyphens (1–40 chars).
+                  Lowercase letters, digits, hyphens/dots, or{" "}
+                  <code className="font-mono">{PROFILE_REPO_SLUG}</code> for namespace profile
+                  README.
                 </p>
               </div>
+
+              <div>
+                <label
+                  htmlFor="header-repo-description"
+                  className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                >
+                  Description <span className="font-normal text-zinc-400">(optional)</span>
+                </label>
+                <input
+                  id="header-repo-description"
+                  type="text"
+                  value={repoDescription}
+                  onChange={(e) => setRepoDescription(e.target.value)}
+                  disabled={creating}
+                  maxLength={200}
+                  placeholder="Short description of this repository"
+                  className="h-9 w-full rounded-md border border-zinc-200 bg-white px-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                />
+              </div>
+
+              {isProfileSlug ? (
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-accent-500/30 bg-accent-500/5 px-3 py-2 text-xs text-zinc-700 dark:text-zinc-200">
+                  <input
+                    type="checkbox"
+                    checked={initProfileReadme}
+                    onChange={(event) => setInitProfileReadme(event.target.checked)}
+                    disabled={creating}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Initialize <code className="font-mono">{PROFILE_README_PATH}</code> starter
+                    template for your namespace profile page.
+                  </span>
+                </label>
+              ) : (
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-200">
+                  <input
+                    type="checkbox"
+                    checked={initReadme}
+                    onChange={(event) => setInitReadme(event.target.checked)}
+                    disabled={creating}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Initialize repository with a <code className="font-mono">README.md</code> file
+                  </span>
+                </label>
+              )}
 
               <div>
                 <label
@@ -405,8 +516,12 @@ export function HeaderMenusIsland({
                   disabled={creating}
                   className="h-9 w-full rounded-md border border-zinc-200 bg-white px-2.5 text-xs text-zinc-900 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                 >
-                  <option value="public">Public — visible to everyone on homepage &amp; Explore</option>
-                  <option value="private">Private — only namespace members can view &amp; clone</option>
+                  <option value="public">
+                    Public — visible to everyone on homepage &amp; Explore
+                  </option>
+                  <option value="private">
+                    Private — only namespace members can view &amp; clone
+                  </option>
                 </select>
               </div>
 

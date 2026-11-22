@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildDefaultRepoReadmeTemplate,
   buildGitCloneUrl,
   canAccessAdminPanel,
   canRemoveNamespaceEntry,
@@ -16,8 +17,15 @@ import {
   normalizeNamespaceHandle,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PROFILE_BIO_MAX_LENGTH,
+  PROFILE_LOCATION_MAX_LENGTH,
+  REPO_DESCRIPTION_MAX_LENGTH,
   resolveActiveSidebarItem,
   sanitizeDisplayName,
+  sanitizeProfileBio,
+  sanitizeProfileLocation,
+  sanitizeProfileWebsite,
+  sanitizeRepoDescription,
   validateUserPassword,
   type AdminNamespaceEntry,
 } from "@/shared/admin/panel";
@@ -220,5 +228,44 @@ describe("admin panel pure helpers", () => {
     expect(canWriteRepositories("member")).toBe(true);
     expect(canWriteRepositories("viewer")).toBe(false);
     expect(canWriteRepositories(undefined)).toBe(false);
+  });
+
+  it("sanitizes repository descriptions, profile bio/location/website, and generates starter READMEs", () => {
+    expect(sanitizeRepoDescription("  Fast   edge\n\tGit server  ")).toBe("Fast edge Git server");
+    expect(sanitizeRepoDescription("x".repeat(REPO_DESCRIPTION_MAX_LENGTH + 40))).toHaveLength(
+      REPO_DESCRIPTION_MAX_LENGTH
+    );
+
+    expect(sanitizeProfileBio("  Shipping   workers \u0007 at scale  ")).toBe(
+      "Shipping workers at scale"
+    );
+    expect(sanitizeProfileBio("b".repeat(PROFILE_BIO_MAX_LENGTH + 25))).toHaveLength(
+      PROFILE_BIO_MAX_LENGTH
+    );
+
+    expect(sanitizeProfileLocation("  Dhaka,\tBD  ")).toBe("Dhaka, BD");
+    expect(sanitizeProfileLocation("l".repeat(PROFILE_LOCATION_MAX_LENGTH + 20))).toHaveLength(
+      PROFILE_LOCATION_MAX_LENGTH
+    );
+
+    expect(sanitizeProfileWebsite("")).toBe("");
+    expect(sanitizeProfileWebsite("vibtools.dev")).toBe("https://vibtools.dev");
+    expect(sanitizeProfileWebsite("https://vibtools.dev/docs")).toBe("https://vibtools.dev/docs");
+    expect(sanitizeProfileWebsite("http://git.example.com:8080/org")).toBe(
+      "http://git.example.com:8080/org"
+    );
+    expect(sanitizeProfileWebsite("javascript:alert(1)")).toBe("");
+    expect(sanitizeProfileWebsite("data:text/html,<script>alert(1)</script>")).toBe("");
+    expect(sanitizeProfileWebsite("ftp://files.example.com")).toBe("");
+    expect(sanitizeProfileWebsite("notadomain")).toBe("");
+
+    const withDesc = buildDefaultRepoReadmeTemplate("alice", "core-kit", "Edge router kit");
+    expect(withDesc).toContain("# core-kit");
+    expect(withDesc).toContain("Edge router kit");
+    expect(withDesc).toContain("git clone <clone-url>");
+
+    const withoutDesc = buildDefaultRepoReadmeTemplate("alice", "core-kit");
+    expect(withoutDesc).toContain("# core-kit");
+    expect(withoutDesc).toContain("Repository hosted under `@alice`.");
   });
 });

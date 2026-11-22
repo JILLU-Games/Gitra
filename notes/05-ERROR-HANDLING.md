@@ -1,0 +1,47 @@
+# 05 — Error Handling Inventory & Hardening Plan (`004`)
+
+> **Scope:** Complete audit of existing error handling across Worker middleware, Git Smart HTTP v2, Auth/Admin APIs, UI SSR, and Client Islands — plus concrete, scoped hardening tasks scheduled for `Phase-05`.
+
+---
+
+## 1. Currently Implemented Error Handling (Verified by File & Line)
+
+### A. Global Worker Boundary (`src/worker/index.ts`)
+
+- **404 Not Found (`src/worker/index.ts:183`):** `app.notFound((c) => renderNotFound(c))` renders React SSR `NotFoundPage` (`404`) for unmatched routes.
+- **Unhandled Exception Catch-All (`src/worker/index.ts:192-200`):** `app.onError((error) => ...)` logs `"worker:unhandled-error"` via structured logger and returns `Response(JSON.stringify({ error: error.message }), 500)`. _(See Gap G1 below — returns raw JSON on browser HTML navigations!)_
+
+### B. Security, CSRF, Auth & Validation Boundaries
+
+- **Same-Origin CSRF Guard (`src/worker/auth/origin.ts`, used across `authLogin.ts`, `authTokens.ts`, `authRepositories.ts`, `admin.ts`, `systemAdmin.ts`):** Rejects cross-origin `POST/PUT/PATCH/DELETE` requests cleanly before hitting D1 mutations.
+- **Zod Request Schema Validation (`src/worker/routes/requestSchemas.ts` + `safeParseJsonRequest`):** Validates JSON request bodies across PAT creation (`authTokens.ts:140`), repo CRUD/file commit (`authRepositories.ts:73, 236, 355, 426`), and admin directory/purge/compaction (`systemAdmin.ts:199, 346, 764`, `admin.ts:35, 117, 144, 249`), returning deterministic `400` responses (`{ ok: false, reason }` or `{ error }`).
+- **Role-Based & Non-Disclosure Access Gates:**
+  - **Repo UI Non-Disclosure (`src/worker/routes/ui/helpers.ts`, `adminPage.ts`):** Private repos return `404` (`NotFoundPage`) or JSON `404` for unauthenticated/non-member requests rather than leaking repo existence (`403` only when authenticated & non-member on known write/admin API routes).
+  - **Git Smart HTTP v2 (`src/worker/routes/git.ts:38-67, 298-378`):** Clean HTTP `401` (`WWW-Authenticate: Basic realm="git"`), `403` (`Forbidden`), `404` (`Not found`), `400` (unsupported service / invalid gzip / malformed v2 protocol), `415` (`Unsupported Content-Encoding`).
+  - **Admin Directory Safety (`src/worker/routes/systemAdmin.ts:242-273, 360-371, 496-499`):** Prevents disabling/demoting/renaming primary admin (`protected-admin` `400`), blocks removing admin entries (`cannot-remove-admin` `403`), prevents duplicate handles (`handle-taken` `409`), enforces `viewer` read-only (`403`).
+  - **Safe Repo Purge & Compaction (`src/worker/routes/admin.ts:44-87, 211-285`):** Requires confirmation string (`400`), rejects active pack deletion (`409`), returns `503` without partial D1 deletion if Queue enqueue fails.
+
+### C. UI SSR Route Handlers (`src/worker/routes/ui/*` & `src/client/server/error.ts`)
+
+- **`badRequest()` Helper (`src/worker/routes/ui/helpers.ts`):** Renders styled SSR `ErrorPage` with HTTP `400` for invalid refs (`isValidRef`), paths (`isValidPath`), or OIDs (`OID_RE`) across `overview.ts`, `tree.ts`, `blob.ts`, `commits.ts`.
+- **`handleError()` Helper (`src/client/server/error.ts:5-46`):** Catches exceptions in `overview.ts`, `tree.ts`, `blob.ts`, `commits.ts`, renders `ErrorPage` with `500` (or `404` if missing/not found).
+- **`renderUiDocumentResponse()` (`src/worker/routes/uiResponse.ts:32-35`):** Checks `if (!body)` and returns `failureBody` with HTTP `500`.
+
+### D. Client Islands (`src/client/islands/*`)
+
+- Forms & interactive islands (`profile-settings.tsx`, `profile-readme-editor.tsx`, `blob-editor.tsx`, `repo-overview-actions.tsx`, `admin-users/*`, `system-admin/*`, `tokens.tsx`, `change-password.tsx`, `owner-profile.tsx`, `repositories.tsx`) use `try { fetch(...) } catch { setError(...) } finally { setSaving(false) }` with inline `role="alert"` banners (`window.alert` is avoided per iframe rules).
+- `commit-diff-expander.tsx` & `merge-expander.tsx` catch fragment fetch failures and render inline error state instead of breaking the page.
+
+---
+
+## 2. Error Handling Gaps Identified & Resolved in `Phase-05` (`2026-11-22`)
+
+| Gap ID | Exact Location                                                                                                             | Original Defect                                                                                                                                  | Implemented `Phase-05` Fix & Status                                                                                                                                                                                                                                                                                         |
+| ------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **G1** | `src/worker/index.ts:184-262`                                                                                              | `app.onError` ALWAYS returned raw JSON `{ error: ... }`, even when a user navigated to `/...` in a browser (`Accept: text/html`).                | **RESOLVED (`Phase-05`):** Added `wantsJsonErrorResponse(c)` content negotiation + structured `"worker:unhandled-error"` log; keeps JSON for API/Git/fragment/diff routes and renders styled `ErrorPage` HTML (`500`) with escaped fallback for browser HTML navigations.                                                   |
+| **G2** | `src/client/server/error.ts:1-130`                                                                                         | Used forbidden `as any` casts (`(e as any)?.status`, `(e as any)?.message`); fallback bare HTML had unescaped `errMsg` edge risk & zero styling. | **RESOLVED (`Phase-05`):** Replaced all `as any` casts with typed narrowing helpers (`getErrorMessage`, `getErrorStack`, `resolveErrorStatus`, `isGitReadMissError`) and `buildEscapedErrorHtmlDocument()`. Tested in `test/error-handling.test.ts`.                                                                        |
+| **G3** | `src/worker/routes/ui/overview.ts`, `tree.ts`, `helpers.ts`                                                                | Silent `catch {}` blocks swallowed DO/cache errors with zero structured logging (`createLogger`).                                                | **RESOLVED (`Phase-05`):** Added structured `debug` logging for expected git read-path misses and `warn` logging for unexpected DO/render failures (`overview:markdown-candidate-failed`, `repo:refs-failed`, `helpers:head-refs-failed`, `tree:read-path-failed`), plus safe date validation in `computeCompactionStatus`. |
+| **G4** | `src/worker/routes/ui/raw.ts:59-103`                                                                                       | Outer `catch {}` wrapped referer check; inner `catch` mapped _all_ `readPath`/`readBlobStream` errors to generic `404`.                          | **RESOLVED (`Phase-05`):** Simplified referer parsing, added `RawUi` structured logging, preserved `404` for git read misses (`isGitReadMissError`), and propagated `HttpError` / `500` statuses cleanly. Verified in `test/error-boundary.worker.test.ts`.                                                                 |
+| **G5** | `src/client/islands/repo-overview-actions.tsx`, `tokens.tsx`                                                               | Silent `catch {}` around clipboard copy gave no visible error feedback if browser blocked clipboard API inside sandboxed iframe.                 | **RESOLVED (`Phase-05`):** Added `copyError` state and `role="alert"` inline feedback (`"Clipboard unavailable — select and copy manually."`) when `navigator.clipboard.writeText` is unavailable or rejects.                                                                                                               |
+| **G6** | `src/client/islands/theme-toggle.tsx:47` & `sidebar-shell.ts:39`                                                           | Intentional `localStorage` fallback `catch {}` when third-party storage is blocked in iframe.                                                    | **VERIFIED (`Phase-05`):** Confirmed safe in-memory state + DOM attribute toggle fallback with zero uncaught errors.                                                                                                                                                                                                        |
+| **G7** | Client Islands HTTP 401 Expiry UX (`tokens.tsx`, `owner-profile.tsx`, `profile-settings.tsx`, `repo-overview-actions.tsx`) | When a session expired (`401`) while tab stayed open, islands displayed generic `"HTTP 401"` instead of prompting re-authentication.             | **RESOLVED (`Phase-05`):** Added explicit `response.status === 401` detection setting `"Session expired — please sign in again."` with an inline `<a href="/auth">Sign in</a>` link inside the alert banner.                                                                                                                |
