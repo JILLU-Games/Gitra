@@ -247,10 +247,27 @@ describe("GitHub/Gitea code view, web file editor, pinning, and rich profile", (
       expect(ownerHtml).toContain("Pinned");
       expect(ownerHtml).not.toContain(">member<");
 
-      // Public explore page renders repo description and owner link
+      // Public homepage (anonymous GET /) and /explore render personalized Vib Tools company portal, featured projects, and teams directory
+      const anonHomeRes = await SELF.fetch(`${ORIGIN}/`);
+      expect(anonHomeRes.status).toBe(200);
+      const anonHomeHtml = await anonHomeRes.text();
+      expect(anonHomeHtml).toContain("Vib Tools · Official Open-Source &amp; Engineering Forge");
+      expect(anonHomeHtml).toContain("Vib Tools Open-Source &amp; Team Repositories");
+      expect(anonHomeHtml).toContain("Featured Open-Source Projects");
+      expect(anonHomeHtml).toContain("Organization Overview");
+      expect(anonHomeHtml).toContain("Teams &amp; Namespaces");
+      expect(anonHomeHtml).toContain("Private &amp; Backup Repositories");
+      expect(anonHomeHtml).toContain("https://vibtools.io/");
+      expect(anonHomeHtml).toContain("Fast Cloudflare edge router");
+      expect(anonHomeHtml).toContain("Coder One HQ");
+
       const exploreRes = await SELF.fetch(`${ORIGIN}/explore`);
       expect(exploreRes.status).toBe(200);
       const exploreHtml = await exploreRes.text();
+      expect(exploreHtml).toContain("Explore Vib Tools Open-Source Repositories");
+      expect(exploreHtml).toContain("Featured Open-Source Projects");
+      expect(exploreHtml).toContain("Organization Overview");
+      expect(exploreHtml).toContain("Teams &amp; Namespaces");
       expect(exploreHtml).toContain("Fast Cloudflare edge router");
       expect(exploreHtml).toContain("/coder-one");
 

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "Security Vulnerability Report (Private)"
+    url: "mailto:support@vibtools.io"
+    about: "Please report security vulnerabilities privately to support@vibtools.io per SECURITY.md."
+  - name: "Vib Tools Product & Technical Support"
+    url: "mailto:support@vibtools.io"
+    about: "Contact Vib Tools technical support for help with public projects and deployments."
+  - name: "Vib Tools Official Website"
+    url: "https://vibtools.io/"
+    about: "Visit vibtools.io for the official product catalog, status, and company information."

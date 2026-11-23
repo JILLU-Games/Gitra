@@ -102,7 +102,7 @@ wrangler secret put TESSERA_OIDC_CLIENT_SECRET
 Set the issuer as a var or secret:
 
 ```bash
-TESSERA_OIDC_ISSUER=https://auth.limic.dev
+TESSERA_OIDC_ISSUER=https://auth.vibtools.io
 ```
 
 If you use another OIDC provider, keep the same environment variable names unless you patch the code. `TESSERA_OIDC_ISSUER` should point at the issuer root that serves `/.well-known/openid-configuration`.

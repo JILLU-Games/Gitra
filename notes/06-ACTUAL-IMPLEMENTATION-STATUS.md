@@ -1,66 +1,33 @@
-# 06 — Actual Implementation Status Matrix
+# 06 — Actual Implementation Status Ledger (`Actual Working vs Pending`)
 
-> **Baseline Reference:** `v0.1.0` (`2026-11-22`)
-> **Purpose:** Honest, code-verified ledger of what works end-to-end today, what works with UI/UX/RBAC defects targeted in `Phase-01`–`Phase-05`, and what remains outside current scope. Update after every phase!
-
----
-
-## Status Legend
-
-- `WORKING` — Verified implemented end-to-end in code + tests.
-- `WORKING (DEFECT)` — Core functionality works, but has confirmed UI/Typography/RBAC/UX bug (see Phase column).
-- `PARTIAL / HARDEN` — Implemented with error-handling or edge-case gap (see `05-ERROR-HANDLING.md`).
-- `NOT IMPLEMENTED` — Not in codebase yet.
+> **Document Purpose:** Single source of truth tracking every feature currently working in production (`v0.2.0` Baseline), what will be added as each Public Homepage phase completes (`Phase-01` → `Phase-04`), and what remains pending.
 
 ---
 
-## 1. Core Git Engine, Storage & Protocol Features
+## 1. Currently Working Features in Production Baseline (`v0.2.0`)
 
-| Capability                                                                        | Status    | Exact Modules / Proof                                                 | Target Fix Phase   |
-| --------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------- | ------------------ |
-| Git Smart HTTP v2 (`info/refs`, `upload-pack`, `receive-pack`)                    | `WORKING` | `src/worker/routes/git.ts`, `uploadStream.ts`, `streamReceivePack.ts` | Unchanged (Locked) |
-| Repo Durable Object SQLite + R2 Pack Storage + Compaction                         | `WORKING` | `src/worker/do/repo/*`, `src/worker/git/pack/*`                       | Unchanged (Locked) |
-| Edge Cache + Request Coalescing + Limiter Subrequest Budget                       | `WORKING` | `src/worker/cache/*`, `src/worker/git/operations/limits.ts`           | Unchanged (Locked) |
-| Git PAT Auth (`Basic` auth, `pull` vs `push`, non-disclosure `404`)               | `WORKING` | `src/worker/auth/gitAuth.ts`, `test/git-acl.worker.test.ts`           | Unchanged (Locked) |
-| Background Queue Consumer (`compaction`, `route-cache-sync`, `repository-delete`) | `WORKING` | `src/worker/tasks/queue.ts`                                           | Unchanged (Locked) |
-
----
-
-## 2. Authentication, Directory, RBAC & User Account Features
-
-| Capability                                                                                    | Status    | Exact Modules / Proof                                                                          | Target Fix Phase                                 |
-| --------------------------------------------------------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| Sign In (`@admin` + directory users), Quick Demo Login, Sign Up, Sign Out                     | `WORKING` | `src/worker/routes/authLogin.ts`, `AuthSignInPage.tsx`                                         | `Phase-05` (Completed `2026-11-22`)              |
-| HMAC-Signed Partitioned Session Cookies + Password Hashing (`PBKDF2-SHA256`)                  | `WORKING` | `src/worker/auth/session.ts`, `src/worker/auth/passwords.ts`                                   | Unchanged (Locked)                               |
-| D1 Session Bookmark Consistency (`first-primary` / `first-unconstrained`)                     | `WORKING` | `src/worker/routes/d1Bookmark.ts`, `test/d1-session.worker.test.ts`                            | Unchanged (Locked)                               |
-| Personal Access Tokens (`namespace` & `repo` scope, `pull`/`push`, revoke)                    | `WORKING` | `src/worker/routes/authTokens.ts`, `src/client/islands/tokens.tsx`                             | `Phase-04` & `Phase-05` (Completed `2026-11-22`) |
-| RBAC Roles (`admin`, `member`, `viewer`) + Disabled User Immediate Revocation                 | `WORKING` | `src/shared/admin/panel.ts`, `auth/session.ts`, `AdminSecurityPage.tsx`, `canViewerManageRepo` | `Phase-02` Complete (RepoNav RBAC gated)         |
-| Dev Seeded Demo User (`@alex-dev`) + Mock Repo (`cloud-forge-kit`) + `.vibtools`              | `WORKING` | `src/worker/auth/demoSeed.ts`, `test/demo-user-mock-repo.worker.test.ts`                       | Unchanged                                        |
-| Dedicated `/user/*` Routes (`/user/profile`, `/account`, `/settings`, `/security`, `/tokens`) | `WORKING` | `src/worker/routes/authTokens.ts:91-106`, `AccountPage.tsx`, `UserSettingsLayout.tsx`          | `Phase-04` (Completed `2026-11-22`)              |
-| Public Profile `/{username}` + `.vibtools/profile/README.md` Rendering & Web Editor           | `WORKING` | `src/worker/routes/ui/overview.ts`, `OwnerPage.tsx`, `owner-profile.tsx`                       | `Phase-03` (Completed `2026-11-22`)              |
-| Pin / Unpin Repositories on Owner Profile                                                     | `WORKING` | `src/worker/routes/authRepositories.ts`, `owner-profile.tsx`                                   | `Phase-03` (Completed `2026-11-22`)              |
+| Subsystem                                              | Working Features in Current Baseline                                                                                                                                                                                                                                                   | Status               |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| **Git Smart HTTP v2 Engine**                           | `GET /:owner/:repo/info/refs`, `POST /:owner/:repo/git-upload-pack` (streaming pack assembly), `POST /:owner/:repo/git-receive-pack` (lease-locked push, R2 staging, SQLite DO index, delta compaction queue)                                                                          | **WORKING (`100%`)** |
+| **Authentication & RBAC**                              | Session cookie auth (`/auth`), PBKDF2 password hashing for directory accounts, primary admin auth, D1-backed PAT tokens (`read` / `push`), `admin` / `member` / `viewer` role enforcement                                                                                              | **WORKING (`100%`)** |
+| **Design System & Theme**                              | `Hanken Grotesk` + `JetBrains Mono` typography, cool-slate `#0d1117`/`#161b22`/`#010409`/`#30363d` dark palette + clean light mode, Forge Blue `#1f6feb`/`#58a6ff` accent, unified `rounded-md` geometry                                                                               | **WORKING (`100%`)** |
+| **Repository Views (`/:owner/:repo/*`)**               | Full-width `RepoNav` (`<> Code \| Commits \| Settings` with strict `canViewerManageRepo` RBAC gate), file tree browser with Forge Blue folder icons, syntax-highlighted blob viewer, markdown README renderer, commit history & diff viewer, repo settings & online file commit editor | **WORKING (`100%`)** |
+| **Public Profile (`/:owner`)**                         | Two-tab profile architecture (`Overview` tab renders `.vibtools/profile/README.md` + `Pinned` repos; `Repositories` tab renders searchable directory; `MEMBER` role badge hidden from anonymous visitors)                                                                              | **WORKING (`100%`)** |
+| **Users Panel (`/user/*`) & Admin Panel (`/admin/*`)** | Dedicated user profile/settings/tokens workspace (`/user/profile`, `/user/settings`, `/user/settings/tokens`) cleanly separated from Site Administration (`/admin`, `/admin/users`, `/admin/repositories`, `/admin/tokens`, `/admin/settings`)                                         | **WORKING (`100%`)** |
+| **Brand & SEO Documentation**                          | Project-wide **Vib Tools** (`https://vibtools.io/`) branding (`0` legacy `limic.dev` references), comprehensive GitHub-ready SEO markdown suite (`README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, `CODE_OF_CONDUCT.md`, `SUPPORT.md`, `.github/*`)                       | **WORKING (`100%`)** |
 
 ---
 
-## 3. Repository Web UI & Admin Control Panel
+## 2. Public Homepage (`GET /` & `GET /explore`) Feature Ledger — Active Upgrade Wave
 
-| Capability                                                                                     | Status    | Exact Modules / Proof                                                                                                     | Target Fix Phase                                 |
-| ---------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| Design System (Typography, Dark/Light Surface Palette, Radius Scale)                           | `WORKING` | `document.tsx`, `app.css`, `components/ui/*` (`Hanken Grotesk`, `#0d1117`/`#161b22` cool slate, Forge Blue, `rounded-md`) | `Phase-01` (Completed `2026-11-22`)              |
-| Top Navigation Header & User Dropdown                                                          | `WORKING` | `src/client/components/header.tsx` (`#010409` header contrast), `header-menus.tsx`                                        | `Phase-02` (Completed `2026-11-22`)              |
-| Repository Sub-Nav (`Code`, `Commits`, `Settings`)                                             | `WORKING` | `src/client/components/RepoNav.tsx`, `canViewerManageRepo` + `test/github-feel.worker.test.ts`                            | `Phase-02` (Completed `2026-11-22`)              |
-| Repo Overview (`README.md`, Tree Preview, Clone URL, Web File Editor)                          | `WORKING` | `OverviewPage.tsx` (slate-blue folders, clean counts, `rounded-md`), `repo-overview-actions.tsx`                          | `Phase-02` & `Phase-05` (Completed `2026-11-22`) |
-| Tree Browser, Highlighted Blob Viewer, Web Blob Editor, Raw Stream                             | `WORKING` | `TreePage.tsx`, `BlobPage.tsx`, `blob-editor.tsx`, `ui/raw.ts` (`rounded-md`, slate folders, structured error logging)    | `Phase-02` & `Phase-05` (Completed `2026-11-22`) |
-| Commits List, Merge Side Expander, Commit Diff & File Patch Viewer                             | `WORKING` | `CommitsPage.tsx`, `CommitPage.tsx`, `ui/commits.ts`                                                                      | `Phase-02` (Completed `2026-11-22`)              |
-| Admin Control Panel (`/admin`, `/users`, `/repositories`, `/tokens`, `/settings`, `/security`) | `WORKING` | `src/worker/routes/systemAdmin.ts`, `AdminSettingsLayout.tsx`, `Admin*Page.tsx`                                           | `Phase-01` & `Phase-05` (Completed `2026-11-22`) |
-| Responsive Left Sidebar & `<640px` Slide-Over Drawer (Admin & User Panels)                     | `WORKING` | `AdminSettingsLayout.tsx`, `UserSettingsLayout.tsx`, `sidebar-shell.ts`                                                   | `Phase-04` & `Phase-06` (Completed `2026-11-22`) |
-| Repo Admin Page (`/:owner/:repo/admin` — Refs, HEAD, Compaction, Packs, Purge)                 | `WORKING` | `AdminPage.tsx`, `ui/adminPage.ts`, `routes/admin.ts`, `islands/repo-admin/*`                                             | `Phase-02` (Completed `2026-11-22`)              |
-| Global SSR Error Boundary & Safe Client Error Prompts                                          | `WORKING` | `src/worker/index.ts`, `src/client/server/error.ts`, `test/error-handling.test.ts`, `test/error-boundary.worker.test.ts`  | `Phase-05` (Completed `2026-11-22`)              |
-
----
-
-## 4. Intentionally Out-of-Scope / Non-Goals (Unless Explicitly Requested Later)
-
-- Pull Requests / Merge Requests / Issues / CI Runner Execution (static `.github/workflows` example files exist in mock repo only for UI browsing).
-- Multi-user Repo Collaborator Invites outside Namespace Membership (access control currently operates at Namespace + PAT + Directory Role level).
-- SSH Git Transport (HTTPS Git Smart HTTP v2 + PAT only on Cloudflare Workers).
+| Feature ID  | Public Homepage Feature Description                                                                                                                                                                                                                                                                                    | Owning Phase | Current Status                        |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------- |
+| **F-HP-01** | **Pinned Repository Flag (`pinned: boolean`) Passed to Homepage & Explore:** Include `pinned` from D1 `repository_meta` on every repository item returned by `GET /` and `GET /explore`.                                                                                                                               | **Phase-01** | **WORKING (`Completed in Phase-01`)** |
+| **F-HP-02** | **Public Teams / Namespaces Summary Query (`listPublicNamespaceSummaries`):** Batch-load `slug`, `displayName`, `bio`, `website`, `publicRepoCount`, and `projectRepoCount` for all public namespaces on `GET /` and `GET /explore`.                                                                                   | **Phase-01** | **WORKING (`Completed in Phase-01`)** |
+| **F-HP-03** | **Personalized Company Hero Banner (`Vib Tools — Official Open-Source & Engineering Forge`):** Replace generic `"git-on-cloudflare"` banner on `HomePage.tsx` with branded company mission header, `https://vibtools.io/` button, and `Team Sign in` CTA.                                                              | **Phase-02** | **WORKING (`Completed in Phase-02`)** |
+| **F-HP-04** | **Live Public Engineering Metrics Strip:** Display live counts of `Open-Source Projects` (excluding `.vibtools`), `Active Teams & Namespaces`, `Featured Releases`, and `Private Company Backups Protected` inside the homepage hero header.                                                                           | **Phase-02** | **WORKING (`Completed in Phase-02`)** |
+| **F-HP-05** | **Featured / Pinned Open-Source Projects 2-Column Showcase Grid:** Highlight pinned/flagship open-source projects at the top of the public homepage with description, team link (`@namespace`), `Public` badge, and one-click `Clone` URL copy.                                                                        | **Phase-03** | **WORKING (`Completed in Phase-03`)** |
+| **F-HP-06** | **Smart `.vibtools` Profile Repo Hiding on Public Catalog:** Hide internal `.vibtools` profile configuration repositories from the main public project feed by default, with an explicit `Profile configs (.vibtools)` toggle pill and empty-catalog fallback.                                                         | **Phase-03** | **WORKING (`Completed in Phase-03`)** |
+| **F-HP-07** | **Interactive Company Team / Namespace Filter Pills & Sort Switcher:** Allow visitors to filter public repositories by team/namespace (`All Teams`, `@alex-dev`, `@admin`) and sort by `Recently updated` or `Name A–Z`, with a one-click `Reset filters` action on empty matches.                                     | **Phase-03** | **WORKING (`Completed in Phase-03`)** |
+| **F-HP-08** | **Sharp `Hanken Grotesk` Row Typography & `rounded-md` Normalization in `home-repos.tsx`:** Replace `font-mono` repository row headings with crisp sans-serif `font-semibold`, show `Pinned` badges on pinned rows, and replace all remaining `rounded-lg` classes with `rounded-md`.                                  | **Phase-03** | **WORKING (`Completed in Phase-03`)** |
+| **F-HP-09** | **Public 2-Column Company Portal Sidebar (`Organization Overview`, `Teams & Namespaces Directory`, `Private & Backup Repositories Notice`):** Display the 3-card right sidebar (`280px` on desktop) on anonymous `/` and `/explore` views, plus worker integration test coverage in `test/github-feel.worker.test.ts`. | **Phase-04** | **WORKING (`Completed in Phase-04`)** |

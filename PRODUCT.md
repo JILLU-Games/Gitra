@@ -42,7 +42,7 @@ This is a tool that does one thing well and knows it. The interface should feel 
 
 **Constraints:**
 
-- Part of devbin.tools ecosystem — shared shell conventions per frontend-spec.md
+- Part of Vib Tools (https://vibtools.io/) ecosystem — shared shell conventions per frontend-spec.md
 - SSR + islands architecture — no SPA patterns, minimal client JS
 - Tailwind v4 CSS-native config, no CSS-in-JS
 - Performance-sensitive: no heavy background effects, respect `prefers-reduced-motion`

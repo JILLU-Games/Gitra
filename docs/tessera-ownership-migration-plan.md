@@ -57,7 +57,7 @@ Reference docs checked:
 - R2 bucket: existing `REPO_BUCKET` remains the data plane. Do not introduce Worker -> DO -> R2 chains for new request flows.
 - KV namespaces: keep `OWNER_REGISTRY` only for legacy listing/backfill until Phase 3. Add `ROUTES` for route read acceleration with keys `repo-route:v1:<namespace>/<repo>`.
 - Queues: extend existing `REPO_MAINT_QUEUE` for legacy backfill messages. Do not create a second queue unless queue isolation becomes operationally necessary.
-- External systems: tessera OIDC provider at `TESSERA_OIDC_ISSUER`, production `https://auth.limic.dev`.
+- External systems: tessera OIDC provider at `TESSERA_OIDC_ISSUER`, production `https://auth.vibtools.io`.
 
 ## Global D1 Model
 
@@ -234,7 +234,7 @@ Implementation tasks:
   - `TESSERA_OIDC_CLIENT_ID`
   - secret `TESSERA_OIDC_CLIENT_SECRET`
   - secret `SESSION_SECRET` for sealing the local goc browser session cookie
-- Register goc in tessera `/admin/clients`; production issuer is `https://auth.limic.dev`.
+- Register goc in tessera `/admin/clients`; production issuer is `https://auth.vibtools.io`.
 - Add local session support:
   - `GET /auth` renders the sign-in surface for anonymous users and account links for signed-in users.
   - `GET /auth/start` starts tessera authorization code + PKCE and sets `__Host-goc_oidc`.

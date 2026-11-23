@@ -5,23 +5,36 @@ export function Footer() {
     <footer className="shrink-0 border-t border-zinc-200 dark:border-zinc-800/60">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-2 px-4 py-3 text-center sm:flex-row sm:items-center sm:justify-between sm:gap-0 sm:px-6 sm:py-2 sm:text-left">
         <a
-          href="https://limic.dev"
+          href="https://vibtools.io/"
           target="_blank"
           rel="noopener noreferrer"
           className="m-0 flex items-center gap-1 text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 transition-colors hover:text-accent-600 dark:decoration-zinc-700 dark:hover:text-accent-400"
         >
           Made with
           <Heart className="inline h-3 w-3 text-accent-500" aria-hidden="true" />
-          on Cloudflare
+          by Vib Tools on Cloudflare
         </a>
-        <a
-          href="https://git.limic.dev/rachel/git-on-cloudflare"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 transition-colors hover:text-accent-600 dark:decoration-zinc-700 dark:hover:text-accent-400"
-        >
-          Source code
-        </a>
+        <div className="flex items-center gap-3">
+          <a
+            href="https://vibtools.io/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 transition-colors hover:text-accent-600 dark:decoration-zinc-700 dark:hover:text-accent-400"
+          >
+            Vib Tools
+          </a>
+          <span className="text-xs text-zinc-300 dark:text-zinc-700" aria-hidden="true">
+            ·
+          </span>
+          <a
+            href="https://github.com/vibtoolshq/git-on-cloudflare"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-zinc-500 underline decoration-zinc-300 underline-offset-2 transition-colors hover:text-accent-600 dark:decoration-zinc-700 dark:hover:text-accent-400"
+          >
+            Source code
+          </a>
+        </div>
       </div>
     </footer>
   );

@@ -1,102 +1,70 @@
-# 01 — Baseline Freeze & Snapshot (`v0.1.0`)
+# 01 — Baseline Freeze & Snapshot (`v0.2.0` — Pre-Homepage Portal Upgrade)
 
-> **Freeze Timestamp:** `2026-11-22`
+> **Freeze Timestamp:** `2026-11-23`
 > **Workspace Root:** `/app/applet`
-> **VCS State:** Uninitialized (`git rev-parse HEAD` → `fatal: not a git repository`; baseline anchored by file manifest, schema, test pass counts, and route inventory below).
-> **Rule:** This document represents the exact **Phase-00 Baseline**. Every later change in `Phase-01` → `Phase-06` is measured against this frozen state.
+> **Baseline Milestone:** Post-Wave-1 Production Sign-Off + Vib Tools (`https://vibtools.io/`) Brand Migration Complete.
+> **Active Scope:** Public Homepage (`GET /` and `GET /explore`) Transformation into a **Personalized Company / Organization Open-Source & Team Repository Portal**.
 
 ---
 
-## 1. Runtime, Tooling & Package Baseline (`/package.json` & `/wrangler.jsonc`)
+## 1. Frozen Baseline Verification Status (`2026-11-23`)
 
-| Item                        | Frozen Baseline Value                                                                                                                                                   | Citation                                   |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Package Name / Version      | `git-on-cloudflare` / `0.1.0`                                                                                                                                           | `package.json:2-3`                         |
-| Frontend Stack              | React `19.2.6`, Tailwind CSS `4.3.0`, `@tailwindcss/vite` `4.3.0`, `lucide-react` `1.7.0`, `marked` `18.0.3`, `highlight.js` `11.11.1`                                  | `package.json:26-55`                       |
-| Backend Runtime             | Hono `4.12.18`, Cloudflare Workers (`compatibility_date: 2026-05-13`, `nodejs_als`), Drizzle ORM `0.45.1`, Zod `4.4.3`, `openid-client` `6.8.4`                         | `package.json:45-56`, `wrangler.jsonc:5-8` |
-| Bindings (`wrangler.jsonc`) | `REPO_DO` (SQLite Durable Object), `DB` (D1 `git-on-cloudflare`), `ROUTES` (KV), `REPO_BUCKET` (R2 `git-repos`), `REPO_TASKS_QUEUE`, `ASSETS` (`html_handling: "none"`) | `wrangler.jsonc:24-93`                     |
-| TypeScript & Testing        | TypeScript `6.0.0`, Vite `8.0.12`, Vitest `4.1.6`, `@cloudflare/vitest-pool-workers` `0.16.4`                                                                           | `package.json:27-41`                       |
+Before planning the Public Homepage upgrade, the entire repository was verified and frozen at the following clean state:
 
-### Baseline Scripts (`package.json:6-24`)
-
-- Dev server: `npm run dev` (`vite dev`, runs on port `3000`)
-- Build: `npm run build` (`vite build`)
-- Typecheck: `npm run typecheck` (`npm run types:generate && tsc -p test/tsconfig.json --noEmit`)
-- Unit tests: `npm run test` (`vitest run --config vitest.unit.config.ts`)
-- Worker integration tests: `npm run test:workers` (`vitest run --config vitest.config.ts`)
-- Format check: `npm run format:check`
+| Verification Gate                   | Frozen Baseline Result               | Citation / Command                                                                                                                             |
+| ----------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript & Wrangler Types         | **PASS (`0` errors)**                | `npm run typecheck`                                                                                                                            |
+| Prettier Code Formatting            | **PASS (`100%` clean)**              | `npm run format:check`                                                                                                                         |
+| Node Unit Test Suite                | **PASS (`13` suites / `53` tests)**  | `npm run test`                                                                                                                                 |
+| Cloudflare Worker Integration Suite | **PASS (`16` suites / `65` tests)**  | `npx vitest run --config vitest.config.ts ...`                                                                                                 |
+| Production Applet Build             | **PASS**                             | `compile_applet`                                                                                                                               |
+| Legacy `limic.dev` Brand Scan       | **PASS (`0` occurrences remaining)** | Replaced project-wide with `https://vibtools.io/` & **Vib Tools**                                                                              |
+| Design System Tokens                | **LOCKED (`Phase-01` Wave 1)**       | `Hanken Grotesk` + `JetBrains Mono`, cool-slate `#0d1117`/`#161b22`/`#010409`/`#30363d`, Forge Blue `#1f6feb`/`#58a6ff`, `rounded-md` geometry |
 
 ---
 
-## 2. Verified Passing Test & Build Baseline (`2026-11-22`)
+## 2. Exact Baseline Snapshot of the Public Homepage Subsystem
 
-At freeze time, all static checks and recently exercised test suites passed:
+The Public Homepage subsystem is strictly owned by **3 source files** plus **1 D1 metadata DAL module**:
 
-1. `npm run typecheck` — **PASS**
-2. `compile_applet` — **PASS**
-3. **Node Unit Suites Verified (`36/36` passing across inspected suites):**
-   - `test/admin-panel.test.ts`
-   - `test/admin-auth.test.ts`
-   - `test/markdown-content.test.ts`
-   - `test/web-format.test.ts`
-   - `test/pat-format.test.ts`
-4. **Worker Integration Suites Verified (`36/36` passing across inspected suites):**
-   - `test/demo-user-mock-repo.worker.test.ts`
-   - `test/github-feel.worker.test.ts`
-   - `test/system-admin.worker.test.ts`
-   - `test/d1-session.worker.test.ts`
-   - `test/auth-session.worker.test.ts`
-5. **Total Test Files Present in `/test/`:** `59` `.test.ts` / `.worker.test.ts` files (`list_dir /test`).
+### 2.1 Worker Route Handlers (`src/worker/index.ts:61-170`)
 
----
+- **`GET /` (`src/worker/index.ts:61-134`):**
+  - Calls `ensureDemoWorkspaceOnPublicEntry(c)` (`line 62`), `loadViewer(c)` (`line 63`), and `listPublicRepositoriesWithNamespaces(c.var.db)` (`line 65`).
+  - When `!viewer` (`lines 67-90`), loads `publicMeta = await listRepositoryMetaMap(c.env.DB, publicRows.map((row) => row.repository.id))` (`lines 68-71`) and maps `publicRepositories` (`lines 72-79`).
+  - **Frozen Baseline Gap in `src/worker/index.ts:72-79, 103-110, 145-152`:**
+    1. Does **not** include `pinned: publicMeta.get(row.repository.id)?.pinned ?? false` in `publicRepositories` or `repositories` items, even though `listRepositoryMetaMap()` already fetches `pinned` from SQLite (`src/worker/db/d1/dal/workspaceMeta.ts:158-168`).
+    2. Does **not** pass `publicNamespaces` (team/namespace slug, `displayName`, `bio`, and `publicRepoCount`) to `HomePage`, leaving the public homepage unable to display a Company Teams / Namespaces directory or filter strip with rich team metadata.
 
-## 3. Demo & Seeded Accounts Baseline (`src/worker/auth/demoSeed.ts` & `src/worker/auth/adminAuth.ts`)
+### 2.2 Public Homepage SSR Component (`src/client/pages/HomePage.tsx:1-104`)
 
-| Handle      | Role                    | Password                                 | Seeded Content                                                                                                                                                                     | Status |
-| ----------- | ----------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| `@admin`    | `admin` (Primary Admin) | `admin123` (when `ADMIN_PASSWORD` unset) | Instance owner / System Admin                                                                                                                                                      | Active |
-| `@alex-dev` | `member`                | `devuser123`                             | `.vibtools` (`profile/README.md`) + `cloud-forge-kit` (GitHub-ready starter repo with `.github`, `docs`, `src`, `test`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `LICENSE`) | Active |
+- **Lines `33-59` (`!signedIn` Header Banner):**
+  - Currently renders a generic small box with `<GitBranch />`, `<h1>git-on-cloudflare</h1>`, and text: _"Edge-native Git Smart HTTP v2 hosting on Cloudflare Workers. Explore public repositories below or sign in to create repositories and manage tokens."_
+  - **Frozen Baseline Gap:** Lacks **Vib Tools** organization branding, company mission statement (_"Practical software for real workflows"_), official link (`https://vibtools.io/`), live open-source project/team counters, and distinction between Public Open-Source repositories and Private Company Backups.
 
----
+### 2.3 Public & Workspace Repositories Island (`src/client/islands/home-repos.tsx:1-621`)
 
-## 4. Frozen UI & Routing Surface Inventory
-
-### Worker HTTP Route Registration Order (`src/worker/index.ts:163-183`)
-
-1. `/_diag/repo/:owner/:repo` (dev diagnostic endpoint gated by `ENABLE_DIAG`)
-2. `registerAuthRoutes(router)` → mounts:
-   - `authLogin.ts`: `GET /auth`, `POST /auth/login`, `POST /auth/demo`, `POST /auth/register`, `POST /auth/logout`, `GET /auth/callback`, `POST /auth/api/password`, `PUT /auth/api/profile`
-   - `authTokens.ts`: `GET /user`, `/user/profile`, `/user/account`, `/user/accounts`, `/user/settings`, `/user/settings/security`, `/user/settings/tokens`, `/auth/account`, `/auth/api/tokens`, `POST /auth/api/tokens`, `DELETE /auth/api/tokens/:patId`
-   - `authRepositories.ts`: `GET/POST /auth/api/repositories`, `PATCH /auth/api/repositories/:repositoryId`, `PUT /auth/api/repositories/:repositoryId/profile-readme`, `PUT /auth/api/repositories/:repositoryId/file`
-3. `registerSystemAdminRoutes(router)` → `GET /admin`, `/admin/repositories`, `/admin/tokens`, `/admin/users`, `/admin/settings`, `/admin/security`, `/admin/SettingsControlPanel` (302 → `/admin/settings`), `/admin/api/overview`, `/admin/api/users`, `/admin/api/namespaces`, `/admin/api/repositories/:repositoryId`
-4. `registerAdminRoutes(router)` → `POST/DELETE /:owner/:repo/admin/compact`, `GET/PUT /:owner/:repo/admin/refs|head`, `GET /:owner/:repo/admin/debug-*`, `DELETE /:owner/:repo/admin/pack/:packKey`, `DELETE /:owner/:repo/admin/purge`
-5. `registerGitRoutes(router)` → `GET /:owner/:repo/info/refs`, `POST /:owner/:repo/git-upload-pack`, `POST /:owner/:repo/git-receive-pack`
-6. `registerUiRoutes(router)` → `GET /`, `/explore`, `/:owner`, `/:owner/:repo`, `/blob`, `/tree`, `/commits`, `/commits/fragments/:oid`, `/commit/:oid`, `/commit/:oid/diff`, `/raw`, `/rawpath`, `/admin`, `/api/refs`
-7. `app.notFound` → `renderNotFound(c)`
-8. `app.onError` → JSON `{ error: ... }` (`500`)
-
-### Frozen Design Token Baseline (`src/client/server/document.tsx` & `src/client/styles/app.css`)
-
-- **Fonts loaded in `<head>` (`document.tsx:29-32`):** ONLY `JetBrains Mono` (`400;500`). **No sans-serif or serif webfont is actually fetched.**
-- **CSS `--font-sans` / `--font-display` (`app.css:10-14`):** `"Segoe UI", system-ui, ...` (UI falls back to host OS default Segoe UI; mono uses `JetBrains Mono`; body has `font-weight: 450` at `app.css:116`).
-- **Colors (`app.css:16-40`):**
-  - `--color-canvas: #221f21` (warm brownish-plum dark tint)
-  - `--color-zinc-900: #1b181a`, `800: #2a2729`, `700: #423f42`, `600: #6e6a6e`
-  - `--color-accent-500: #6366f1`, `--color-accent-600: #4f46e5`
-  - Light canvas: `--color-canvas-light: #ffffff`
-- **Radii Mismatch Across Components:** `rounded-md` (`header.tsx`), `rounded-lg` (`card.tsx`, `AdminSettingsLayout.tsx`, `UserSettingsLayout.tsx`), `rounded-xl` (`button.tsx`, `input.tsx`, `RepoNav.tsx`), `rounded-2xl` (`TreePage.tsx`, `BlobPage.tsx`, `OverviewPage.tsx` clone dialog, `ErrorPage.tsx`, `.prose pre`).
+- **`HomeRepositoryItem` (`lines 31-38`):**
+  - Fields: `id`, `slug`, `namespaceSlug`, `visibility`, `description`, `updatedAt`. Missing `pinned?: boolean`.
+- **Filtering Logic (`lines 96-114`):**
+  - Filters only by `visibilityFilter` (when `signedIn && activeFeed === "mine"`) and text search `query`.
+  - **Frozen Baseline Gaps:**
+    1. **No `.vibtools` Dotfile Repo Filtering:** Internal profile metadata repositories (`admin/.vibtools`, `alex-dev/.vibtools`) appear directly inside the main public software catalog alongside real open-source projects (`cloud-forge-kit`, `edge-kit`, `edge-starter`).
+    2. **No Featured / Pinned Open-Source Showcase Grid:** Pinned flagship repositories are not highlighted in a 2-column showcase grid at the top of the public homepage.
+    3. **No Team / Namespace Filter Pills (`@alex-dev`, `@admin`):** Visitors cannot filter public repositories by company team, division, or developer namespace.
+    4. **No Sort Control:** Visitors cannot switch between `Recently updated` and `Name (A–Z)`.
+    5. **Single-Column Anonymous Layout (`lines 525-527`):** `if (!signedIn || exploreOnly) { return repoListPanel; }` hides the right-hand sidebar completely on the public homepage instead of presenting an **Organization Overview, Teams & Namespaces Directory, and Private Backup Workspace Sign-In Card**.
+    6. **Typography & Border Radius Drift (`lines 297, 404, 422, 433, 535, 596`):** Uses `rounded-lg` on containers instead of `rounded-md` and renders the entire `namespace / repo` title in `font-mono` (`line 433`) instead of crisp `Hanken Grotesk` sans-serif (`font-semibold`).
 
 ---
 
-## 5. Baseline-to-Audit Alignment Summary
+## 3. Subsystems Explicitly Frozen & Untouched During This Wave
 
-Comparing this frozen baseline directly against screenshots `Screenshot_1` – `Screenshot_7` and `PRODUCT.md`:
+To guarantee zero regressions, all subsystems outside the Public Homepage remain **100% locked and untouched**:
 
-- **Matches Baseline:** Seeded `@alex-dev` profile, `.vibtools` `profile/README.md`, `cloud-forge-kit` repository tree/README/markdown rendering, `/user/*` routes, `/admin/*` responsive left-drawer sidebar (`sm:hidden` drawer + persistent `>=640px` sidebar), D1 session & Auth/PAT security boundaries all exist and work functionally.
-- **Confirmed Baseline Defects (Tracked in `02-FORENSIC-AUDIT-AND-SCOPE-LOCKS.md`):**
-  1. Missing UI sans-serif webfont + synthetic `font-weight: 450` + overused `font-mono` causing weak typography vs GitHub/Gitea/GitLab/Forgejo.
-  2. Warm plum/brown zinc neutrals (`#221f21`/`#1b181a`) + amber-yellow folder icons + weak surface border contrast + mixed `rounded-xl`/`rounded-2xl`/`rounded-lg` radii.
-  3. **`RepoNav.tsx` RBAC / UI Defect (Red-boxed in Screenshot 1):** `Admin` tab renders unconditionally for anonymous visitors & non-owners inside a cramped floating pill box on the right instead of a full-width GitHub-style repo underline tab strip; also duplicates commit history/branch chrome.
-  4. **`OwnerPage.tsx` Profile Hierarchy Defect (Screenshots 2 & 7):** `.vibtools` README sits ABOVE the `Overview | Repositories` tab bar (persists on Repositories tab), public header exposes `MEMBER` badge & `.vibtools` text link to anonymous visitors, and Overview repeats both Pinned and full Repositories directory.
-  5. **`AccountPage.tsx` & `UserSettingsLayout.tsx` User Panel Leaks (Prior QA):** Still displays `Site Administration` admin CTA inside `/user/*`, duplicates `Public page ↗` + `Open /handle ↗`, overlaps `Profile`/`Account`/`Settings`, and keeps footer `Back to Repositories` link.
-  6. **Silent `catch {}` blocks + unstyled/JSON error fallback leaks (`error.ts`, `index.ts:192`, `overview.ts`, `tree.ts`)** needing clean typed error boundaries.
+- Git Smart HTTP v2 protocol routes (`src/worker/routes/git.ts`, `RepoDurableObject`, pack assembly/indexing, R2 storage)
+- Public Owner Profile page (`src/client/pages/OwnerPage.tsx`, `src/client/islands/owner-repositories.tsx`)
+- Repository Code / Tree / Blob / Commits / Diff / Admin pages (`OverviewPage.tsx`, `TreePage.tsx`, `BlobPage.tsx`, `CommitsPage.tsx`, `CommitPage.tsx`, `AdminPage.tsx`, `RepoNav.tsx`)
+- User Settings & Access Tokens panel (`AccountPage.tsx`, `UserSettingsLayout.tsx`, `src/worker/routes/authTokens.ts`)
+- Site Administration panel (`SystemAdminPage.tsx`, `AdminSettingsLayout.tsx`, `src/worker/routes/systemAdmin.ts`)
+- Global Error Boundaries (`src/client/server/error.ts`, `src/client/pages/ErrorPage.tsx`, `src/client/pages/NotFoundPage.tsx`)

@@ -1,177 +1,290 @@
-# 02 — Forensic Audit Report & Per-Phase Scope Locks (`001`)
+# 02 — Forensic Audit, Code Patch Proofs & Phase Scope Locks (`001`)
 
-> **Baseline Reference:** `v0.1.0` (`notes/01-BASELINE-FREEZE.md`)
-> **Evidence Sources:** Screenshots `1–7` (current app vs GitHub, Gitea, GitLab, Forgejo) + direct source inspection (`src/client/*`, `src/worker/*`).
-> **Purpose:** Exact code-level proof for every defect, exact patch direction, and strict **Scope Lock** per phase so no unrelated code is broken.
+> **Document Purpose:** Exact forensic audit of the Public Homepage (`GET /` and `GET /explore`) against the Company / Organization Open-Source & Team Repository Portal requirements, complete with exact file paths, line numbers, before/after code block proofs, and strict **Phase-01 → Phase-04 Scope Locks**.
 
 ---
 
-## 1. Visual & Architectural Forensic Findings (With Exact Code Proofs)
+## 1. Executive Summary of Public Homepage Forensic Findings
 
-### F1. Typography & Font Loading Defect (Screenshots 1, 2, 7 vs GitHub/Gitea/GitLab/Forgejo)
-
-- **Symptom:** Headings, labels, and repo descriptions look thin/uneven ("useless fonts"), metadata is noisy due to arbitrary `font-mono`, and `PRODUCT.md` (`Hanken Grotesk`) / clean `Inter` UI typography is not actually loaded in `<head>`.
-- **Code Proof 1 — Missing UI Webfont (`src/client/server/document.tsx:29-32`):**
-  ```tsx
-  <link
-    rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
-  />
-  ```
-  _Only `JetBrains Mono` is loaded; UI sans-serif falls back to local `"Segoe UI"`._
-- **Code Proof 2 — Non-standard Font Weight & Fallback Stack (`src/client/styles/app.css:10-14, 114-121`):**
-  ```css
-  --font-sans:
-    "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-  --font-display:
-    "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-  ...
-  body {
-    font-weight: 450;
-  ```
-  _`font-weight: 450` is not a native weight on Windows/Linux `"Segoe UI"` or `400;500` JetBrains Mono, causing awkward stroke interpolation._
-- **Code Proof 3 — Overused `font-mono` on UI Text:**
-  - `src/client/pages/OverviewPage.tsx:221`: file directory count uses `font-mono` (`12 items`); `:390, :403` branch count / list uses `font-mono`.
-  - `src/client/pages/OwnerPage.tsx:76`: `@handle` + `:102` repo stats + `:161` repo `visibility` pill + `:187` repo counters.
-  - `src/client/pages/AccountPage.tsx`: various non-code metadata labels.
-- **Target Fix:** Load `Hanken Grotesk:wght@400;500;600;700` (committed in `PRODUCT.md`) alongside `JetBrains+Mono:wght@400;500` in `document.tsx`; switch `--font-sans`/`--font-display` to `"Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif`; normalize body weight to `400` (`400/500/600` crisp scale); restrict `font-mono` strictly to commit hashes, OIDs, clone URLs, branches/paths, PAT prefixes, and code blocks.
+| Audit ID  | File & Exact Line Range                                                 | Problem Identified in Frozen Baseline                                                                                                                                                                                                                                                                                             | Target Fix & Phase                                                                                                                                                                                                                                                                  |
+| --------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HP-01** | `src/worker/index.ts:67-168`<br>`src/worker/db/d1/dal/workspaceMeta.ts` | `GET /` and `GET /explore` already call `listRepositoryMetaMap()`, which loads `pinned: boolean` from SQLite, but `index.ts` discards `pinned` when mapping `publicRepositories` and `repositories`. In addition, no public team/namespace metadata (`displayName`, `bio`, `publicRepoCount`) is queried or passed to `HomePage`. | **Phase-01:** Add `listPublicNamespaceSummaries()` in `workspaceMeta.ts`, include `pinned` on every mapped repo in `src/worker/index.ts`, and pass `publicNamespaces` to `HomePage` & `HomeReposIsland`.                                                                            |
+| **HP-02** | `src/client/pages/HomePage.tsx:33-59`                                   | Public visitors (`!signedIn`) see a generic `"git-on-cloudflare"` technical demo banner with no **Vib Tools** company branding, no explanation of public open-source vs private company backups, no link to `https://vibtools.io/`, and no live open-source project/team metrics.                                                 | **Phase-02:** Replace the generic banner in `HomePage.tsx` with the **Vib Tools — Open-Source & Engineering Forge** company hero card, live metrics strip (`Open-Source Projects`, `Active Teams / Namespaces`, `Git Smart HTTP v2`), `vibtools.io ↗` link, and `Team Sign in` CTA. |
+| **HP-03** | `src/client/islands/home-repos.tsx:96-114`                              | Internal `.vibtools` profile metadata repositories (`admin/.vibtools`, `alex-dev/.vibtools`) clutter the main public catalog alongside actual software projects (`cloud-forge-kit`, `edge-kit`, `edge-starter`).                                                                                                                  | **Phase-03:** Hide `.vibtools` dotfile repos by default in the main public repository feed (`activeFeed === "public"`), and provide an explicit `Show profile repos (.vibtools)` toggle pill in the filter strip.                                                                   |
+| **HP-04** | `src/client/islands/home-repos.tsx:189-292`                             | No **Featured / Pinned Open-Source Projects** showcase grid at the top of the public homepage, no **Team / Namespace filter pills** (`All Teams`, `@alex-dev`, `@admin`), and no **Sort selector** (`Recently updated` vs `Name A–Z`).                                                                                            | **Phase-03:** Render a 2-column **Featured Open-Source Projects** showcase grid for pinned public repos, interactive **Team / Namespace Filter Pills**, and a **Sort Switcher** (`updated` / `name`).                                                                               |
+| **HP-05** | `src/client/islands/home-repos.tsx:297,404,422,433,535,596`             | Repository list rows use `font-mono` for the entire `namespace / repo` heading (`line 433`) and legacy `rounded-lg` borders (`lines 297, 404, 422, 535, 596`) instead of the `Phase-01` `Hanken Grotesk` sans-serif + `rounded-md` design standard.                                                                               | **Phase-03:** Upgrade repo title typography to crisp sans-serif (`font-semibold`) with team badge & `Pinned` badge, and normalize all cards/containers in `home-repos.tsx` to `rounded-md`.                                                                                         |
+| **HP-06** | `src/client/islands/home-repos.tsx:524-527`                             | When `!signedIn                                                                                                                                                                                                                                                                                                                   |                                                                                                                                                                                                                                                                                     | exploreOnly`, `HomeReposIsland` returns a single full-width column (`return repoListPanel;`) with zero organization sidebar—missing the **Organization Overview**, **Teams & Namespaces Directory**, and **Private & Backup Repositories Workspace Notice**. | **Phase-04:** Render a responsive 2-column layout (`lg:grid-cols-[minmax(0,1fr)_280px]`) on the public homepage with a dedicated **Organization & Teams Sidebar** on the right. |
 
 ---
 
-### F2. Palette, Surface Contrast, Folder Icons & Radius Fragmentation
-
-- **Symptom:** Dark theme background has a warm plum/brownish cast (`#221f21` / `#1b181a`) instead of crisp GitHub-slate/charcoal (`#0d1117` / `#161b22` / `#30363d`); primary blue-violet (`#6366f1`) + yellow-amber folder icons clash; border radii jump wildly (`rounded-md`, `rounded-lg`, `rounded-xl`, `rounded-2xl`).
-- **Code Proof 1 — Warm Plum Zincs & Saturated Indigo (`src/client/styles/app.css:16-40`):**
-  ```css
-  --color-canvas: #221f21;
-  --color-zinc-900: #1b181a;
-  --color-zinc-800: #2a2729;
-  --color-zinc-700: #423f42;
-  --color-accent-500: #6366f1;
-  --color-accent-600: #4f46e5;
-  ```
-- **Code Proof 2 — Yellow-Amber Folder Icons (`src/client/pages/OverviewPage.tsx:67`, `src/client/pages/TreePage.tsx:34`):**
-  ```tsx
-  <Folder className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-  ```
-- **Code Proof 3 — Border Radius Fragmentation:**
-  - `src/client/components/ui/button.tsx:26`: `rounded-xl`
-  - `src/client/components/ui/input.tsx:10, 13`: `rounded-xl`
-  - `src/client/components/ui/card.tsx:12`: `rounded-lg`
-  - `src/client/components/RepoNav.tsx:58`: `rounded-xl`
-  - `src/client/pages/TreePage.tsx:61` & `src/client/pages/BlobPage.tsx:89`: `rounded-2xl`
-  - `src/client/styles/app.css:609` (`.prose pre`): `rounded-2xl`
-  - `src/client/components/header.tsx:48, 86, 110`: `rounded-lg` / `rounded-md`
-- **Target Fix:** Adopt cool crisp slate neutrals (`canvas #0d1117`, `surface #161b22`, `elevated #1c2128`, `border #30363d`, refined Forge Blue accent `#3b82f6` / `#2563eb` or muted slate-blue `#58a6ff` for links & `#238636` or crisp blue for primary actions); change folder icons to cool slate-blue (`text-sky-400` / `text-slate-400`); standardize UI radius system (`rounded-md` / `6px` for buttons, inputs, tabs, cards, code containers; `rounded-full` only where semantic like small avatar or dot).
+## 2. Detailed Forensic Proofs & Exact Code Patches Per Phase
 
 ---
 
-### F3. Repo Navigation & RBAC Leak (`RepoNav.tsx` — Red-Boxed in Screenshot 1)
+### PHASE-01: Backend Data Enrichment (`GET /` & `GET /explore` — Pinned Metadata & Public Team Summaries)
 
-- **Symptom:** On `/{owner}/{repo}`, the `Browse | Commits | Admin` bar sits in a disconnected floating pill box on the right, AND **`Admin` is visible to anonymous visitors and non-member viewers** (who see `Sign in` in the top header and have zero admin rights!). Meanwhile `OverviewPage` repeats ref/commits/history chrome below it.
-- **Code Proof 1 — Unconditional `Admin` Link (`src/client/components/RepoNav.tsx:71-77`):**
-  ```tsx
-  <a
-    href={`/${owner}/${repo}/admin`}
-    className={tabClass("admin")}
-    aria-current={currentTab === "admin" ? "page" : undefined}
-  >
-    <Settings className="h-3.5 w-3.5" aria-hidden="true" />
-    <span>Admin</span>
-  </a>
-  ```
-  _`RepoNavProps` (`RepoNav.tsx:15-21`) has NO `canManageRepo?: boolean` prop at all!_
-- **Code Proof 2 — Backend Already Knows `canManage`, But Doesn't Thread It Consistently:**
-  - `src/worker/routes/ui/overview.ts:288`: computes `canEditRepo = viewer ? await viewerCanWriteRepo(...) : false`, passes `canEditRepo`, NOT `canManageRepo` to `OverviewPage` (`OverviewPage.tsx:100` doesn't pass any permission to `RepoNav`).
-  - `src/worker/routes/ui/tree.ts:154-169`, `src/worker/routes/ui/blob.ts:154-171`, `src/worker/routes/ui/commits.ts:100-118`: don't pass `canManageRepo` to `TreePage`, `BlobPage`, `CommitsPage`.
-  - Compare `resolveAdminPageRepoAccess` in `src/worker/routes/ui/helpers.ts`: actual repo admin access requires **authenticated admin role + namespace membership**, yet `RepoNav` exposes `/admin` to everyone!
-- **Code Proof 3 — Redundant Controls on Repo Overview (`src/client/pages/OverviewPage.tsx:139-156, 240-252`):**
-  - Top row (`:139-156`) renders ref selector + `1 branch` + `0 tags`, while sidebar ALSO lists `BRANCHES` and `Branches 1 (default: main)` / `Tags 0`, and file header row (`:240-252`) repeats `History` & `Browse tree` when `Commits` & `Browse`/`Code` belong in a unified top underline repo tab bar (`<> Code`, `Commits`, plus conditional `Settings` only when `canManageRepo === true`).
-- **Target Fix:**
-  - Add `canManageRepo?: boolean` (computed via existing `canAccessAdminPanel(viewer.role)` + namespace membership helper in `ui/helpers.ts`) across `overview.ts`, `tree.ts`, `blob.ts`, `commits.ts`, `adminPage.ts`.
-  - Redesign `RepoNav.tsx` into a full-width GitHub/Gitea-style horizontal underline sub-header (`<> Code`, `Commits`, and `Settings` only when `canManageRepo === true`). Move repository title breadcrumb cleanly above tabs.
+#### Scope Lock for Phase-01
+
+- **Allowed Files (4):**
+  1. `src/worker/db/d1/dal/workspaceMeta.ts`
+  2. `src/worker/index.ts`
+  3. `src/client/pages/HomePage.tsx` (prop types & passthrough only)
+  4. `src/client/islands/home-repos.tsx` (prop types only)
+- **Strictly Forbidden in Phase-01:** Do not change visual markup in `HomePage.tsx` or `home-repos.tsx` yet; do not touch any other route or component.
+
+#### Forensic Proof (`src/worker/index.ts:67-89`) — Before
+
+```ts
+if (!viewer) {
+  const publicMeta = await listRepositoryMetaMap(
+    c.env.DB,
+    publicRows.map((row) => row.repository.id)
+  );
+  const publicRepositories = publicRows.map((row) => ({
+    id: row.repository.id,
+    slug: row.repository.slug,
+    namespaceSlug: row.namespace.slug,
+    visibility: row.repository.visibility,
+    description: publicMeta.get(row.repository.id)?.description ?? "",
+    updatedAt: row.repository.updatedAt,
+  }));
+  return renderUiDocumentResponse(
+    c.env,
+    "home",
+    {
+      signedIn: false,
+      origin,
+      publicRepositories,
+    },
+    { failureBody: "Failed to render page\n", viewer: null }
+  );
+}
+```
+
+#### Exact Target Patch Proof for Phase-01
+
+1. **`src/worker/db/d1/dal/workspaceMeta.ts` — Add `PublicNamespaceSummary` & `listPublicNamespaceSummaries()`:**
+
+```ts
+export type PublicNamespaceSummary = {
+  slug: string;
+  displayName: string;
+  bio: string;
+  website: string;
+  publicRepoCount: number;
+  projectRepoCount: number;
+};
+```
+
+Queries `namespace_directory_meta` (`display_name`) and `namespace_profile_meta` (`bio`, `website`) in one batched D1 lookup for the distinct namespace IDs present in `publicRows`, computing `publicRepoCount` (all public repos in that namespace) and `projectRepoCount` (public repos excluding `.vibtools`).
+
+2. **`src/worker/index.ts:61-169` — Include `pinned` and `publicNamespaces` on `GET /` and `GET /explore`:**
+
+```ts
+const [publicMeta, publicNamespaces] = await Promise.all([
+  listRepositoryMetaMap(
+    c.env.DB,
+    publicRows.map((row) => row.repository.id)
+  ),
+  listPublicNamespaceSummaries(c.env.DB, publicRows, resolveAdminAuthConfig(c.env).username),
+]);
+const publicRepositories = publicRows.map((row) => ({
+  id: row.repository.id,
+  slug: row.repository.slug,
+  namespaceSlug: row.namespace.slug,
+  visibility: row.repository.visibility,
+  description: publicMeta.get(row.repository.id)?.description ?? "",
+  pinned: publicMeta.get(row.repository.id)?.pinned ?? false,
+  updatedAt: row.repository.updatedAt,
+}));
+```
+
+(And identically include `pinned: repoMeta.get(row.repository.id)?.pinned ?? false` and `publicNamespaces` in the signed-in `GET /` branch at `lines 103-131` and `GET /explore` at `lines 145-166`.)
+
+3. **`src/client/islands/home-repos.tsx:31-50` & `src/client/pages/HomePage.tsx:7-17` — Extend Props:**
+
+```ts
+export type PublicNamespaceItem = {
+  slug: string;
+  displayName: string;
+  bio?: string;
+  website?: string;
+  publicRepoCount: number;
+  projectRepoCount: number;
+};
+
+export type HomeRepositoryItem = {
+  id: string;
+  slug: string;
+  namespaceSlug: string;
+  visibility: "public" | "private";
+  description?: string;
+  pinned?: boolean;
+  updatedAt: number;
+};
+```
 
 ---
 
-### F4. User/Org Public Profile (`/{owner}`) Hierarchy & Metadata Leak (Screenshots 2 & 7 vs Screenshots 3, 4, 6)
+### PHASE-02: Personalized Company Identity Hero & Live Open-Source Metrics Header (`HomePage.tsx`)
 
-- **Symptom:** Look at Screenshot 2 vs GitHub (Screenshot 3), Gitea (Screenshot 4), Forgejo (Screenshot 6):
-  1. `.vibtools` `profile/README.md` card (`OwnerPage.tsx:154-205`) renders **ABOVE** `OwnerReposIsland` (`Overview | Repositories` tabs), so switching to `Repositories` tab STILL shows `.vibtools` README on top.
-  2. Anonymous visitors see `MEMBER` role badge (`OwnerPage.tsx:81-85`) and a public `.vibtools` repo shortcut link (`OwnerPage.tsx:121-125`) inside the profile header.
-  3. Clicking `Overview` shows BOTH `Pinned` AND the full `Repositories` directory stacked (`src/client/islands/owner-profile.tsx:314-433`), making Overview overly tall and redundant with the `Repositories` tab.
-- **Code Proof (`src/client/pages/OwnerPage.tsx:81-85, 121-125, 154-240`):**
-  ```tsx
-  <span className="rounded border ... uppercase">
-    {ownerRole}
-  </span>
-  ...
-  {hasProfileRepo ? (
-    <a href={`/${owner}/${profileRepoSlug}`}>.{profileRepoSlug.slice(1)}</a>
-  ) : null}
-  ...
-  {/* Profile README currently rendered BEFORE OwnerReposIsland! */}
-  {profileReadme ? <section aria-label="Profile README">...</section> : null}
-  <IslandHost name="owner-profile" ...>
-  ```
-- **Target Fix:**
-  - Move `profileReadme` + owner `.vibtools` setup banner **inside** `OwnerReposIsland`'s `"overview"` tab panel (below pinned/popular repos or right at top of the Overview tab, disappearing cleanly when user switches to `"repositories"` tab, matching GitHub & Gitea!).
-  - Hide `ownerRole` badge from anonymous public visitors (show only when `viewer` is admin/owner viewing, or keep public header clean like GitHub/Gitea/Forgejo: Display Name, `@handle`, concise bio, repo count, location, website).
-  - Keep `Pinned` + compact repository cards inside `Overview` tab and put search/filter/all-repos cleanly inside `Repositories` tab.
+#### Scope Lock for Phase-02
 
----
+- **Allowed Files (1):**
+  1. `src/client/pages/HomePage.tsx`
+- **Strictly Forbidden in Phase-02:** Do not touch `home-repos.tsx`, `index.ts`, or any other page.
 
-### F5. Users Panel (`/user/*`) Clutter & Admin CTA Leak (`AccountPage.tsx`, `UserSettingsLayout.tsx`)
+#### Forensic Proof (`src/client/pages/HomePage.tsx:33-59`) — Before
 
-- **Symptom:** The user specifically flagged _"users panel er moddhe admin CTA and useless CTA nav button ekhono ace"_.
-- **Code Proof 1 — Admin CTA Leaked Into User Panel (`src/client/pages/AccountPage.tsx:136-144`):**
-  ```tsx
-  {
-    isAdmin ? (
-      <a
-        href="/admin"
-        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-500/30 bg-accent-500/10 ..."
-      >
-        <Shield className="h-3.5 w-3.5" aria-hidden="true" />
-        <span>Site Administration</span>
-      </a>
-    ) : null;
-  }
-  ```
-  _`Control Panel` is already in the top-right `@username` header dropdown (`header.tsx:96-102`). Mixing an Admin button inside `/user/*` violates panel separation._
-- **Code Proof 2 — Duplicate Profile Link (`AccountPage.tsx:127-135` + `profile-settings.tsx:89-95`):**
-  - `AccountPage` header renders `Public page ↗` at top right, and right underneath it `ProfileSettingsIsland` ALSO renders `Open /{namespaceSlug} ↗` on `/user/profile`!
-- **Code Proof 3 — Extra Footer CTA in User Sidebar (`src/client/components/UserSettingsLayout.tsx:114-123`):**
-  ```tsx
-  <a href="/">
-    <FolderGit2 ... />
-    <span>Back to Repositories</span>
-  </a>
-  ```
-  _Duplicates the primary `Repositories` link sitting directly in the top header (`header.tsx:41`)._
-- **Target Fix:**
-  - Remove `Site Administration` button from `AccountPage.tsx` completely (keep `/admin` accessible strictly from the header `@user` menu and `/admin/*`).
-  - Keep a single concise `View public profile ↗` action in `AccountPage` header (remove redundant duplicate in `profile-settings.tsx` header or vice versa).
-  - Remove redundant `Back to Repositories` footer CTA from `UserSettingsLayout.tsx` (keep sidebar laser-focused on User Settings sections: `Profile`, `Account & Repos`, `Settings`, `Security`, `Access Tokens`). Simplify `/user/settings` vs `/user/profile` overlap so each link has a clear single purpose.
+```tsx
+      {!signedIn ? (
+        <section className="flex flex-col justify-between gap-4 rounded-md border border-zinc-200 bg-white px-5 py-4 sm:flex-row sm:items-center dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <GitBranch
+                className="h-4 w-4 shrink-0 text-accent-600 dark:text-accent-400"
+                aria-hidden="true"
+              />
+              <h1 className="m-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+                git-on-cloudflare
+              </h1>
+            </div>
+            <p className="m-0 mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+              Edge-native Git Smart HTTP v2 hosting on Cloudflare Workers. Explore public
+              repositories below or sign in to create repositories and manage tokens.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href="/auth"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-600 bg-accent-600 px-3.5 text-xs font-medium whitespace-nowrap text-white no-underline hover:bg-accent-700"
+            >
+              <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Sign in</span>
+            </a>
+          </div>
+        </section>
+      ) : (
+```
 
----
+#### Exact Target Patch Proof for Phase-02 (`src/client/pages/HomePage.tsx`)
 
-### F6. Global Header & Auth Sign-In Polish (`header.tsx`, `AuthSignInPage.tsx`)
+Replace the generic banner with a personalized **Vib Tools Organization Open-Source & Engineering Portal Hero Card** (shown on anonymous `/` and on `/explore`):
 
-- **Code Proof (`src/client/components/header.tsx:19, 34-61, 108-115`):**
-  - Top bar `bg-white dark:bg-zinc-900` needs crisp surface contrast (`dark:bg-[#010409] dark:border-b dark:border-[#30363d]`) and cleaner spacing (`h-13` / `52px`), zero bloated `rounded-xl` buttons.
-  - Note: Test `test/github-feel.worker.test.ts` and `test/admin-panel.test.ts` assert header links and routes — keep exact `href` paths (`/`, `/explore`, `/auth`, `/user/profile`, `/admin`) untouched!
+- Computes:
+  - `openSourceProjectCount`: count of `publicRepositories` where `repo.slug !== PROFILE_REPO_SLUG` (falling back to `publicRepositories.length` if all are profile repos).
+  - `teamNamespaceCount`: `publicNamespaces.length` (or distinct `namespaceSlug` count from `publicRepositories`).
+  - `pinnedProjectCount`: count of `publicRepositories` where `repo.pinned && repo.slug !== PROFILE_REPO_SLUG`.
+- Displays:
+  - Top eyebrow badge: `Vib Tools · Official Open-Source & Engineering Forge`
+  - Main heading (`h1`): `git-on-cloudflare` (preserving test/brand anchor) with subtitle `Vib Tools Open-Source & Team Repositories`
+  - Description: _"Practical software for real workflows. Browse our public open-source repositories, edge-native tools, and product team namespaces below—or sign in to access private company backups and internal workspaces."_
+  - Action buttons on right:
+    - External link `vibtools.io ↗` (`https://vibtools.io/`, `target="_blank"`, `rel="noreferrer"`)
+    - Primary CTA `Team Sign in` (`/auth`) when `!signedIn`
+  - Bottom live metrics bar inside the hero card:
+    - `{openSourceProjectCount} Open-Source Projects`
+    - `{teamNamespaceCount} Active Teams & Namespaces`
+    - `{pinnedProjectCount > 0 ? `${pinnedProjectCount} Featured Releases` : "Git Smart HTTP v2 · Edge-Native"}`
+    - `Private Company Backups Protected`
 
 ---
 
-## 2. Strict Per-Phase Scope Locks
+### PHASE-03: Featured/Pinned Showcase Grid, Team/Namespace Filter Pills, Smart `.vibtools` Hiding & Sort Controls (`home-repos.tsx`)
 
-> **Contract:** During any Phase `N`, ONLY files listed under **Allowed Files** may be modified. Everything under **Locked / Untouched** MUST NOT be touched or refactored during that phase.
+#### Scope Lock for Phase-03
 
-| Phase        | Scope Focus                                                                                                   | Allowed Files to Modify                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Strictly Locked / Untouched                                                                                                              |
-| ------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| **Phase-01** | Design System, Fonts, Cool-Slate Palette & Standardized Radius                                                | `src/client/server/document.tsx`, `src/client/styles/app.css`, `src/client/components/ui/button.tsx`, `src/client/components/ui/card.tsx`, `src/client/components/ui/input.tsx`, `src/client/components/ui/badge.tsx`, `src/client/components/ui/page-header.tsx`                                                                                                                                                                                                                                                               | All worker routes (`src/worker/*`), all islands logic, DB/DAL, DO, tests (except visual/CSS class assertions if any)                     |
-| **Phase-02** | Top Header + Full-Width Repo Sub-Nav (`RepoNav`) + `Admin` Tab RBAC Gate                                      | `src/client/components/header.tsx`, `src/client/components/RepoNav.tsx`, `src/client/pages/OverviewPage.tsx`, `src/client/pages/TreePage.tsx`, `src/client/pages/BlobPage.tsx`, `src/client/pages/CommitsPage.tsx`, `src/client/pages/CommitPage.tsx`, `src/client/pages/AdminPage.tsx`, `src/worker/routes/ui/helpers.ts`, `src/worker/routes/ui/overview.ts`, `src/worker/routes/ui/tree.ts`, `src/worker/routes/ui/blob.ts`, `src/worker/routes/ui/commits.ts`, `src/worker/routes/ui/adminPage.ts`, + test update if needed | `src/worker/git/*`, `src/worker/do/*`, `src/worker/db/*`, `src/worker/auth/*`, `OwnerPage.tsx`, `AccountPage.tsx`, `SystemAdminPage.tsx` |
-| **Phase-03** | Public Profile (`/{owner}`) GitHub/Gitea Layout & Privacy Cleanups                                            | `src/client/pages/OwnerPage.tsx`, `src/client/islands/owner-profile.tsx`, `src/worker/routes/ui/overview.ts` (profile handler section only), `test/vibtools-profile.worker.test.ts`, `test/github-feel.worker.test.ts`                                                                                                                                                                                                                                                                                                          | Repo browse pages, `/user/*`, `/admin/*`, Git Smart HTTP, Auth APIs                                                                      |
-| **Phase-04** | Users Panel (`/user/*`) & Sidebar Cleanup (Remove Admin & Duplicate CTAs)                                     | `src/client/pages/AccountPage.tsx`, `src/client/components/UserSettingsLayout.tsx`, `src/client/islands/profile-settings.tsx`, `src/client/islands/tokens.tsx`, `src/client/islands/change-password.tsx`, `src/client/islands/repositories.tsx`, `test/admin-panel.test.ts`, `test/demo-user-mock-repo.worker.test.ts`                                                                                                                                                                                                          | `/admin/*` pages & APIs, Git routes, `OwnerPage.tsx`, Repo pages                                                                         |
-| **Phase-05** | Error Handling Hardening + Remaining Views Polish (`Tree`, `Blob`, `Commits`, `Home`, `AuthSignIn`, `Admin*`) | `src/client/server/error.ts`, `src/worker/index.ts` (content-negotiated `onError`), `src/client/pages/ErrorPage.tsx`, `src/client/pages/NotFoundPage.tsx`, `src/client/pages/HomePage.tsx`, `src/client/pages/AuthSignInPage.tsx`, `src/client/components/AdminSettingsLayout.tsx`, `src/client/pages/AdminSettingsPage.tsx`, `src/client/pages/AdminSecurityPage.tsx` + targeted error-boundary tests                                                                                                                          | `src/worker/git/*`, `src/worker/do/*`, `src/worker/db/*`, Git ACL status codes (401/403/404 contracts in `git-acl.worker.test.ts`)       |
-| **Phase-06** | End-to-End Responsive, Dark/Light & Production Audit                                                          | Cross-view verification, test additions under `test/`, Prettier formatting (`npm run format:check`), Playwright captures (desktop + mobile, dark + light)                                                                                                                                                                                                                                                                                                                                                                       | No new features outside Phases 01–05; fix only regressions discovered in verification                                                    |
+- **Allowed Files (1):**
+  1. `src/client/islands/home-repos.tsx`
+- **Strictly Forbidden in Phase-03:** Do not touch `HomePage.tsx`, `OwnerPage.tsx`, `OverviewPage.tsx`, or backend routes.
+
+#### Forensic Proof (`src/client/islands/home-repos.tsx:96-114`) — Before
+
+```tsx
+const sourceList = activeFeed === "public" ? publicRepositories : repositories;
+
+const filtered = useMemo(() => {
+  const q = query.trim().toLowerCase();
+  return sourceList.filter((repo) => {
+    if (
+      activeFeed === "mine" &&
+      visibilityFilter !== "all" &&
+      repo.visibility !== visibilityFilter
+    ) {
+      return false;
+    }
+    if (!q) return true;
+    return (
+      `${repo.namespaceSlug}/${repo.slug}`.toLowerCase().includes(q) ||
+      (repo.description ?? "").toLowerCase().includes(q)
+    );
+  });
+}, [sourceList, activeFeed, query, visibilityFilter]);
+```
+
+#### Exact Target Patch Proof for Phase-03 (`src/client/islands/home-repos.tsx`)
+
+1. **New Interactive State Hooks in `HomeReposIsland`:**
+   - `const [namespaceFilter, setNamespaceFilter] = useState<string>("all");`
+   - `const [sortBy, setSortBy] = useState<"updated" | "name">("updated");`
+   - `const [showProfileRepos, setShowProfileRepos] = useState<boolean>(false);`
+2. **Smart `.vibtools` Profile Repo Hiding on Public Feed:**
+   - In `activeFeed === "public"`, repositories with `repo.slug === PROFILE_REPO_SLUG` (`.vibtools`) are hidden by default unless `showProfileRepos === true` OR the user explicitly types `.vibtools` in the search box (`q.includes(".vibtools")`).
+   - If the instance ONLY has `.vibtools` repositories and zero non-profile repos, automatically show them so the list is never unexpectedly blank.
+3. **Featured / Pinned Open-Source Projects 2-Column Grid (Public Feed):**
+   - Extracts `featuredRepos = publicRepositories.filter((r) => r.pinned && r.slug !== PROFILE_REPO_SLUG).slice(0, 4)` (or top 2 non-profile public repos with descriptions if none are explicitly pinned yet).
+   - When `activeFeed === "public"` and `!query.trim()` and `namespaceFilter === "all"` and `featuredRepos.length > 0`, renders a clean **`Featured Open-Source Projects`** section above the directory toolbar with 2-column `rounded-md` cards (`grid-cols-1 md:grid-cols-2`), displaying:
+     - Folder/Repo icon + `namespaceSlug / slug` in `Hanken Grotesk` (`font-semibold`)
+     - `Featured` / `Public` badge
+     - 2-line project description
+     - Team profile link (`@namespaceSlug`) + relative update timestamp + one-click `Clone` URL copy button.
+4. **Team / Namespace Quick-Filter Strip (Public Feed):**
+   - Renders horizontal filter pills for every active team/namespace in the public catalog:
+     - `All Teams ({totalProjectCount})`
+     - `@{ns.slug} ({count})` (e.g., `@alex-dev (2)`, `@admin (1)`)
+     - Plus a right-aligned subtle toggle pill when profile repos exist: `Profile configs (.vibtools)` (`aria-pressed={showProfileRepos}`).
+5. **Sort Switcher & Sharp Row Typography:**
+   - Adds a compact sort selector (`Recently updated` | `Name A–Z`) next to the search bar.
+   - Replaces `font-mono text-sm font-medium` on the repo row title (`line 433`) with `text-sm font-semibold tracking-tight` (`Hanken Grotesk`), adds a `Pinned` badge on pinned rows, and replaces all 5 legacy `rounded-lg` classes in `home-repos.tsx` (`lines 297, 404, 422, 535, 596`) with `rounded-md`.
+
+---
+
+### PHASE-04: Public 2-Column Company Portal Sidebar (Organization Overview, Teams Directory & Private Backup Access) + Regression Sign-Off
+
+#### Scope Lock for Phase-04
+
+- **Allowed Files (2):**
+  1. `src/client/islands/home-repos.tsx`
+  2. `test/github-feel.worker.test.ts`
+- **Strictly Forbidden in Phase-04:** Do not touch any file outside `home-repos.tsx` and `test/github-feel.worker.test.ts`.
+
+#### Forensic Proof (`src/client/islands/home-repos.tsx:524-527`) — Before
+
+```tsx
+// Anonymous homepage or /explore: single clean column
+if (!signedIn || exploreOnly) {
+  return repoListPanel;
+}
+```
+
+#### Exact Target Patch Proof for Phase-04 (`src/client/islands/home-repos.tsx`)
+
+Instead of dropping the right column on the public homepage (`!signedIn || exploreOnly`), render a responsive 2-column layout (`grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_280px]`) with an `<aside aria-label="Organization and teams summary">` containing 3 compact, high-trust cards (`rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900`):
+
+1. **Card 1 — Organization Overview (`Vib Tools`):**
+   - Header: `Organization`
+   - Body: **Vib Tools** (`Practical software, web applications, and open-source developer tools built for real workflows.`)
+   - Links:
+     - Official Website: `https://vibtools.io/`
+     - Support: `mailto:support@vibtools.io`
+2. **Card 2 — Teams & Namespaces Directory:**
+   - Header: `Teams & Namespaces ({publicNamespaces.length})`
+   - Lists each public team/namespace (`@alex-dev`, `@admin`, etc.) with:
+     - Display Name (`Alex Rivera`, `Administrator`) + `@slug` handle badge
+     - Optional 1-line bio snippet
+     - Public repository count badge
+     - Direct link to `buildNamespaceProfileHref(ns.slug)` (`/:owner`) AND quick-filter button to filter the catalog by that team.
+3. **Card 3 — Private & Backup Repositories Notice (shown when `!signedIn`):**
+   - Header with `<Lock />` icon: `Private & Backup Repositories`
+   - Copy: _"Internal company backups, proprietary product builds, and private team repositories are hidden from public view."_
+   - CTA link: `Sign in to Team Workspace →` (`/auth`).

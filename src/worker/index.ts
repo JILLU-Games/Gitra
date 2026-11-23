@@ -7,12 +7,17 @@ import { registerAuthRoutes } from "./routes/auth";
 import { requestServicesMiddleware, type AppBindings, type AppContext } from "./routes/hono";
 import { renderUiDocumentResponse } from "./routes/uiResponse";
 import { loadViewer } from "./auth/session";
-import { DEFAULT_DEMO_USER_USERNAME, isDemoModeEnabled } from "./auth/adminAuth";
+import {
+  DEFAULT_DEMO_USER_USERNAME,
+  isDemoModeEnabled,
+  resolveAdminAuthConfig,
+} from "./auth/adminAuth";
 import { ensureDemoTestUserSeeded } from "./auth/demoSeed";
 import { createDb } from "./db/d1/client";
 import {
   findNamespaceBySlug,
   listNamespacesForUser,
+  listPublicNamespaceSummaries,
   listPublicRepositoriesWithNamespaces,
   listRepositoriesForUser,
   listRepositoryMetaMap,
@@ -63,18 +68,23 @@ app.get("/", async (c) => {
   const viewer = await loadViewer(c);
   const origin = resolveRequestOrigin(c);
   const publicRows = await listPublicRepositoriesWithNamespaces(c.var.db);
+  const primaryAdminSlug = resolveAdminAuthConfig(c.env).username;
 
   if (!viewer) {
-    const publicMeta = await listRepositoryMetaMap(
-      c.env.DB,
-      publicRows.map((row) => row.repository.id)
-    );
+    const [publicMeta, publicNamespaces] = await Promise.all([
+      listRepositoryMetaMap(
+        c.env.DB,
+        publicRows.map((row) => row.repository.id)
+      ),
+      listPublicNamespaceSummaries(c.env.DB, publicRows, primaryAdminSlug),
+    ]);
     const publicRepositories = publicRows.map((row) => ({
       id: row.repository.id,
       slug: row.repository.slug,
       namespaceSlug: row.namespace.slug,
       visibility: row.repository.visibility,
       description: publicMeta.get(row.repository.id)?.description ?? "",
+      pinned: publicMeta.get(row.repository.id)?.pinned ?? false,
       updatedAt: row.repository.updatedAt,
     }));
     return renderUiDocumentResponse(
@@ -83,15 +93,17 @@ app.get("/", async (c) => {
       {
         signedIn: false,
         origin,
+        publicNamespaces,
         publicRepositories,
       },
       { failureBody: "Failed to render page\n", viewer: null }
     );
   }
 
-  const [repositoryRows, namespaces] = await Promise.all([
+  const [repositoryRows, namespaces, publicNamespaces] = await Promise.all([
     listRepositoriesForUser(c.var.db, viewer.userId),
     listNamespacesForUser(c.var.db, viewer.userId),
+    listPublicNamespaceSummaries(c.env.DB, publicRows, primaryAdminSlug),
   ]);
   const allRepoIds = Array.from(
     new Set([
@@ -106,6 +118,7 @@ app.get("/", async (c) => {
     namespaceSlug: row.namespace.slug,
     visibility: row.repository.visibility,
     description: repoMeta.get(row.repository.id)?.description ?? "",
+    pinned: repoMeta.get(row.repository.id)?.pinned ?? false,
     updatedAt: row.repository.updatedAt,
   }));
 
@@ -119,12 +132,14 @@ app.get("/", async (c) => {
       displayName: viewer.displayName,
       viewerRole: viewer.role,
       namespaces: namespaces.map((ns) => ({ id: ns.id, slug: ns.slug })),
+      publicNamespaces,
       repositories: repositoryRows.map((row) => ({
         id: row.repository.id,
         slug: row.repository.slug,
         namespaceSlug: row.namespace.slug,
         visibility: row.repository.visibility,
         description: repoMeta.get(row.repository.id)?.description ?? "",
+        pinned: repoMeta.get(row.repository.id)?.pinned ?? false,
         updatedAt: row.repository.updatedAt,
       })),
       publicRepositories,
@@ -138,16 +153,21 @@ app.get("/explore", async (c) => {
   const viewer = await loadViewer(c);
   const origin = resolveRequestOrigin(c);
   const publicRows = await listPublicRepositoriesWithNamespaces(c.var.db);
-  const publicMeta = await listRepositoryMetaMap(
-    c.env.DB,
-    publicRows.map((row) => row.repository.id)
-  );
+  const primaryAdminSlug = resolveAdminAuthConfig(c.env).username;
+  const [publicMeta, publicNamespaces] = await Promise.all([
+    listRepositoryMetaMap(
+      c.env.DB,
+      publicRows.map((row) => row.repository.id)
+    ),
+    listPublicNamespaceSummaries(c.env.DB, publicRows, primaryAdminSlug),
+  ]);
   const publicRepositories = publicRows.map((row) => ({
     id: row.repository.id,
     slug: row.repository.slug,
     namespaceSlug: row.namespace.slug,
     visibility: row.repository.visibility,
     description: publicMeta.get(row.repository.id)?.description ?? "",
+    pinned: publicMeta.get(row.repository.id)?.pinned ?? false,
     updatedAt: row.repository.updatedAt,
   }));
 
@@ -161,6 +181,7 @@ app.get("/explore", async (c) => {
       primaryNamespaceSlug: viewer?.primaryNamespaceSlug,
       displayName: viewer?.displayName,
       viewerRole: viewer?.role,
+      publicNamespaces,
       repositories: [],
       publicRepositories,
     },

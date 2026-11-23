@@ -1077,7 +1077,7 @@ export async function ensureDemoTestUserSeeded(args: {
       await upsertNamespaceProfileMeta(args.env.DB, namespace.id, {
         bio: "Edge systems developer building TypeScript starter kits on Cloudflare Workers.",
         location: "San Francisco, CA",
-        website: "https://alexrivera.dev",
+        website: "https://vibtools.io",
         now,
       });
     }

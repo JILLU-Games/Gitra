@@ -1,9 +1,13 @@
 import {
+  sanitizeDisplayName,
   sanitizeProfileBio,
   sanitizeProfileLocation,
   sanitizeProfileWebsite,
   sanitizeRepoDescription,
 } from "@/shared/admin/panel";
+import { PROFILE_REPO_SLUG } from "@/shared/slugs";
+import { ensureNamespaceDirectoryMetaTable } from "./adminDirectory";
+import type { RepositoryListing } from "./repositories";
 
 export type NamespaceProfileMeta = {
   bio: string;
@@ -14,6 +18,15 @@ export type NamespaceProfileMeta = {
 export type RepositoryMeta = {
   description: string;
   pinned: boolean;
+};
+
+export type PublicNamespaceSummary = {
+  slug: string;
+  displayName: string;
+  bio: string;
+  website: string;
+  publicRepoCount: number;
+  projectRepoCount: number;
 };
 
 type NamespaceProfileMetaRow = {
@@ -201,4 +214,101 @@ export async function upsertRepositoryMeta(
     .run();
 
   return { description: nextDescription, pinned: nextPinned };
+}
+
+export async function listPublicNamespaceSummaries(
+  d1: D1Database,
+  publicRows: readonly RepositoryListing[],
+  primaryAdminSlug?: string
+): Promise<PublicNamespaceSummary[]> {
+  if (publicRows.length === 0) return [];
+
+  const countsByNamespaceId = new Map<
+    string,
+    { slug: string; publicRepoCount: number; projectRepoCount: number }
+  >();
+  for (const row of publicRows) {
+    const existing = countsByNamespaceId.get(row.namespace.id);
+    const isProjectRepo = row.repository.slug !== PROFILE_REPO_SLUG;
+    if (existing) {
+      existing.publicRepoCount += 1;
+      if (isProjectRepo) existing.projectRepoCount += 1;
+    } else {
+      countsByNamespaceId.set(row.namespace.id, {
+        slug: row.namespace.slug,
+        publicRepoCount: 1,
+        projectRepoCount: isProjectRepo ? 1 : 0,
+      });
+    }
+  }
+
+  const namespaceIds = Array.from(countsByNamespaceId.keys());
+  await Promise.all([ensureWorkspaceMetaTables(d1), ensureNamespaceDirectoryMetaTable(d1)]);
+
+  const directoryById = new Map<string, { displayName: string; status: string }>();
+  const profileById = new Map<string, { bio: string; website: string }>();
+
+  const chunkSize = 80;
+  for (let i = 0; i < namespaceIds.length; i += chunkSize) {
+    const slice = namespaceIds.slice(i, i + chunkSize);
+    const placeholders = slice.map(() => "?").join(", ");
+    const [dirResult, profResult] = await Promise.all([
+      d1
+        .prepare(
+          `SELECT namespace_id, display_name, status
+           FROM namespace_directory_meta
+           WHERE namespace_id IN (${placeholders})`
+        )
+        .bind(...slice)
+        .all<{ namespace_id: string; display_name: string; status: string }>(),
+      d1
+        .prepare(
+          `SELECT namespace_id, bio, website
+           FROM namespace_profile_meta
+           WHERE namespace_id IN (${placeholders})`
+        )
+        .bind(...slice)
+        .all<{ namespace_id: string; bio: string; website: string }>(),
+    ]);
+
+    for (const row of dirResult.results ?? []) {
+      directoryById.set(row.namespace_id, {
+        displayName: row.display_name ?? "",
+        status: row.status ?? "active",
+      });
+    }
+    for (const row of profResult.results ?? []) {
+      profileById.set(row.namespace_id, {
+        bio: row.bio ?? "",
+        website: row.website ?? "",
+      });
+    }
+  }
+
+  const summaries: PublicNamespaceSummary[] = [];
+  for (const [namespaceId, counts] of countsByNamespaceId.entries()) {
+    const dir = directoryById.get(namespaceId);
+    const prof = profileById.get(namespaceId);
+    const isPrimaryAdmin = Boolean(primaryAdminSlug && counts.slug === primaryAdminSlug);
+    if (!isPrimaryAdmin && dir?.status === "disabled") {
+      continue;
+    }
+    const fallbackName = isPrimaryAdmin ? "Administrator" : counts.slug;
+    const displayName = dir?.displayName
+      ? sanitizeDisplayName(dir.displayName, fallbackName)
+      : fallbackName;
+
+    summaries.push({
+      slug: counts.slug,
+      displayName,
+      bio: prof?.bio ?? "",
+      website: prof?.website ?? "",
+      publicRepoCount: counts.publicRepoCount,
+      projectRepoCount: counts.projectRepoCount,
+    });
+  }
+
+  return summaries.sort(
+    (a, b) => b.projectRepoCount - a.projectRepoCount || a.slug.localeCompare(b.slug)
+  );
 }
