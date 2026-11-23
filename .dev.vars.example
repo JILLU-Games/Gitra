@@ -12,9 +12,15 @@ LOG_LEVEL=debug
 # `wrangler secret put SESSION_SECRET`; never commit a real production value.
 SESSION_SECRET=local-goc-session-secret-change-me
 
+# Authentication runtime mode: development | production.
+# - Local `npm run dev` runs in development/demo mode by default.
+# - Production builds (`npm run build` / `npm run deploy`) automatically
+#   compile in production mode (`import.meta.env.PROD === true`) with demo
+#   sign-in and mock repository seeding disabled.
+AUTH_MODE=development
+
 # Optional admin login credentials. Leave ADMIN_PASSWORD unset in local dev
-# or Live Preview to enable Mock Mode (default `admin` / `admin123` and the
-# "Quick Demo Login" button). In production, set ADMIN_PASSWORD with
-# `wrangler secret put ADMIN_PASSWORD` to disable demo login.
+# to enable Demo Mode (default `admin` / `admin123` and `alex-dev` / `devuser123`).
+# In production, set ADMIN_PASSWORD with `wrangler secret put ADMIN_PASSWORD`.
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=

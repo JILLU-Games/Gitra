@@ -9,7 +9,7 @@ import type { UserRow } from "@/worker/db/d1/schema";
 import type { AppContext } from "@/worker/routes/hono";
 import { z } from "zod";
 
-import { buildLocalAccountSubject, resolveAdminAuthConfig } from "./adminAuth";
+import { buildLocalAccountSubject, isProductionRuntime, resolveAdminAuthConfig } from "./adminAuth";
 import { clearSessionCookie, getSessionCookie, setSessionCookie } from "./cookies";
 
 // Session cookie value shape: `goc_sess_<base64url AES-GCM blob>`.
@@ -149,12 +149,15 @@ function getEphemeralFallbackSecret(): string {
 }
 
 export function loadSessionConfig(env: Env): SessionConfigResult {
-  // When SESSION_SECRET is completely unset (for example in Live Preview
-  // without a local `.dev.vars` file), use a cryptographically random
-  // per-isolate signing key so demo sign-in works immediately. An explicitly
-  // empty string still fails closed so misconfigured deployments and tests
-  // surface `missing_session_secret`.
+  // In Production Mode (`vite build` / `AUTH_MODE=production`), a real non-empty
+  // `SESSION_SECRET` is strictly required and never falls back to an ephemeral key.
+  // In local Development / Live Preview when `SESSION_SECRET` is completely unset
+  // (undefined), use a per-isolate random signing key so local dev works out of
+  // the box. An explicitly empty string always fails closed.
   if (env.SESSION_SECRET === undefined) {
+    if (isProductionRuntime(env)) {
+      return { ok: false, reason: "missing_session_secret" };
+    }
     return { ok: true, secret: getEphemeralFallbackSecret() };
   }
   const secret = env.SESSION_SECRET.trim();

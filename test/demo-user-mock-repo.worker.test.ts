@@ -185,10 +185,52 @@ describe("Dev Mode test user (@alex-dev) and mock GitHub-ready repository", () =
     expect(manualLoginRes.headers.get("location")).toBe("/user/account");
     expect(extractSessionToken(manualLoginRes.headers.get("set-cookie"))).toBeTruthy();
 
-    // 6. When ADMIN_PASSWORD is configured, Demo Mode login for account=user is disabled
+    // 6. When ADMIN_PASSWORD is configured or AUTH_MODE=production, Demo Mode is disabled
     const originalAdminPassword = env.ADMIN_PASSWORD;
-    env.ADMIN_PASSWORD = "configured-prod-password";
+    const originalAuthMode = env.AUTH_MODE;
     try {
+      // 6a. Explicit AUTH_MODE=production without ADMIN_PASSWORD still disables demo mode and rejects admin123
+      env.AUTH_MODE = "production";
+      env.ADMIN_PASSWORD = "";
+
+      const prodDemoRes = await SELF.fetch(`${ORIGIN}/auth/demo-login`, {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          Origin: ORIGIN,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ account: "admin" }).toString(),
+      });
+      expect(prodDemoRes.status).toBe(403);
+
+      const prodDefaultAdminLogin = await SELF.fetch(`${ORIGIN}/auth/login`, {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          Origin: ORIGIN,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          username: "admin",
+          password: "admin123",
+        }).toString(),
+      });
+      expect(prodDefaultAdminLogin.status).toBe(303);
+      expect(prodDefaultAdminLogin.headers.get("location")).toBe("/auth?error=invalid_credentials");
+      expect(extractSessionToken(prodDefaultAdminLogin.headers.get("set-cookie"))).toBeNull();
+
+      const prodAuthPageRes = await SELF.fetch(`${ORIGIN}/auth`);
+      expect(prodAuthPageRes.status).toBe(200);
+      const prodAuthPageHtml = await prodAuthPageRes.text();
+      expect(prodAuthPageHtml).toContain("Production Auth");
+      expect(prodAuthPageHtml).not.toContain("Quick Demo Login");
+      expect(prodAuthPageHtml).not.toContain("Demo User Panel");
+      expect(prodAuthPageHtml).not.toContain("admin123");
+      expect(prodAuthPageHtml).not.toContain("devuser123");
+
+      // 6b. Configured ADMIN_PASSWORD in production mode authenticates the primary admin
+      env.ADMIN_PASSWORD = "configured-prod-password";
       const disabledDemoRes = await SELF.fetch(`${ORIGIN}/auth/demo-login`, {
         method: "POST",
         redirect: "manual",
@@ -200,11 +242,24 @@ describe("Dev Mode test user (@alex-dev) and mock GitHub-ready repository", () =
       });
       expect(disabledDemoRes.status).toBe(403);
 
-      const prodAuthRes = await SELF.fetch(`${ORIGIN}/auth`);
-      const prodAuthHtml = await prodAuthRes.text();
-      expect(prodAuthHtml).not.toContain("Demo User Panel");
+      const prodConfiguredLogin = await SELF.fetch(`${ORIGIN}/auth/login`, {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          Origin: ORIGIN,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          username: "admin",
+          password: "configured-prod-password",
+        }).toString(),
+      });
+      expect(prodConfiguredLogin.status).toBe(303);
+      expect(prodConfiguredLogin.headers.get("location")).toBe("/");
+      expect(extractSessionToken(prodConfiguredLogin.headers.get("set-cookie"))).toBeTruthy();
     } finally {
       env.ADMIN_PASSWORD = originalAdminPassword;
+      env.AUTH_MODE = originalAuthMode;
     }
   });
 });

@@ -418,8 +418,9 @@ export function registerAuthLoginRoutes(router: AppRouter) {
     } as const);
   });
 
-  // POST /auth/demo-login: one-click Live Preview / Mock Mode admin sign-in.
-  // Automatically disabled whenever `ADMIN_PASSWORD` is configured in env.
+  // POST /auth/demo-login: one-click local Development / Demo Mode sign-in.
+  // Automatically disabled in Production builds (`import.meta.env.PROD`), when
+  // `AUTH_MODE=production`, or whenever `ADMIN_PASSWORD` is configured in env.
   router.post(`/auth/demo-login`, async (c) => {
     const log = c.var.logFor({ service: "AuthLogin" });
     const violation = sameOriginViolation(c);
@@ -430,7 +431,7 @@ export function registerAuthLoginRoutes(router: AppRouter) {
 
     if (!isDemoModeEnabled(c.env)) {
       log.warn("auth:demo-login-disabled");
-      return json({ error: "Demo login is disabled when ADMIN_PASSWORD is configured" }, 403);
+      return json({ error: "Demo login is disabled in production mode" }, 403);
     }
 
     const body = await readLoginPayload(c);

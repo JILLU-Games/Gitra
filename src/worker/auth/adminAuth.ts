@@ -1,16 +1,23 @@
 import { validateSlugForRoute } from "@/shared/slugs";
 
 /**
- * Local administrator authentication for the web dashboard.
+ * Local administrator and runtime mode resolution for the web dashboard.
  *
- * Deployment model:
- * - When `ADMIN_PASSWORD` is configured in the Worker environment (via
- *   `wrangler secret put ADMIN_PASSWORD` or `.dev.vars`), the app runs in
- *   `configured` mode and only accepts that credential pair. Passwordless
- *   Quick Demo Login is disabled.
- * - When `ADMIN_PASSWORD` is unset (such as Live Preview / local mock mode),
- *   the app runs in `demo` mode with default credentials `admin` / `admin123`
- *   and enables the one-click "Quick Demo Login" button on `/auth`.
+ * Two-mode authentication architecture:
+ * 1. Development / Demo Mode (`mode: "demo"`, `runtimeMode: "development"`):
+ *    - Active automatically on the local/dev server (`vite dev` where
+ *      `import.meta.env.PROD` is false) when neither `AUTH_MODE=production`
+ *      nor `ADMIN_PASSWORD` is configured.
+ *    - Enables default demo credentials (`admin` / `admin123`,
+ *      `alex-dev` / `devuser123`), one-click `/auth/demo-login`, and lazy
+ *      demo repository seeding.
+ * 2. Production Mode (`mode: "configured"`, `runtimeMode: "production"`):
+ *    - Active automatically on production builds (`vite build` / `npm run build`
+ *      where `import.meta.env.PROD === true`), when `AUTH_MODE=production`, or
+ *      when `ADMIN_PASSWORD` is configured via Worker secrets.
+ *    - Strictly disables `/auth/demo-login`, disables all mock user/repository
+ *      seeding, removes demo UI from `/auth`, and never falls back to default
+ *      demo passwords (`admin123` / `devuser123`).
  */
 
 export const DEFAULT_DEMO_ADMIN_USERNAME = "admin";
@@ -20,7 +27,10 @@ export const DEFAULT_DEMO_USER_PASSWORD = "devuser123";
 export const DEFAULT_DEMO_USER_DISPLAY_NAME = "Alex Rivera";
 export const DEFAULT_POST_LOGIN_REDIRECT = "/";
 
+export type AuthRuntimeMode = "development" | "production";
+
 export type AdminAuthEnv = {
+  AUTH_MODE?: string;
   ADMIN_USERNAME?: string;
   ADMIN_PASSWORD?: string;
 };
@@ -30,7 +40,7 @@ export type AdminAuthMode = "demo" | "configured";
 export interface ResolvedAdminAuthConfig {
   mode: AdminAuthMode;
   username: string;
-  password: string;
+  password: string | null;
 }
 
 export type VerifyAdminCredentialsResult =
@@ -50,6 +60,42 @@ const textEncoder = new TextEncoder();
 
 export function normalizeAdminUsername(raw: string | undefined | null): string {
   return (raw ?? "").trim().toLowerCase();
+}
+
+export function normalizeAuthRuntimeMode(raw: string | undefined | null): AuthRuntimeMode | null {
+  const normalized = (raw ?? "").trim().toLowerCase();
+  if (normalized === "production" || normalized === "prod") {
+    return "production";
+  }
+  if (normalized === "development" || normalized === "dev" || normalized === "demo") {
+    return "development";
+  }
+  return null;
+}
+
+/**
+ * Resolves whether the Worker runtime is operating in `production` or
+ * `development` mode.
+ *
+ * - An explicit `AUTH_MODE` binding (`"production"` vs `"development"`/`"demo"`)
+ *   always takes precedence so tests and operators can override deterministically.
+ * - Otherwise, Vite production builds (`import.meta.env.PROD === true`) default
+ *   automatically to `"production"`, while `vite dev` / local preview / tests
+ *   default to `"development"`.
+ */
+export function resolveAuthRuntimeMode(env: AdminAuthEnv): AuthRuntimeMode {
+  const explicitMode = normalizeAuthRuntimeMode(env.AUTH_MODE);
+  if (explicitMode) {
+    return explicitMode;
+  }
+  if (import.meta.env?.PROD === true) {
+    return "production";
+  }
+  return "development";
+}
+
+export function isProductionRuntime(env: AdminAuthEnv): boolean {
+  return resolveAuthRuntimeMode(env) === "production";
 }
 
 export function deriveNamespaceSlugForAdmin(username: string): string {
@@ -73,6 +119,18 @@ export function resolveAdminAuthConfig(env: AdminAuthEnv): ResolvedAdminAuthConf
       mode: "configured",
       username,
       password: configuredPassword,
+    };
+  }
+
+  // In production builds or when AUTH_MODE=production, never fall back to the
+  // demo password (`admin123`). Primary admin password login fails closed
+  // (`password: null`) until ADMIN_PASSWORD is provided via Worker secrets,
+  // while D1 directory users continue to authenticate normally.
+  if (isProductionRuntime(env)) {
+    return {
+      mode: "configured",
+      username,
+      password: null,
     };
   }
 
@@ -118,6 +176,16 @@ export async function verifyAdminCredentials(
   }
 
   const config = resolveAdminAuthConfig(env);
+  if (config.password === null) {
+    // Perform constant-time digest work before failing closed so unconfigured
+    // production admin logins do not expose a timing oracle.
+    await Promise.all([
+      constantTimeEqual(username, config.username),
+      constantTimeEqual(password, DEFAULT_DEMO_ADMIN_PASSWORD),
+    ]);
+    return { ok: false, reason: "invalid_credentials" };
+  }
+
   const [usernameMatches, passwordMatches] = await Promise.all([
     constantTimeEqual(username, config.username),
     constantTimeEqual(password, config.password),

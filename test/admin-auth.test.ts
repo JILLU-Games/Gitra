@@ -8,7 +8,9 @@ import {
   DEFAULT_POST_LOGIN_REDIRECT,
   deriveNamespaceSlugForAdmin,
   isDemoModeEnabled,
+  isProductionRuntime,
   resolveAdminAuthConfig,
+  resolveAuthRuntimeMode,
   sanitizeNextRedirect,
   verifyAdminCredentials,
 } from "@/worker/auth/adminAuth";
@@ -16,13 +18,15 @@ import { isAllowedOrigin } from "@/worker/auth/origin";
 import { hashPassword, verifyPassword } from "@/worker/auth/passwords";
 
 describe("adminAuth pure logic", () => {
-  it("defaults to demo mode with admin / admin123 when ADMIN_PASSWORD is unset", () => {
+  it("defaults to demo mode with admin / admin123 when ADMIN_PASSWORD is unset in development", () => {
     const config = resolveAdminAuthConfig({});
     expect(config).toEqual({
       mode: "demo",
       username: DEFAULT_DEMO_ADMIN_USERNAME,
       password: DEFAULT_DEMO_ADMIN_PASSWORD,
     });
+    expect(resolveAuthRuntimeMode({})).toBe("development");
+    expect(isProductionRuntime({})).toBe(false);
     expect(isDemoModeEnabled({})).toBe(true);
   });
 
@@ -35,6 +39,40 @@ describe("adminAuth pure logic", () => {
       password: "super-secret-password",
     });
     expect(isDemoModeEnabled(env)).toBe(false);
+  });
+
+  it("enforces production mode when AUTH_MODE=production and never falls back to demo password", async () => {
+    const prodUnconfigured = { AUTH_MODE: "production" };
+    expect(resolveAuthRuntimeMode(prodUnconfigured)).toBe("production");
+    expect(isProductionRuntime(prodUnconfigured)).toBe(true);
+    expect(isDemoModeEnabled(prodUnconfigured)).toBe(false);
+    expect(resolveAdminAuthConfig(prodUnconfigured)).toEqual({
+      mode: "configured",
+      username: DEFAULT_DEMO_ADMIN_USERNAME,
+      password: null,
+    });
+
+    // Default demo password `admin123` is strictly rejected in production mode
+    expect(await verifyAdminCredentials(prodUnconfigured, "admin", "admin123")).toEqual({
+      ok: false,
+      reason: "invalid_credentials",
+    });
+
+    // Configured production ADMIN_PASSWORD succeeds in production mode
+    const prodConfigured = {
+      AUTH_MODE: "production",
+      ADMIN_USERNAME: "prod-admin",
+      ADMIN_PASSWORD: "prod-strong-password-2026",
+    };
+    expect(
+      await verifyAdminCredentials(prodConfigured, "prod-admin", "prod-strong-password-2026")
+    ).toEqual({
+      ok: true,
+      mode: "configured",
+      username: "prod-admin",
+      namespaceSlug: "prod-admin",
+      subject: "local:prod-admin",
+    });
   });
 
   it("verifies demo credentials and rejects missing or invalid credentials", async () => {
