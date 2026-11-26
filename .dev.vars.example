@@ -24,3 +24,6 @@ AUTH_MODE=development
 # In production, set ADMIN_PASSWORD with `wrangler secret put ADMIN_PASSWORD`.
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=
+# Optional initial public Git @namespace handle for the primary admin (defaults to
+# ADMIN_USERNAME until renamed in /admin/users, keeping sign-in username private).
+# ADMIN_NAMESPACE=vibtools

@@ -11,6 +11,7 @@ export const clientEntrypoints = {
   adminPage: "src/client/entries/admin-page.ts",
   systemAdminPage: "src/client/entries/system-admin-page.ts",
   adminUsersPage: "src/client/entries/admin-users-page.ts",
+  adminSettingsPage: "src/client/entries/admin-settings-page.ts",
   accountPage: "src/client/entries/account-page.ts",
 } as const;
 

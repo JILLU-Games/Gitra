@@ -26,6 +26,8 @@ export type AdminRepositoryEntry = {
   namespaceSlug: string;
   visibility: "public" | "private";
   defaultBranch: string;
+  pinned: boolean;
+  homePinned: boolean;
   updatedAt: number;
 };
 
@@ -33,6 +35,7 @@ export type AdminTokenEntry = {
   id: string;
   name: string;
   prefix: string;
+  ownerSlug?: string;
   createdAt: number;
   revokedAt?: number;
   lastUsedAt?: number;
@@ -142,6 +145,90 @@ export function canAccessAdminPanel(role?: DirectoryRole): boolean {
 
 export function canWriteRepositories(role?: DirectoryRole): boolean {
   return role === "admin" || role === "member";
+}
+
+export type RepositoryPatchPolicyInput = {
+  viewerRole?: DirectoryRole;
+  isNamespaceMember: boolean;
+  hasHomePinned: boolean;
+  requestedHomePinned?: boolean;
+  currentVisibility: "public" | "private";
+  requestedVisibility?: "public" | "private";
+};
+
+export type RepositoryPatchPolicyResult =
+  | { ok: true; effectiveVisibility: "public" | "private" }
+  | {
+      ok: false;
+      status: 400 | 403;
+      reason: "viewer-read-only" | "admin-required" | "not-member" | "private-repo-cannot-feature";
+    };
+
+/**
+ * Authorizes repository metadata/visibility updates:
+ * - Viewers are always read-only.
+ * - Site admins (`role === "admin"`) can update any repository and manage
+ *   main Public Homepage featuring (`homePinned`).
+ * - Namespace members (`role === "member"`) can manage their own namespace
+ *   repositories (`visibility`, `description`, `pinned`), but cannot modify
+ *   `homePinned`.
+ * - Private repositories cannot be pinned to the main Public Homepage.
+ */
+export function evaluateRepositoryPatchPolicy(
+  input: RepositoryPatchPolicyInput
+): RepositoryPatchPolicyResult {
+  if (!canWriteRepositories(input.viewerRole)) {
+    return { ok: false, status: 403, reason: "viewer-read-only" };
+  }
+  const isAdmin = canAccessAdminPanel(input.viewerRole);
+  if (input.hasHomePinned && !isAdmin) {
+    return { ok: false, status: 403, reason: "admin-required" };
+  }
+  if (!input.isNamespaceMember && !isAdmin) {
+    return { ok: false, status: 403, reason: "not-member" };
+  }
+  const effectiveVisibility = input.requestedVisibility ?? input.currentVisibility;
+  if (input.requestedHomePinned === true && effectiveVisibility === "private") {
+    return { ok: false, status: 400, reason: "private-repo-cannot-feature" };
+  }
+  return { ok: true, effectiveVisibility };
+}
+
+export type HomeFeaturedCandidate = {
+  slug: string;
+  namespaceSlug: string;
+  visibility: "public" | "private";
+  homePinned?: boolean;
+  updatedAt: number;
+};
+
+/**
+ * Selects repositories featured in the main Public Homepage "Pinned Repositories"
+ * section. Only public repositories explicitly pinned for the homepage are
+ * included, ordered most-recently-updated first with deterministic slug tie-break.
+ */
+export function selectHomeFeaturedRepositories<T extends HomeFeaturedCandidate>(
+  repositories: readonly T[]
+): T[] {
+  return repositories
+    .filter((repo) => repo.visibility === "public" && Boolean(repo.homePinned))
+    .sort((a, b) => {
+      const timeDiff = b.updatedAt - a.updatedAt;
+      if (timeDiff !== 0) return timeDiff;
+      return `${a.namespaceSlug}/${a.slug}`.localeCompare(`${b.namespaceSlug}/${b.slug}`);
+    });
+}
+
+export function countHomeFeaturedRepositories(
+  repositories: readonly HomeFeaturedCandidate[]
+): number {
+  let count = 0;
+  for (const repo of repositories) {
+    if (repo.visibility === "public" && repo.homePinned) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 /**
@@ -330,6 +417,34 @@ export function canRemoveNamespaceEntry(entry: {
   return !entry.isPrimaryAdmin;
 }
 
+export type PrimaryAdminPatchInput = {
+  isPrimaryAdmin: boolean;
+  status?: DirectoryStatus;
+  role?: DirectoryRole;
+  hasPasswordChange: boolean;
+};
+
+/**
+ * Validates directory patch requests against primary-admin protections:
+ * - Primary admin can rename their public `@namespace` handle and display name
+ *   without altering their private env sign-in username.
+ * - Primary admin cannot be disabled, demoted from `admin`, or given a
+ *   directory password override.
+ */
+export function evaluatePrimaryAdminPatchPolicy(
+  input: PrimaryAdminPatchInput
+): { ok: true } | { ok: false; reason: "protected-admin" } {
+  if (!input.isPrimaryAdmin) {
+    return { ok: true };
+  }
+  const wantsDisable = input.status !== undefined && input.status !== "active";
+  const wantsDemote = input.role !== undefined && input.role !== "admin";
+  if (wantsDisable || wantsDemote || input.hasPasswordChange) {
+    return { ok: false, reason: "protected-admin" };
+  }
+  return { ok: true };
+}
+
 /**
  * Filters users by free-text query (matching `@handle`, `handle`, or display name),
  * role, and active/disabled status.
@@ -434,10 +549,46 @@ export function resolveActiveSidebarItem(currentView?: string): SidebarNavKey | 
     case "account":
       return "account";
     case "system-admin":
+    case "system-admin-repositories":
+    case "system-admin-tokens":
+    case "system-admin-settings":
+    case "system-admin-security":
       return "admin";
     case "system-admin-users":
       return "admin-users";
     default:
       return null;
   }
+}
+
+export const GLOBAL_PAT_TARGET_VALUE = "__global__";
+export const GLOBAL_PAT_TARGET_LABEL = "All namespaces";
+
+/**
+ * Only active `admin` accounts are permitted to mint or exercise
+ * global ("All namespaces") Personal Access Tokens.
+ */
+export function canIssueGlobalPat(
+  role: DirectoryRole,
+  status: DirectoryStatus = "active"
+): boolean {
+  return role === "admin" && status === "active";
+}
+
+/**
+ * Validates the HTTP Basic username presented alongside a global admin PAT.
+ * Accepts either the target repository's namespace slug or any of the PAT
+ * owner's own namespace slugs (case-insensitive), rejecting unrelated handles.
+ */
+export function isGlobalPatUsernameAllowed(args: {
+  presentedUsername: string;
+  targetNamespaceSlug?: string;
+  ownerNamespaceSlugs: readonly string[];
+}): boolean {
+  const normalized = args.presentedUsername.trim().toLowerCase();
+  if (!normalized) return false;
+  if (args.targetNamespaceSlug && normalized === args.targetNamespaceSlug.trim().toLowerCase()) {
+    return true;
+  }
+  return args.ownerNamespaceSlugs.some((slug) => slug.trim().toLowerCase() === normalized);
 }

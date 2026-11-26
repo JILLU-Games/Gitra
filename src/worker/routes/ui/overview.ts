@@ -2,11 +2,18 @@ import { canAccessAdminPanel, canWriteRepositories } from "@/shared/admin/panel"
 import { classifyRef, formatRefOption, shortRefName } from "@/shared/git/ref-display";
 import { PROFILE_README_CANDIDATES, PROFILE_REPO_SLUG } from "@/shared/slugs";
 import { bytesToText, isValidOwnerRepo, isValidRef } from "@/shared/web";
-import { resolveAdminAuthConfig } from "@/worker/auth/adminAuth";
+import {
+  buildLocalAccountSubject,
+  resolveAdminAuthConfig,
+  resolveInitialAdminNamespaceSlug,
+} from "@/worker/auth/adminAuth";
 import { viewerIsNamespaceMember } from "@/worker/auth/pat";
 import { loadViewer } from "@/worker/auth/session";
 import { buildCacheKeyFrom, cacheOrLoadJSONForRequest } from "@/worker/cache";
-import { findDirectoryAccountBySlug } from "@/worker/db/d1/dal/adminDirectory";
+import {
+  findDirectoryAccountBySlug,
+  findPrimaryAdminNamespace,
+} from "@/worker/db/d1/dal/adminDirectory";
 import { findNamespaceBySlug } from "@/worker/db/d1/dal/namespaces";
 import { findRepositoryById, listRepositoriesForNamespace } from "@/worker/db/d1/dal/repositories";
 import {
@@ -40,6 +47,7 @@ async function loadCandidateMarkdown(args: {
   refOrOid: string;
   candidates: readonly string[];
   cachePath: string;
+  cacheVersion?: string;
   log?: ReturnType<AppContext["var"]["logFor"]>;
 }): Promise<{ md: string; path: string } | null> {
   const loader = async (): Promise<{ md: string; path: string } | null> => {
@@ -70,6 +78,7 @@ async function loadCandidateMarkdown(args: {
   const cacheKey = buildCacheKeyFrom(args.req, args.cachePath, {
     repo: args.repoId,
     ref: args.refOrOid,
+    v: args.cacheVersion,
   });
   return await cacheOrLoadJSONForRequest<{ md: string; path: string }>(
     args.cacheCtx,
@@ -92,11 +101,13 @@ export async function handleOwnerOverview(c: AppContext<"/:owner" | "/profile/:o
     return await notFound(c);
   }
   const viewer = await loadViewer(c);
-  const [repos, directoryAccount, isMember, profileMeta] = await Promise.all([
+  const adminSubject = buildLocalAccountSubject(resolveAdminAuthConfig(env).username);
+  const [repos, directoryAccount, isMember, profileMeta, primaryAdminNs] = await Promise.all([
     listRepositoriesForNamespace(db, namespace.id, viewer?.userId ?? null),
     findDirectoryAccountBySlug(env.DB, db, owner),
     viewer ? viewerIsNamespaceMember(db, viewer.userId, namespace.id) : Promise.resolve(false),
     getNamespaceProfileMeta(env.DB, namespace.id),
+    findPrimaryAdminNamespace(db, adminSubject),
   ]);
   const repoMeta = await listRepositoryMetaMap(
     env.DB,
@@ -104,12 +115,15 @@ export async function handleOwnerOverview(c: AppContext<"/:owner" | "/profile/:o
   );
 
   const canManageProfile = Boolean(viewer && canWriteRepositories(viewer.role) && isMember);
-  const exposeRoleToViewer = Boolean(viewer && canAccessAdminPanel(viewer.role));
+  const isSiteAdmin = Boolean(viewer && canAccessAdminPanel(viewer.role));
+  const canPinRepos = canManageProfile || isSiteAdmin;
+  const canFeatureHomepage = isSiteAdmin;
+  const exposeRoleToViewer = isSiteAdmin;
   const includesPrivate = repos.some((row) => row.visibility === "private");
   const cacheCtx = c.var.cacheCtx;
-  if (includesPrivate || canManageProfile || exposeRoleToViewer) {
-    // Private repo lists, interactive owner views, or admin-only role badges
-    // bypass edge cache so updates and visibility rules apply immediately.
+  if (includesPrivate || canManageProfile || canPinRepos || exposeRoleToViewer) {
+    // Private repo lists, interactive owner/admin views, or admin-only role
+    // badges bypass edge cache so updates and visibility rules apply immediately.
     markRequestPrivate(cacheCtx);
   }
 
@@ -151,6 +165,7 @@ export async function handleOwnerOverview(c: AppContext<"/:owner" | "/profile/:o
         refOrOid: targetOid,
         candidates: PROFILE_README_CANDIDATES,
         cachePath: "/_cache/owner-profile-readme",
+        cacheVersion: String(profileRepo.updatedAt),
         log: profileLog,
       });
       if (foundProfile) {
@@ -160,7 +175,9 @@ export async function handleOwnerOverview(c: AppContext<"/:owner" | "/profile/:o
     }
   }
 
-  const isPrimaryAdminOwner = owner === resolveAdminAuthConfig(env).username;
+  const isPrimaryAdminOwner = primaryAdminNs
+    ? primaryAdminNs.id === namespace.id
+    : owner === resolveInitialAdminNamespaceSlug(env);
   const displayName =
     directoryAccount?.displayName || (isPrimaryAdminOwner ? "Administrator" : owner);
   const ownerRole = isPrimaryAdminOwner ? "admin" : directoryAccount?.role;
@@ -177,6 +194,8 @@ export async function handleOwnerOverview(c: AppContext<"/:owner" | "/profile/:o
       location: profileMeta.location,
       website: profileMeta.website,
       canManageProfile,
+      canPinRepos,
+      canFeatureHomepage,
       hasProfileRepo: Boolean(profileRepo),
       profileRepoVisibility: profileRepo?.visibility,
       profileReadmeMd,
@@ -188,14 +207,15 @@ export async function handleOwnerOverview(c: AppContext<"/:owner" | "/profile/:o
         visibility: row.visibility,
         description: repoMeta.get(row.id)?.description ?? "",
         pinned: repoMeta.get(row.id)?.pinned ?? false,
+        homePinned: repoMeta.get(row.id)?.homePinned ?? false,
         updatedAt: row.updatedAt,
       })),
     },
     {
-      // Public-only listings cache briefly per-colo. Private rows or member
+      // Public-only listings cache briefly per-colo. Private rows or member/admin
       // views must not be shared across requests.
       cacheControl:
-        includesPrivate || canManageProfile || exposeRoleToViewer
+        includesPrivate || canManageProfile || canPinRepos || exposeRoleToViewer
           ? "no-store"
           : "public, max-age=60",
       failureBody: "Failed to render view",
@@ -217,8 +237,11 @@ export async function handleRepoOverview(c: AppContext<"/:owner/:repo">) {
   const canManageRepo = canViewerManageRepo(access);
   const canEditRepo = canManageRepo;
   const canEditProfile = Boolean(isProfileRepo && canEditRepo);
+  const isSiteAdmin = Boolean(viewer && canAccessAdminPanel(viewer.role));
+  const canPinRepo = canEditRepo || isSiteAdmin;
+  const canFeatureHomepage = isSiteAdmin;
 
-  if (canEditRepo || route.visibility === "private") {
+  if (canEditRepo || canPinRepo || route.visibility === "private") {
     markRequestPrivate(cacheCtx);
   }
 
@@ -228,6 +251,7 @@ export async function handleRepoOverview(c: AppContext<"/:owner/:repo">) {
     isProfileRepo ? findDirectoryAccountBySlug(env.DB, c.var.db, owner) : Promise.resolve(null),
   ]);
 
+  const cacheVersion = repoRow ? String(repoRow.updatedAt) : undefined;
   const repoLog = c.var.logFor({ service: "UiOverview", repoId });
   const refsData =
     canEditRepo || route.visibility === "private"
@@ -235,12 +259,7 @@ export async function handleRepoOverview(c: AppContext<"/:owner/:repo">) {
           repoLog.warn("repo:refs-failed", { error: getErrorMessage(error) });
           return null;
         })
-      : await loadHeadAndRefsCached(
-          env,
-          cacheCtx,
-          repoId,
-          repoRow ? String(repoRow.updatedAt) : undefined
-        );
+      : await loadHeadAndRefsCached(env, cacheCtx, repoId, cacheVersion);
   const head: HeadInfo | undefined = refsData?.head;
   const refs: Ref[] = refsData?.refs || [];
 
@@ -290,6 +309,7 @@ export async function handleRepoOverview(c: AppContext<"/:owner/:repo">) {
       repo: repoId,
       ref: refLookup,
       path: "",
+      v: cacheVersion,
     });
     const rootTreeRes = await cacheOrLoadJSONForRequest<ReadPathResult | null>(
       cacheCtx,
@@ -315,6 +335,7 @@ export async function handleRepoOverview(c: AppContext<"/:owner/:repo">) {
       refOrOid: refLookup,
       candidates: ["README.md", "README.MD", "Readme.md", "README", "readme.md"],
       cachePath: "/_cache/readme",
+      cacheVersion,
       log: repoLog,
     });
     readmeMd = foundRootReadme?.md || "";
@@ -328,6 +349,7 @@ export async function handleRepoOverview(c: AppContext<"/:owner/:repo">) {
         refOrOid: refLookup,
         candidates: PROFILE_README_CANDIDATES,
         cachePath: "/_cache/owner-profile-readme",
+        cacheVersion,
         log: repoLog,
       });
       profileReadmeMd = foundProfileReadme?.md || "";
@@ -349,6 +371,7 @@ export async function handleRepoOverview(c: AppContext<"/:owner/:repo">) {
       displayName: directoryAccount?.displayName,
       description: repoMeta.description,
       pinned: repoMeta.pinned,
+      homePinned: repoMeta.homePinned,
       visibility: route.visibility,
       defaultBranch,
       refShort: activeRefShort,
@@ -361,11 +384,14 @@ export async function handleRepoOverview(c: AppContext<"/:owner/:repo">) {
       profileReadmePath,
       canEditRepo,
       canManageRepo,
+      canPinRepo,
+      canFeatureHomepage,
       canEditProfile,
       progress,
     },
     {
-      cacheControl: route.visibility === "private" || canEditRepo ? "no-store" : undefined,
+      cacheControl:
+        route.visibility === "private" || canEditRepo || canPinRepo ? "no-store" : undefined,
       failureBody: "Failed to render view",
       viewer,
     }

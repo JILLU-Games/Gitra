@@ -11,11 +11,20 @@ import {
   isProductionRuntime,
   resolveAdminAuthConfig,
   resolveAuthRuntimeMode,
+  resolveInitialAdminNamespaceSlug,
   sanitizeNextRedirect,
   verifyAdminCredentials,
 } from "@/worker/auth/adminAuth";
 import { isAllowedOrigin } from "@/worker/auth/origin";
 import { hashPassword, verifyPassword } from "@/worker/auth/passwords";
+import {
+  AUTH_RATE_LIMIT_MAX_FAILURES,
+  AUTH_RATE_LIMIT_WINDOW_SECONDS,
+  buildAuthRateLimitKey,
+  evaluateAuthRateLimit,
+  extractClientIp,
+  recordAuthRateLimitFailure,
+} from "@/worker/auth/rateLimit";
 
 describe("adminAuth pure logic", () => {
   it("defaults to demo mode with admin / admin123 when ADMIN_PASSWORD is unset in development", () => {
@@ -113,6 +122,18 @@ describe("adminAuth pure logic", () => {
     expect(deriveNamespaceSlugForAdmin("Admin")).toBe("admin");
     expect(deriveNamespaceSlugForAdmin("not valid!!")).toBe("admin");
     expect(buildLocalAccountSubject("Ops")).toBe("local:ops");
+    expect(
+      resolveInitialAdminNamespaceSlug({
+        ADMIN_USERNAME: "secret-admin-login",
+        ADMIN_NAMESPACE: "VibTools",
+      })
+    ).toBe("vibtools");
+    expect(
+      resolveInitialAdminNamespaceSlug({
+        ADMIN_USERNAME: "secret-admin-login",
+        ADMIN_NAMESPACE: "api",
+      })
+    ).toBe("secret-admin-login");
   });
 
   it("sanitizes post-login redirect paths against open redirects and loops", () => {
@@ -130,12 +151,13 @@ describe("adminAuth pure logic", () => {
 describe("isAllowedOrigin reverse-proxy and CSRF checks", () => {
   it("accepts exact request origin and rejects missing or cross-origin", () => {
     expect(isAllowedOrigin("https://example.com", "https://example.com/auth/login")).toBe(true);
+    expect(isAllowedOrigin("http://example.com", "https://example.com/auth/login")).toBe(false);
     expect(isAllowedOrigin(undefined, "https://example.com/auth/login")).toBe(false);
     expect(isAllowedOrigin("https://attacker.com", "https://example.com/auth/login")).toBe(false);
     expect(isAllowedOrigin("null", "https://example.com/auth/login")).toBe(false);
   });
 
-  it("accepts HTTPS Origin matching X-Forwarded-Host behind TLS-terminating preview proxy", () => {
+  it("accepts matching Origin/X-Forwarded-Proto behind TLS-terminating preview proxy and rejects scheme downgrades", () => {
     expect(
       isAllowedOrigin("https://preview.run.app", "http://localhost:3000/auth/login", {
         forwardedHost: "preview.run.app",
@@ -143,11 +165,53 @@ describe("isAllowedOrigin reverse-proxy and CSRF checks", () => {
       })
     ).toBe(true);
     expect(
+      isAllowedOrigin("http://preview.run.app", "http://localhost:3000/auth/login", {
+        forwardedHost: "preview.run.app",
+        forwardedProto: "https",
+      })
+    ).toBe(false);
+    expect(
       isAllowedOrigin("https://attacker.run.app", "http://localhost:3000/auth/login", {
         forwardedHost: "preview.run.app",
         forwardedProto: "https",
       })
     ).toBe(false);
+    expect(
+      isAllowedOrigin("https://evil.com@preview.run.app", "http://localhost:3000/auth/login", {
+        forwardedHost: "evil.com@preview.run.app",
+        forwardedProto: "https",
+      })
+    ).toBe(false);
+  });
+});
+
+describe("auth rate limiting pure logic", () => {
+  it("extracts client IPs and enforces sliding window limits", () => {
+    expect(extractClientIp(new Request("https://example.com"))).toBe("unknown");
+    expect(
+      extractClientIp(
+        new Request("https://example.com", { headers: { "cf-connecting-ip": "198.51.100.7" } })
+      )
+    ).toBe("198.51.100.7");
+    expect(buildAuthRateLimitKey("login", "198.51.100.7", "Admin")).toBe(
+      "auth-rl:login:198.51.100.7:admin"
+    );
+
+    const now = 1_700_000_000_000;
+    let state = recordAuthRateLimitFailure(null, now);
+    for (let i = 1; i < AUTH_RATE_LIMIT_MAX_FAILURES - 1; i += 1) {
+      state = recordAuthRateLimitFailure(state, now + 500 * i);
+      const decision = evaluateAuthRateLimit(state, now + 500 * i);
+      expect(decision.allowed).toBe(true);
+      expect(decision.remaining).toBe(AUTH_RATE_LIMIT_MAX_FAILURES - (i + 1));
+    }
+    state = recordAuthRateLimitFailure(state, now + 5000);
+    const blocked = evaluateAuthRateLimit(state, now + 5000);
+    expect(blocked.allowed).toBe(false);
+    if (!blocked.allowed) {
+      expect(blocked.retryAfterSeconds).toBeGreaterThan(0);
+      expect(blocked.retryAfterSeconds).toBeLessThanOrEqual(AUTH_RATE_LIMIT_WINDOW_SECONDS);
+    }
   });
 });
 

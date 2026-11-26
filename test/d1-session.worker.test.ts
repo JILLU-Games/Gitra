@@ -282,7 +282,8 @@ describe("D1 Sessions middleware", () => {
     expect(cookie?.attributes.Path).toBe("/");
     expect(cookie?.attributes.HttpOnly).toBe(true);
     expect(cookie?.attributes.Secure).toBe(true);
-    expect(cookie?.attributes.SameSite).toBe("Lax");
+    expect(cookie?.attributes.SameSite).toBe("None");
+    expect(cookie?.attributes.Partitioned).toBe(true);
     expect(cookie?.attributes["Max-Age"]).toBe(String(D1_BOOKMARK_COOKIE_MAX_AGE_SECONDS));
   });
 

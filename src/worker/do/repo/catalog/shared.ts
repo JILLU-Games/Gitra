@@ -1,4 +1,10 @@
-import type { Head, RepoStateSchema, RepoLease, TypedStorage } from "../repoState";
+import type {
+  Head,
+  RepoStateSchema,
+  RepoLease,
+  TypedStorage,
+  TypedSyncStorage,
+} from "../repoState";
 import type { PackCatalogRow } from "../db/schema";
 import type { Ref } from "../repoState";
 
@@ -46,8 +52,22 @@ export async function ensureRepoMetadataDefaults(
   if ((await store.get("nextPackSeq")) === undefined) await store.put("nextPackSeq", 1);
 }
 
+/** Synchronous variant of `ensureRepoMetadataDefaults` for `transactionSync()` blocks. */
+export function ensureRepoMetadataDefaultsSync(kv: TypedSyncStorage<RepoStateSchema>): void {
+  if (kv.get("refsVersion") === undefined) kv.put("refsVersion", 0);
+  if (kv.get("packsetVersion") === undefined) kv.put("packsetVersion", 0);
+  if (kv.get("nextPackSeq") === undefined) kv.put("nextPackSeq", 1);
+}
+
 export async function bumpPacksetVersion(store: TypedStorage<RepoStateSchema>): Promise<number> {
   const next = ((await store.get("packsetVersion")) || 0) + 1;
   await store.put("packsetVersion", next);
+  return next;
+}
+
+/** Synchronous variant of `bumpPacksetVersion` for `transactionSync()` blocks. */
+export function bumpPacksetVersionSync(kv: TypedSyncStorage<RepoStateSchema>): number {
+  const next = (kv.get("packsetVersion") || 0) + 1;
+  kv.put("packsetVersion", next);
   return next;
 }

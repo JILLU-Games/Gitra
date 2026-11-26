@@ -1,11 +1,26 @@
+import {
+  canIssueGlobalPat,
+  canWriteRepositories,
+  isGlobalPatUsernameAllowed,
+  type DirectoryRole,
+} from "@/shared/admin/panel";
+import { buildLocalAccountSubject, resolveAdminAuthConfig } from "@/worker/auth/adminAuth";
 import { createDb, type Db } from "@/worker/db/d1/client";
 import {
   findPatByPrefix,
+  findPatGlobalGrant,
   findPatGrantForNamespace,
   findPatGrantForRepo,
   type PatGrantLevel,
 } from "@/worker/db/d1/dal/tokens";
-import { findMembership, findNamespaceBySlug } from "@/worker/db/d1/dal/namespaces";
+import {
+  findMembership,
+  findNamespaceById,
+  findNamespaceBySlug,
+  listNamespacesForUser,
+} from "@/worker/db/d1/dal/namespaces";
+import { findDirectoryAccountByUserId } from "@/worker/db/d1/dal/adminDirectory";
+import { findUserById } from "@/worker/db/d1/dal/users";
 
 // Parse/generate/hash/validate helpers and `verifyPat` share a single file
 // so the management and verification surfaces stay on the same parsing and
@@ -118,6 +133,7 @@ export type PatVerifyOk = {
   // Loaded value at verification time so callers throttle the write
   // decision in Worker memory; see `shouldTouchPatLastUsedAt`.
   lastUsedAt: number | null;
+  isGlobal?: boolean;
 };
 
 export type PatVerifyError =
@@ -165,10 +181,48 @@ export type VerifyPatArgs = {
   db?: Db;
 };
 
+type PatOwnerPolicy =
+  | { ok: true; role: DirectoryRole; isActiveAdmin: boolean }
+  | { ok: false; reason: "token-revoked" | "grant-missing" };
+
+// Resolves directory status and role for any PAT owner so disabled accounts
+// cannot continue using scoped PATs and viewer accounts cannot push.
+async function resolvePatOwnerPolicy(env: Env, db: Db, userId: string): Promise<PatOwnerPolicy> {
+  const user = await findUserById(db, userId);
+  if (!user) return { ok: false, reason: "grant-missing" };
+
+  const primaryAdminSubject = buildLocalAccountSubject(resolveAdminAuthConfig(env).username);
+  if (user.tesseraSub === primaryAdminSubject) {
+    return { ok: true, role: "admin", isActiveAdmin: true };
+  }
+
+  if (!env.DB) {
+    return { ok: true, role: "member", isActiveAdmin: false };
+  }
+
+  try {
+    const account = await findDirectoryAccountByUserId(env.DB, db, userId);
+    if (!account) {
+      return { ok: true, role: "viewer", isActiveAdmin: false };
+    }
+    if (account.status === "disabled") {
+      return { ok: false, reason: "token-revoked" };
+    }
+    return {
+      ok: true,
+      role: account.role,
+      isActiveAdmin: canIssueGlobalPat(account.role, account.status),
+    };
+  } catch {
+    // Fail closed if directory status cannot be verified.
+    return { ok: false, reason: "grant-missing" };
+  }
+}
+
 // Verify a PAT against the stored hash and grants. Returns the user/scope
 // when the token is currently valid for the requested namespace + repo
 // pair, otherwise a tagged failure that the caller maps to an HTTP
-// status (typically 401 for malformed/not-found, 403 for grant-missing).
+// status (typically 401 for malformed/not-found/revoked, 403 for grant-missing).
 export async function verifyPat(env: Env, args: VerifyPatArgs): Promise<PatVerifyResult> {
   const now = args.now ?? Date.now();
   const parsed = parsePatPlaintext(args.plaintext);
@@ -187,50 +241,117 @@ export async function verifyPat(env: Env, args: VerifyPatArgs): Promise<PatVerif
     return { ok: false, reason: "token-not-found" };
   }
 
-  // Resolve namespace either directly via id or by username; both must align
-  // for the username-as-namespace-slug Git authentication contract.
-  let resolvedNamespaceId: string | undefined = args.namespaceId;
-  let resolvedRepositoryId: string | undefined = args.repositoryId;
-  if (!resolvedNamespaceId) {
-    const namespace = await findNamespaceBySlug(db, args.username);
-    if (!namespace) return { ok: false, reason: "username-mismatch" };
-    resolvedNamespaceId = namespace.id;
-  } else {
-    const namespace = await findNamespaceBySlug(db, args.username);
-    if (!namespace || namespace.id !== resolvedNamespaceId) {
-      return { ok: false, reason: "username-mismatch" };
-    }
+  const ownerPolicy = await resolvePatOwnerPolicy(env, db, pat.userId);
+  if (!ownerPolicy.ok) {
+    return { ok: false, reason: ownerPolicy.reason };
   }
 
-  // Repo grant takes precedence; namespace grant covers remaining repos.
-  if (resolvedRepositoryId) {
-    const repoGrant = await findPatGrantForRepo(db, pat.id, resolvedRepositoryId);
-    if (repoGrant) {
+  const presentedNamespace = await findNamespaceBySlug(db, args.username);
+  let resolvedNamespaceId: string | undefined = args.namespaceId;
+  const resolvedRepositoryId: string | undefined = args.repositoryId;
+
+  const usernameMatchesTarget = resolvedNamespaceId
+    ? presentedNamespace?.id === resolvedNamespaceId
+    : Boolean(presentedNamespace);
+
+  if (usernameMatchesTarget) {
+    if (!resolvedNamespaceId && presentedNamespace) {
+      resolvedNamespaceId = presentedNamespace.id;
+    }
+
+    // Repo grant takes precedence; namespace grant covers remaining repos.
+    // Accounts demoted to `viewer` retain read-only (`pull`) capability only.
+    if (resolvedRepositoryId) {
+      const repoGrant = await findPatGrantForRepo(db, pat.id, resolvedRepositoryId);
+      if (repoGrant) {
+        return {
+          ok: true,
+          patId: pat.id,
+          userId: pat.userId,
+          namespaceId: resolvedNamespaceId!,
+          repositoryId: resolvedRepositoryId,
+          level: canWriteRepositories(ownerPolicy.role) ? repoGrant.level : "pull",
+          lastUsedAt: pat.lastUsedAt,
+        };
+      }
+    }
+    const namespaceGrant = await findPatGrantForNamespace(db, pat.id, resolvedNamespaceId!);
+    if (namespaceGrant) {
       return {
         ok: true,
         patId: pat.id,
         userId: pat.userId,
-        namespaceId: resolvedNamespaceId,
+        namespaceId: resolvedNamespaceId!,
         repositoryId: resolvedRepositoryId,
-        level: repoGrant.level,
+        level: canWriteRepositories(ownerPolicy.role) ? namespaceGrant.level : "pull",
         lastUsedAt: pat.lastUsedAt,
       };
     }
-  }
-  const namespaceGrant = await findPatGrantForNamespace(db, pat.id, resolvedNamespaceId);
-  if (namespaceGrant) {
-    return {
-      ok: true,
-      patId: pat.id,
-      userId: pat.userId,
-      namespaceId: resolvedNamespaceId,
-      repositoryId: resolvedRepositoryId,
-      level: namespaceGrant.level,
-      lastUsedAt: pat.lastUsedAt,
-    };
+
+    // Fall back to an active-admin global grant when targeting the admin's
+    // own namespace or using the target owner's handle as Basic username.
+    const globalGrant = env.DB ? await findPatGlobalGrant(env.DB, pat.id) : undefined;
+    if (globalGrant) {
+      if (!ownerPolicy.isActiveAdmin) {
+        return { ok: false, reason: "grant-missing" };
+      }
+      return {
+        ok: true,
+        patId: pat.id,
+        userId: pat.userId,
+        namespaceId: resolvedNamespaceId!,
+        repositoryId: resolvedRepositoryId,
+        level: globalGrant.level,
+        lastUsedAt: pat.lastUsedAt,
+        isGlobal: true,
+      };
+    }
+
+    return { ok: false, reason: "grant-missing" };
   }
 
-  return { ok: false, reason: "grant-missing" };
+  // HTTP Basic username did not match the target namespace slug. Only an
+  // active-admin global PAT may authenticate with the owner's own handle
+  // across other users' namespaces.
+  const globalGrant = env.DB ? await findPatGlobalGrant(env.DB, pat.id) : undefined;
+  if (!globalGrant) {
+    return { ok: false, reason: "username-mismatch" };
+  }
+
+  if (!ownerPolicy.isActiveAdmin) {
+    return { ok: false, reason: "grant-missing" };
+  }
+
+  const [targetNs, ownerNamespaces] = await Promise.all([
+    resolvedNamespaceId ? findNamespaceById(db, resolvedNamespaceId) : Promise.resolve(undefined),
+    listNamespacesForUser(db, pat.userId),
+  ]);
+
+  if (
+    !isGlobalPatUsernameAllowed({
+      presentedUsername: args.username,
+      targetNamespaceSlug: targetNs?.slug,
+      ownerNamespaceSlugs: ownerNamespaces.map((ns) => ns.slug),
+    })
+  ) {
+    return { ok: false, reason: "username-mismatch" };
+  }
+
+  const effectiveNamespaceId = resolvedNamespaceId ?? ownerNamespaces[0]?.id;
+  if (!effectiveNamespaceId) {
+    return { ok: false, reason: "username-mismatch" };
+  }
+
+  return {
+    ok: true,
+    patId: pat.id,
+    userId: pat.userId,
+    namespaceId: effectiveNamespaceId,
+    repositoryId: resolvedRepositoryId,
+    level: globalGrant.level,
+    lastUsedAt: pat.lastUsedAt,
+    isGlobal: true,
+  };
 }
 
 // Writes always update; reads only when the prior value is older than this

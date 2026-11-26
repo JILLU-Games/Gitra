@@ -35,16 +35,17 @@ export function enqueueRouteCacheSync(
 }
 
 // Build the wire-shape summary that the management UI consumes. Grants are
-// fetched in two batched queries (one per grant table) and grouped by PAT
-// id, so an arbitrary number of tokens still costs the same fixed number
-// of round trips.
+// fetched in batched queries (one per grant table) and grouped by PAT id,
+// so an arbitrary number of tokens still costs the same fixed number of
+// round trips.
 export async function summarizeTokens(
   db: Db,
-  tokens: PersonalAccessTokenRow[]
+  tokens: PersonalAccessTokenRow[],
+  d1?: D1Database
 ): Promise<TokensIslandSummary[]> {
   if (tokens.length === 0) return [];
   const ids = tokens.map((row) => row.id);
-  const grants = await listPatGrantsByIds(db, ids);
+  const grants = await listPatGrantsByIds(db, ids, d1);
   const namespaceByPatId = new Map<string, TokensIslandSummary["namespaceGrants"]>();
   for (const grant of grants.namespaceGrants) {
     const list = namespaceByPatId.get(grant.patId) ?? [];
@@ -64,6 +65,10 @@ export async function summarizeTokens(
     });
     repoByPatId.set(grant.patId, list);
   }
+  const globalByPatId = new Map<string, NonNullable<TokensIslandSummary["globalGrant"]>>();
+  for (const grant of grants.globalGrants) {
+    globalByPatId.set(grant.patId, { level: grant.level });
+  }
   return tokens.map((token) => ({
     id: token.id,
     name: token.name,
@@ -74,6 +79,7 @@ export async function summarizeTokens(
     lastUsedAt: token.lastUsedAt ?? undefined,
     namespaceGrants: namespaceByPatId.get(token.id) ?? [],
     repoGrants: repoByPatId.get(token.id) ?? [],
+    globalGrant: globalByPatId.get(token.id),
   }));
 }
 

@@ -38,10 +38,10 @@ export function BlobActionsIsland({
   return (
     <div className="flex items-center gap-2">
       <div className="hidden items-center gap-2 sm:flex">
-        <div className="inline-flex items-center overflow-hidden rounded-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+        <div className="inline-flex h-7 items-center overflow-hidden rounded-md border border-border bg-canvas text-[12px]">
           {showCopy ? (
             <button
-              className="px-3 py-1.5 text-sm no-underline text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+              className="h-full px-2.5 font-medium text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
               type="button"
               onClick={() => void copyRawText()}
             >
@@ -50,51 +50,51 @@ export function BlobActionsIsland({
           ) : null}
           {!isImage && !isPdf ? (
             <a
-              className="border-l border-zinc-200 dark:border-zinc-700 px-3 py-1.5 text-sm no-underline text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
+              className="inline-flex h-full items-center border-l border-border px-2.5 font-medium text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
               href={viewRawHref}
             >
               View
             </a>
           ) : null}
-          <span className="border-l border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/50 px-3 py-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+          <span className="inline-flex h-full items-center border-l border-border bg-surface px-2.5 text-fgMuted">
             Raw
           </span>
         </div>
-        <Button size="sm" href={rawHref}>
+        <Button size="sm" variant="secondary" href={rawHref}>
           Download
         </Button>
       </div>
       <div className="sm:hidden">
         <details className="ref-menu relative">
           <summary className={buttonClasses("secondary", "sm")}>
-            <Menu className="h-4 w-4" aria-hidden="true" />
+            <Menu className="h-3.5 w-3.5" aria-hidden="true" />
           </summary>
-          <div className="fixed inset-x-0 z-20 mx-3 mt-2 rounded-xl border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-800/60 dark:bg-zinc-900">
+          <div className="fixed inset-x-0 z-20 mx-3 mt-1.5 rounded-md border border-border bg-surface p-1.5 text-[12px]">
             <div className="flex flex-col">
               {showCopy ? (
                 <button
                   type="button"
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  className="flex items-center gap-2 rounded px-3 py-1.5 text-left text-fgBody hover:bg-surfaceHover hover:text-fg"
                   onClick={() => void copyRawText()}
                 >
-                  <Clipboard className="h-4 w-4" aria-hidden="true" />
+                  <Clipboard className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>{copyLabel === "Copy" ? "Copy raw" : "Copied"}</span>
                 </button>
               ) : null}
               {!isImage && !isPdf ? (
                 <a
                   href={viewRawHref}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  className="flex items-center gap-2 rounded px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                 >
-                  <FileText className="h-4 w-4" aria-hidden="true" />
+                  <FileText className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>View raw</span>
                 </a>
               ) : null}
               <a
                 href={rawHref}
-                className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                className="flex items-center gap-2 rounded px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
               >
-                <Download className="h-4 w-4" aria-hidden="true" />
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>Download</span>
               </a>
             </div>

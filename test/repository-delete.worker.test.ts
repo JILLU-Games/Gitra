@@ -3,7 +3,13 @@ import { env } from "cloudflare:workers";
 
 import { newPrefixedId, getRepoStub } from "@/worker/common";
 import { createDb } from "@/worker/db/d1/client";
-import { findPatGrantForRepo, insertPatWithGrants } from "@/worker/db/d1/dal";
+import {
+  deleteNamespaceEntry,
+  findPatGrantForRepo,
+  getRepositoryMeta,
+  insertPatWithGrants,
+  upsertRepositoryMeta,
+} from "@/worker/db/d1/dal";
 import { routeCacheKey } from "@/worker/repositories/routeCache";
 import { findRepositoryById } from "@/worker/db/d1/dal/repositories";
 import { generatePatPlaintext, hashPatPlaintext } from "@/worker/auth/pat";
@@ -116,5 +122,27 @@ describe("repository-delete consumer", () => {
     expect(result.acked).toBe(false);
     const db = createDb(env.DB);
     expect(await findRepositoryById(db, s.repositoryId)).toBeUndefined();
+  });
+
+  it("cleans repository_meta cascade and clears ROUTES/R2/DO even when D1 namespace rows were pre-deleted", async () => {
+    const s = await seedDeletable();
+    const db = createDb(env.DB);
+    await upsertRepositoryMeta(env.DB, s.repositoryId, {
+      description: "Will cascade",
+      pinned: true,
+      homePinned: true,
+      now: Date.now(),
+    });
+    expect((await getRepositoryMeta(env.DB, s.repositoryId)).pinned).toBe(true);
+
+    // Simulate user/namespace deletion clearing D1 first, followed by queued repo cleanup.
+    await deleteNamespaceEntry(env.DB, db, s.namespaceId, s.userId, "protected-admin");
+    expect(await findRepositoryById(db, s.repositoryId)).toBeUndefined();
+    expect((await getRepositoryMeta(env.DB, s.repositoryId)).pinned).toBe(false);
+
+    const queueRes = await runQueueMessage(deleteMessage(s));
+    expect(queueRes.acked).toBe(true);
+    expect(await env.ROUTES.get(routeCacheKey(s.namespaceSlug, s.repoSlug))).toBeNull();
+    expect(await r2HasObjectsForDoName(s.doName)).toBe(false);
   });
 });

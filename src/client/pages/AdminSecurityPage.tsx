@@ -1,10 +1,12 @@
 import { ArrowRight, Check, KeyRound, Lock, ShieldCheck, Users, X } from "lucide-react";
 
 import { AdminSettingsLayout, type AdminNavCounts } from "@/client/components/AdminSettingsLayout";
+import { buildNamespaceProfileHref } from "@/shared/admin/panel";
 
 export type AdminSecurityPageProps = {
   authMode: "demo" | "configured";
   primaryAdminHandle: string;
+  primaryAdminNamespaceSlug?: string;
   totalUsers: number;
   disabledUsers: number;
   usersWithPasswords: number;
@@ -59,120 +61,117 @@ const RBAC_MATRIX: ReadonlyArray<{
 export function AdminSecurityPage({
   authMode,
   primaryAdminHandle,
+  primaryAdminNamespaceSlug,
   totalUsers,
   disabledUsers,
   usersWithPasswords,
   counts,
 }: AdminSecurityPageProps) {
+  const publicNamespace = primaryAdminNamespaceSlug ?? primaryAdminHandle;
   return (
     <AdminSettingsLayout active="security" counts={counts}>
-      <div className="space-y-5">
-        <header className="flex flex-col gap-2 border-b border-zinc-200 pb-3.5 sm:flex-row sm:items-end sm:justify-between dark:border-zinc-800">
+      <div className="space-y-4">
+        <header className="flex flex-col gap-2 border-b border-border pb-3.5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="m-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+            <h1 className="m-0 text-[18px] font-semibold tracking-tight text-fg">
               Security &amp; Policies
             </h1>
-            <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="m-0 mt-0.5 text-[12px] text-fgMuted">
               Role-based access control matrix, credential hashing, and session enforcement rules.
             </p>
           </div>
           <a
             href="/admin/users"
-            className="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 no-underline hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            className="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
           >
-            <Users className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
+            <Users className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
             <span>Audit Users</span>
-            <ArrowRight className="h-3 w-3 text-zinc-400" aria-hidden="true" />
+            <ArrowRight className="h-3 w-3 text-fgMuted" aria-hidden="true" />
           </a>
         </header>
 
         {/* Security Metrics Strip */}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="rounded-md border border-zinc-200 bg-white px-3.5 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+          <div className="rounded-md border border-border bg-surface px-3.5 py-3">
+            <div className="flex items-center justify-between text-[12px] font-medium text-fgMuted">
               <span>Password Coverage</span>
-              <KeyRound className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
+              <KeyRound className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
             </div>
             <div className="mt-1.5 flex items-baseline justify-between gap-2">
-              <span className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+              <span className="text-[20px] font-semibold tabular-nums text-fg">
                 {usersWithPasswords}
               </span>
-              <span className="text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
-                of {totalUsers} users
-              </span>
+              <span className="text-[11px] tabular-nums text-fgMuted">of {totalUsers} users</span>
             </div>
           </div>
 
-          <div className="rounded-md border border-zinc-200 bg-white px-3.5 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+          <div className="rounded-md border border-border bg-surface px-3.5 py-3">
+            <div className="flex items-center justify-between text-[12px] font-medium text-fgMuted">
               <span>Disabled Accounts</span>
-              <Lock className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
+              <Lock className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
             </div>
             <div className="mt-1.5 flex items-baseline justify-between gap-2">
-              <span className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+              <span className="text-[20px] font-semibold tabular-nums text-fg">
                 {disabledUsers}
               </span>
-              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                revoked immediately
-              </span>
+              <span className="text-[11px] text-fgMuted">revoked immediately</span>
             </div>
           </div>
 
-          <div className="rounded-md border border-zinc-200 bg-white px-3.5 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+          <div className="rounded-md border border-border bg-surface px-3.5 py-3">
+            <div className="flex items-center justify-between text-[12px] font-medium text-fgMuted">
               <span>Primary Admin</span>
-              <ShieldCheck
-                className="h-3.5 w-3.5 text-accent-600 dark:text-accent-400"
-                aria-hidden="true"
-              />
+              <ShieldCheck className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
             </div>
             <div className="mt-1.5 flex items-baseline justify-between gap-2">
-              <span className="truncate font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                @{primaryAdminHandle}
-              </span>
-              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                {authMode === "configured" ? "env secret" : "demo mode"}
+              <a
+                href={buildNamespaceProfileHref(publicNamespace)}
+                className="truncate font-mono text-[13px] font-semibold text-fg no-underline hover:text-accent hover:underline"
+                title="Public Git namespace"
+              >
+                @{publicNamespace}
+              </a>
+              <span
+                className="truncate font-mono text-[11px] text-fgMuted"
+                title="Sign-in username"
+              >
+                login: {primaryAdminHandle} ({authMode === "configured" ? "env" : "demo"})
               </span>
             </div>
           </div>
         </div>
 
         {/* Role-Based Access Control Matrix */}
-        <section className="overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="border-b border-zinc-200 px-4 py-2.5 text-xs font-semibold text-zinc-900 dark:border-zinc-800 dark:text-zinc-100">
+        <section className="overflow-hidden rounded-md border border-border bg-surface">
+          <div className="border-b border-border px-4 py-2.5 text-[13px] font-semibold text-fg">
             Role-Based Access Control (RBAC) Matrix
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs">
+            <table className="w-full border-collapse text-left text-[12px]">
               <thead>
-                <tr className="border-b border-zinc-200 bg-zinc-50/70 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950/40 dark:text-zinc-400">
+                <tr className="border-b border-border bg-surface text-[11px] font-semibold uppercase tracking-wider text-fgMuted">
                   <th className="px-4 py-2">Capability</th>
                   <th className="px-3 py-2 text-center">Admin</th>
                   <th className="px-3 py-2 text-center">Member</th>
                   <th className="px-3 py-2 text-center">Viewer</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              <tbody className="divide-y divide-borderSubtle">
                 {RBAC_MATRIX.map((row) => (
-                  <tr
-                    key={row.capability}
-                    className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30"
-                  >
-                    <td className="px-4 py-2.5 text-zinc-800 dark:text-zinc-200">
-                      {row.capability}
-                    </td>
+                  <tr key={row.capability} className="hover:bg-surfaceHover/50">
+                    <td className="px-4 py-2.5 text-[13px] text-fgBody">{row.capability}</td>
                     {[row.admin, row.member, row.viewer].map((allowed, idx) => (
                       <td key={idx} className="px-3 py-2.5 text-center">
                         {allowed ? (
                           <span
-                            className="inline-flex h-5 w-5 items-center justify-center rounded border border-emerald-600/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                             aria-label="Allowed"
                           >
                             <Check className="h-3 w-3" aria-hidden="true" />
                           </span>
                         ) : (
                           <span
-                            className="inline-flex h-5 w-5 items-center justify-center rounded border border-zinc-200 bg-zinc-50 text-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-600"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-canvas text-fgMuted"
                             aria-label="Restricted"
                           >
                             <X className="h-3 w-3" aria-hidden="true" />
@@ -188,36 +187,36 @@ export function AdminSecurityPage({
         </section>
 
         {/* Active Security Controls */}
-        <section className="rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="border-b border-zinc-200 px-4 py-2.5 text-xs font-semibold text-zinc-900 dark:border-zinc-800 dark:text-zinc-100">
+        <section className="rounded-md border border-border bg-surface">
+          <div className="border-b border-border px-4 py-2.5 text-[13px] font-semibold text-fg">
             Cryptographic &amp; Transport Controls
           </div>
-          <dl className="m-0 divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
+          <dl className="m-0 divide-y divide-borderSubtle text-[12px]">
             <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
-              <dt className="shrink-0 text-zinc-500 dark:text-zinc-400">Password Derivation</dt>
-              <dd className="m-0 break-words text-zinc-900 sm:text-right dark:text-zinc-100">
+              <dt className="shrink-0 text-fgMuted">Password Derivation</dt>
+              <dd className="m-0 break-words text-fgBody sm:text-right">
                 <code className="font-mono">PBKDF2-SHA256</code> · 100,000 iterations · 16-byte salt
                 · constant-time compare
               </dd>
             </div>
             <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
-              <dt className="shrink-0 text-zinc-500 dark:text-zinc-400">Session Cookie</dt>
-              <dd className="m-0 break-words text-zinc-900 sm:text-right dark:text-zinc-100">
-                HMAC-signed · <code className="font-mono">HttpOnly</code> ·{" "}
+              <dt className="shrink-0 text-fgMuted">Session Cookie</dt>
+              <dd className="m-0 break-words text-fgBody sm:text-right">
+                AES-256-GCM encrypted · <code className="font-mono">HttpOnly</code> ·{" "}
                 <code className="font-mono">Secure</code> ·{" "}
                 <code className="font-mono">Partitioned</code> ·{" "}
                 <code className="font-mono">SameSite=None</code>
               </dd>
             </div>
             <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
-              <dt className="shrink-0 text-zinc-500 dark:text-zinc-400">CSRF Protection</dt>
-              <dd className="m-0 break-words text-zinc-900 sm:text-right dark:text-zinc-100">
+              <dt className="shrink-0 text-fgMuted">CSRF Protection</dt>
+              <dd className="m-0 break-words text-fgBody sm:text-right">
                 Strict same-origin enforcement on all state-changing endpoints
               </dd>
             </div>
             <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
-              <dt className="shrink-0 text-zinc-500 dark:text-zinc-400">Personal Access Tokens</dt>
-              <dd className="m-0 break-words text-zinc-900 sm:text-right dark:text-zinc-100">
+              <dt className="shrink-0 text-fgMuted">Personal Access Tokens</dt>
+              <dd className="m-0 break-words text-fgBody sm:text-right">
                 <code className="font-mono">SHA-256</code> hashed at rest · shown once at creation ·
                 namespace or repo scoped
               </dd>

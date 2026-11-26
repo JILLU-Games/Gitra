@@ -1,8 +1,9 @@
 import {
   canAccessAdminPanel,
   canRemoveNamespaceEntry,
-  canToggleNamespaceStatus,
+  evaluatePrimaryAdminPatchPolicy,
   formatPatScopeLabel,
+  GLOBAL_PAT_TARGET_LABEL,
   normalizeNamespaceHandle,
   sanitizeDisplayName,
   validateUserPassword,
@@ -15,42 +16,57 @@ import {
 import { shortRefName } from "@/shared/git/ref-display";
 import { safeParseJsonRequest } from "@/shared/web";
 import type { Viewer } from "@/client/server/viewer";
-import { buildLocalAccountSubject, resolveAdminAuthConfig } from "@/worker/auth/adminAuth";
+import {
+  buildLocalAccountSubject,
+  resolveAdminAuthConfig,
+  resolveInitialAdminNamespaceSlug,
+} from "@/worker/auth/adminAuth";
 import { sameOriginViolation } from "@/worker/auth/origin";
 import { hashPassword } from "@/worker/auth/passwords";
 import { viewerIsNamespaceMember } from "@/worker/auth/pat";
 import { loadViewer } from "@/worker/auth/session";
 import { getRepoStub, json, newPrefixedId } from "@/worker/common";
+import { loadSiteBranding, saveSiteBranding } from "@/worker/branding";
 import {
   claimNamespace,
   deleteNamespaceEntry,
-  deleteRepositoryById,
   findNamespaceById,
   findNamespaceBySlug,
   findNamespaceDirectoryMeta,
+  findPrimaryAdminNamespace,
   findRepositoryById,
   findUserBySubject,
   insertMembershipIfMissing,
   insertUserIfNew,
   listAllNamespaceDirectoryEntries,
+  listAllPatsWithOwners,
   listAllRepositoriesWithNamespaces,
-  listPatsForUser,
+  listRepositoriesInNamespace,
+  listRepositoryMetaMap,
+  revokePatAsAdmin,
   updateNamespaceHandle,
   upsertNamespaceDirectoryMeta,
 } from "@/worker/db/d1/dal";
 import { getLimiter, type Limiter } from "@/worker/git/operations/limits";
+import { deleteRouteCacheRecord } from "@/worker/repositories/routeCache";
+import { handleRepositoryPatch } from "./authRepositories";
 import { enqueueRouteCacheSync, safeRedirect, summarizeTokens } from "./authShared";
+import type { RepositoryDeleteMessage } from "@/worker/tasks/queue";
 import type { AppContext, AppRouter } from "./hono";
 import {
   AdminNamespaceCreateRequestSchema,
   AdminNamespacePatchRequestSchema,
   AdminRepositoryDeleteRequestSchema,
+  AdminSettingsUpdateRequestSchema,
 } from "./requestSchemas";
 import { renderUiDocumentResponse } from "./uiResponse";
 
+const REPO_BRANCH_KV_PREFIX = "repo-branch:";
+const MAX_COLD_BRANCH_LOOKUPS = 60;
+
 async function resolvePrimaryAdminNamespaceId(c: AppContext): Promise<string | null> {
-  const adminUsername = resolveAdminAuthConfig(c.env).username;
-  const ns = await findNamespaceBySlug(c.var.db, adminUsername);
+  const adminSubject = buildLocalAccountSubject(resolveAdminAuthConfig(c.env).username);
+  const ns = await findPrimaryAdminNamespace(c.var.db, adminSubject);
   return ns?.id ?? null;
 }
 
@@ -67,6 +83,14 @@ async function requireAdminApiViewer(
   return { ok: true, viewer };
 }
 
+function resolveRequestOrigin(c: AppContext): string {
+  const url = new URL(c.req.url);
+  const forwardedProto = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost =
+    c.req.header("x-forwarded-host")?.split(",")[0]?.trim() || c.req.header("host")?.trim();
+  return forwardedHost && forwardedProto ? `${forwardedProto}://${forwardedHost}` : url.origin;
+}
+
 async function resolveDefaultBranch(env: Env, limiter: Limiter, doName: string): Promise<string> {
   try {
     const stub = getRepoStub(env, doName);
@@ -80,22 +104,107 @@ async function resolveDefaultBranch(env: Env, limiter: Limiter, doName: string):
   return "main";
 }
 
+type CachedRepoBranch = {
+  branch: string;
+  updatedAt: number;
+};
+
+async function resolveCachedDefaultBranches(
+  c: AppContext,
+  limiter: Limiter,
+  repoRows: ReadonlyArray<{ id: string; doName: string; updatedAt: number }>
+): Promise<Map<string, string>> {
+  const branchById = new Map<string, string>();
+  const kv = c.env.ROUTES;
+  const uncached: Array<{ id: string; doName: string; updatedAt: number }> = [];
+
+  if (kv && typeof kv.get === "function") {
+    const cachedEntries = await Promise.all(
+      repoRows.map(async (row) => {
+        try {
+          const raw = await kv.get(`${REPO_BRANCH_KV_PREFIX}${row.id}`);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw) as Partial<CachedRepoBranch>;
+          if (
+            typeof parsed.branch === "string" &&
+            parsed.branch.length > 0 &&
+            parsed.updatedAt === row.updatedAt
+          ) {
+            return { id: row.id, branch: parsed.branch };
+          }
+        } catch {
+          // Malformed KV entry triggers a live DO read below.
+        }
+        return null;
+      })
+    );
+    cachedEntries.forEach((hit, index) => {
+      const row = repoRows[index]!;
+      if (hit) {
+        branchById.set(row.id, hit.branch);
+      } else {
+        uncached.push(row);
+      }
+    });
+  } else {
+    uncached.push(...repoRows);
+  }
+
+  // Bound cold-cache DO lookups to stay comfortably below the Worker request ceiling,
+  // while caching resolved branches in ROUTES KV keyed by repo updatedAt.
+  const toResolve = uncached.slice(0, MAX_COLD_BRANCH_LOOKUPS);
+  const overflow = uncached.slice(MAX_COLD_BRANCH_LOOKUPS);
+  for (const row of overflow) {
+    branchById.set(row.id, "main");
+  }
+
+  if (toResolve.length > 0) {
+    const resolved = await Promise.all(
+      toResolve.map(async (row) => ({
+        row,
+        branch: await resolveDefaultBranch(c.env, limiter, row.doName),
+      }))
+    );
+    const kvWrites: Promise<void>[] = [];
+    for (const { row, branch } of resolved) {
+      branchById.set(row.id, branch);
+      if (kv && typeof kv.put === "function") {
+        const payload: CachedRepoBranch = { branch, updatedAt: row.updatedAt };
+        kvWrites.push(kv.put(`${REPO_BRANCH_KV_PREFIX}${row.id}`, JSON.stringify(payload)));
+      }
+    }
+    if (kvWrites.length > 0) {
+      try {
+        c.executionCtx.waitUntil(Promise.allSettled(kvWrites));
+      } catch {
+        await Promise.allSettled(kvWrites);
+      }
+    }
+  }
+
+  return branchById;
+}
+
 function summarizeAdminTokens(
-  tokens: Awaited<ReturnType<typeof summarizeTokens>>
+  tokens: Awaited<ReturnType<typeof summarizeTokens>>,
+  ownerSlugByPatId: ReadonlyMap<string, string | undefined>
 ): AdminTokenEntry[] {
   return tokens.map((token) => {
     const firstNs = token.namespaceGrants[0];
     const firstRepo = token.repoGrants[0];
-    const level = firstNs?.level ?? firstRepo?.level ?? "pull";
-    const targetLabel = firstNs
-      ? `@${firstNs.namespaceSlug}`
-      : firstRepo
-        ? `${firstRepo.namespaceSlug}/${firstRepo.repoSlug}`
-        : "unscoped";
+    const level = token.globalGrant?.level ?? firstNs?.level ?? firstRepo?.level ?? "pull";
+    const targetLabel = token.globalGrant
+      ? GLOBAL_PAT_TARGET_LABEL
+      : firstNs
+        ? `@${firstNs.namespaceSlug}`
+        : firstRepo
+          ? `${firstRepo.namespaceSlug}/${firstRepo.repoSlug}`
+          : "unscoped";
     return {
       id: token.id,
       name: token.name,
       prefix: token.prefix,
+      ownerSlug: ownerSlugByPatId.get(token.id),
       createdAt: token.createdAt,
       revokedAt: token.revokedAt ?? undefined,
       lastUsedAt: token.lastUsedAt ?? undefined,
@@ -137,46 +246,45 @@ async function loadSystemAdminData(
   tokens: AdminTokenEntry[];
 }> {
   const db = c.var.db;
-  const [namespaces, repoRows, patRows] = await Promise.all([
+  const [namespaces, repoRows, patEntries] = await Promise.all([
     loadDirectoryUsers(c),
     listAllRepositoriesWithNamespaces(db),
-    listPatsForUser(db, viewer.userId),
+    listAllPatsWithOwners(db),
+  ]);
+  const patRows = patEntries.map((entry) => entry.pat);
+  const ownerSlugByPatId = new Map(patEntries.map((entry) => [entry.pat.id, entry.ownerSlug]));
+
+  const limiter = getLimiter();
+  const [tokenSummaries, repoMeta, branchById] = await Promise.all([
+    summarizeTokens(db, patRows, c.env.DB),
+    listRepositoryMetaMap(
+      c.env.DB,
+      repoRows.map((row) => row.id)
+    ),
+    resolveCachedDefaultBranches(c, limiter, repoRows),
   ]);
 
-  const tokenSummaries = await summarizeTokens(db, patRows);
-  const limiter = getLimiter();
-
-  // Resolve default branch for up to 24 repositories within the request budget;
-  // additional repositories fall back to "main" to avoid fanning out subrequests.
-  const repositories: AdminRepositoryEntry[] = await Promise.all(
-    repoRows.map(async (row, index) => {
-      const defaultBranch =
-        index < 24 ? await resolveDefaultBranch(c.env, limiter, row.doName) : "main";
-      return {
-        id: row.id,
-        slug: row.slug,
-        namespaceId: row.namespaceId,
-        namespaceSlug: row.namespaceSlug,
-        visibility: row.visibility,
-        defaultBranch,
-        updatedAt: row.updatedAt,
-      };
-    })
-  );
-
-  const url = new URL(c.req.url);
-  const forwardedProto = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
-  const forwardedHost =
-    c.req.header("x-forwarded-host")?.split(",")[0]?.trim() || c.req.header("host")?.trim();
-  const origin =
-    forwardedHost && forwardedProto ? `${forwardedProto}://${forwardedHost}` : url.origin;
+  const repositories: AdminRepositoryEntry[] = repoRows.map((row) => {
+    const meta = repoMeta.get(row.id);
+    return {
+      id: row.id,
+      slug: row.slug,
+      namespaceId: row.namespaceId,
+      namespaceSlug: row.namespaceSlug,
+      visibility: row.visibility,
+      defaultBranch: branchById.get(row.id) ?? "main",
+      pinned: meta?.pinned ?? false,
+      homePinned: meta?.homePinned ?? false,
+      updatedAt: row.updatedAt,
+    };
+  });
 
   return {
-    origin,
+    origin: resolveRequestOrigin(c),
     primaryNamespaceSlug: viewer.primaryNamespaceSlug,
     namespaces,
     repositories,
-    tokens: summarizeAdminTokens(tokenSummaries),
+    tokens: summarizeAdminTokens(tokenSummaries, ownerSlugByPatId),
   };
 }
 
@@ -350,19 +458,18 @@ async function handlePatchDirectoryUser(c: AppContext, namespaceId: string): Pro
     return json({ ok: false, reason: "invalid-payload" } as const, 400);
   }
 
-  // Primary signed-in admin can edit displayName, but cannot be disabled,
-  // demoted from admin, have its handle renamed, or override its env password.
-  if (!canToggleNamespaceStatus({ id: ns.id, isPrimaryAdmin })) {
-    const wantsDisable = parsed.data.status !== undefined && parsed.data.status !== "active";
-    const wantsDemote = parsed.data.role !== undefined && parsed.data.role !== "admin";
-    const wantsRename =
-      parsed.data.handle !== undefined &&
-      parsed.data.handle.replace(/^@+/, "").toLowerCase() !== ns.slug;
-    const wantsPassword = parsed.data.password !== undefined;
-    if (wantsDisable || wantsDemote || wantsRename || wantsPassword) {
-      log.warn("system-admin:namespace-protected", { namespaceId });
-      return json({ ok: false, reason: "protected-admin" } as const, 400);
-    }
+  // Primary signed-in admin can update displayName and rename their public
+  // `@namespace` handle without altering `ADMIN_USERNAME`, while remaining
+  // protected from disable, demotion, or directory password override.
+  const policyCheck = evaluatePrimaryAdminPatchPolicy({
+    isPrimaryAdmin,
+    status: parsed.data.status,
+    role: parsed.data.role,
+    hasPasswordChange: parsed.data.password !== undefined,
+  });
+  if (!policyCheck.ok) {
+    log.warn("system-admin:namespace-protected", { namespaceId });
+    return json({ ok: false, reason: policyCheck.reason } as const, 400);
   }
 
   let nextPasswordHash: string | undefined;
@@ -408,11 +515,31 @@ async function handlePatchDirectoryUser(c: AppContext, namespaceId: string): Pro
         slugResult.slug,
         ns.createdBy,
         viewer.userId,
-        buildLocalAccountSubject(slugResult.slug)
+        buildLocalAccountSubject(slugResult.slug),
+        { skipSubjectUpdate: isPrimaryAdmin, log }
       );
       if (!renamed) {
         return json({ ok: false, reason: "not-found" } as const, 404);
       }
+
+      // Reconcile ROUTES KV for every repository in this namespace: drop stale
+      // `oldSlug/repo` entries immediately and queue canonical syncs for `newSlug/repo`.
+      const reposInNamespace = await listRepositoriesInNamespace(db, ns.id);
+      if (reposInNamespace.length > 0) {
+        c.executionCtx.waitUntil(
+          Promise.allSettled(
+            reposInNamespace.map((repo) => deleteRouteCacheRecord(c.env, ns.slug, repo.slug))
+          )
+        );
+        for (const repo of reposInNamespace) {
+          enqueueRouteCacheSync(c, log, {
+            repositoryId: repo.id,
+            namespaceSlug: ns.slug,
+            repoSlug: repo.slug,
+          });
+        }
+      }
+
       nextSlug = slugResult.slug;
     }
   }
@@ -492,6 +619,39 @@ async function handleDeleteDirectoryUser(c: AppContext, namespaceId: string): Pr
     return json({ ok: false, reason: "cannot-remove-admin" } as const, 403);
   }
 
+  // Enqueue full repository cleanup (ROUTES KV, R2 objects, DO storage)
+  // before removing D1 rows so a queue outage fails safely without orphaning storage.
+  const reposInNamespace = await listRepositoriesInNamespace(db, ns.id);
+  const requestedAt = Date.now();
+  if (reposInNamespace.length > 0) {
+    try {
+      for (const repo of reposInNamespace) {
+        const message: RepositoryDeleteMessage = {
+          kind: "repository-delete",
+          repositoryId: repo.id,
+          namespaceId: ns.id,
+          namespaceSlug: ns.slug,
+          repoSlug: repo.slug,
+          doName: repo.doName,
+          actor: viewer.userId,
+          requestedAt,
+        };
+        await c.env.REPO_TASKS_QUEUE.send(message);
+      }
+    } catch (error) {
+      log.error("system-admin:namespace-delete-enqueue-failed", {
+        actor: viewer.userId,
+        namespaceId: ns.id,
+        repoCount: reposInNamespace.length,
+        error: String(error),
+      });
+      return json(
+        { ok: false, error: "Failed to enqueue repository cleanup; please retry" } as const,
+        503
+      );
+    }
+  }
+
   const removed = await deleteNamespaceEntry(c.env.DB, db, ns.id, ns.createdBy, viewer.userId);
   if (!removed) {
     return json({ ok: false, reason: "not-found" } as const, 404);
@@ -501,9 +661,10 @@ async function handleDeleteDirectoryUser(c: AppContext, namespaceId: string): Pr
     actor: viewer.userId,
     namespaceId: ns.id,
     slug: ns.slug,
+    queuedRepos: reposInNamespace.length,
   });
 
-  return json({ ok: true, id: ns.id } as const);
+  return json({ ok: true, id: ns.id, queuedRepos: reposInNamespace.length } as const);
 }
 
 export function registerSystemAdminRoutes(router: AppRouter) {
@@ -515,7 +676,10 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     if (!canAccessAdminPanel(viewer.role)) {
       return safeRedirect(c, "/", 303);
     }
-    const data = await loadSystemAdminData(c, viewer);
+    const [data, branding] = await Promise.all([
+      loadSystemAdminData(c, viewer),
+      loadSiteBranding(c.env),
+    ]);
     const authConfig = resolveAdminAuthConfig(c.env);
     return renderUiDocumentResponse(
       c.env,
@@ -528,6 +692,8 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       {
         failureBody: "Failed to render admin panel\n",
         viewer,
+        branding,
+        origin: data.origin,
       }
     );
   });
@@ -540,7 +706,10 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     if (!canAccessAdminPanel(viewer.role)) {
       return safeRedirect(c, "/", 303);
     }
-    const data = await loadSystemAdminData(c, viewer);
+    const [data, branding] = await Promise.all([
+      loadSystemAdminData(c, viewer),
+      loadSiteBranding(c.env),
+    ]);
     const authConfig = resolveAdminAuthConfig(c.env);
     return renderUiDocumentResponse(
       c.env,
@@ -553,6 +722,8 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       {
         failureBody: "Failed to render admin repositories page\n",
         viewer,
+        branding,
+        origin: data.origin,
       }
     );
   });
@@ -565,7 +736,10 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     if (!canAccessAdminPanel(viewer.role)) {
       return safeRedirect(c, "/", 303);
     }
-    const data = await loadSystemAdminData(c, viewer);
+    const [data, branding] = await Promise.all([
+      loadSystemAdminData(c, viewer),
+      loadSiteBranding(c.env),
+    ]);
     const authConfig = resolveAdminAuthConfig(c.env);
     return renderUiDocumentResponse(
       c.env,
@@ -578,6 +752,8 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       {
         failureBody: "Failed to render admin access tokens page\n",
         viewer,
+        branding,
+        origin: data.origin,
       }
     );
   });
@@ -590,11 +766,13 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     if (!canAccessAdminPanel(viewer.role)) {
       return safeRedirect(c, "/", 303);
     }
-    const [users, repoRows, patRows] = await Promise.all([
+    const [users, repoRows, patEntries, branding] = await Promise.all([
       loadDirectoryUsers(c),
       listAllRepositoriesWithNamespaces(c.var.db),
-      listPatsForUser(c.var.db, viewer.userId),
+      listAllPatsWithOwners(c.var.db),
+      loadSiteBranding(c.env),
     ]);
+    const origin = resolveRequestOrigin(c);
     return renderUiDocumentResponse(
       c.env,
       "system-admin-users",
@@ -604,12 +782,14 @@ export function registerSystemAdminRoutes(router: AppRouter) {
         counts: {
           users: users.length,
           repositories: repoRows.length,
-          activeTokens: patRows.filter((p) => !p.revokedAt).length,
+          activeTokens: patEntries.filter((entry) => !entry.pat.revokedAt).length,
         },
       },
       {
         failureBody: "Failed to render users management page\n",
         viewer,
+        branding,
+        origin,
       }
     );
   });
@@ -622,18 +802,18 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     if (!canAccessAdminPanel(viewer.role)) {
       return safeRedirect(c, "/", 303);
     }
-    const [users, repoRows, patRows] = await Promise.all([
+    const [users, repoRows, patEntries, branding] = await Promise.all([
       loadDirectoryUsers(c),
       listAllRepositoriesWithNamespaces(c.var.db),
-      listPatsForUser(c.var.db, viewer.userId),
+      listAllPatsWithOwners(c.var.db),
+      loadSiteBranding(c.env),
     ]);
     const authConfig = resolveAdminAuthConfig(c.env);
-    const url = new URL(c.req.url);
-    const forwardedProto = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
-    const forwardedHost =
-      c.req.header("x-forwarded-host")?.split(",")[0]?.trim() || c.req.header("host")?.trim();
-    const origin =
-      forwardedHost && forwardedProto ? `${forwardedProto}://${forwardedHost}` : url.origin;
+    const primaryAdminNamespaceSlug =
+      users.find((u) => u.isPrimaryAdmin)?.slug ??
+      viewer.primaryNamespaceSlug ??
+      resolveInitialAdminNamespaceSlug(c.env);
+    const origin = resolveRequestOrigin(c);
 
     return renderUiDocumentResponse(
       c.env,
@@ -641,17 +821,21 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       {
         authMode: authConfig.mode,
         primaryAdminHandle: authConfig.username,
+        primaryAdminNamespaceSlug,
         totalUsers: users.length,
         activeUsers: users.filter((u) => u.status === "active").length,
         totalRepositories: repoRows.length,
         publicRepositories: repoRows.filter((r) => r.visibility === "public").length,
         privateRepositories: repoRows.filter((r) => r.visibility === "private").length,
-        activeTokens: patRows.filter((p) => !p.revokedAt).length,
+        activeTokens: patEntries.filter((entry) => !entry.pat.revokedAt).length,
         origin,
+        branding,
       },
       {
         failureBody: "Failed to render admin settings control panel\n",
         viewer,
+        branding,
+        origin,
       }
     );
   });
@@ -664,35 +848,93 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     if (!canAccessAdminPanel(viewer.role)) {
       return safeRedirect(c, "/", 303);
     }
-    const [users, repoRows, patRows] = await Promise.all([
+    const [users, repoRows, patEntries, branding] = await Promise.all([
       loadDirectoryUsers(c),
       listAllRepositoriesWithNamespaces(c.var.db),
-      listPatsForUser(c.var.db, viewer.userId),
+      listAllPatsWithOwners(c.var.db),
+      loadSiteBranding(c.env),
     ]);
     const authConfig = resolveAdminAuthConfig(c.env);
+    const primaryAdminNamespaceSlug =
+      users.find((u) => u.isPrimaryAdmin)?.slug ??
+      viewer.primaryNamespaceSlug ??
+      resolveInitialAdminNamespaceSlug(c.env);
+    const origin = resolveRequestOrigin(c);
     return renderUiDocumentResponse(
       c.env,
       "system-admin-security",
       {
         authMode: authConfig.mode,
         primaryAdminHandle: authConfig.username,
+        primaryAdminNamespaceSlug,
         totalUsers: users.length,
         disabledUsers: users.filter((u) => u.status === "disabled").length,
         usersWithPasswords: users.filter((u) => u.isPrimaryAdmin || u.hasPassword).length,
         counts: {
           users: users.length,
           repositories: repoRows.length,
-          activeTokens: patRows.filter((p) => !p.revokedAt).length,
+          activeTokens: patEntries.filter((entry) => !entry.pat.revokedAt).length,
         },
       },
       {
         failureBody: "Failed to render admin security page\n",
         viewer,
+        branding,
+        origin,
       }
     );
   });
 
   router.get(`/admin/SettingsControlPanel`, (c) => safeRedirect(c, "/admin/settings", 302));
+
+  router.put(`/admin/api/settings`, async (c) => {
+    const log = c.var.logFor({ service: "SystemAdmin" });
+    const violation = sameOriginViolation(c);
+    if (violation) {
+      log.warn("system-admin:settings-same-origin-violation");
+      return violation;
+    }
+    const auth = await requireAdminApiViewer(c);
+    if (!auth.ok) return auth.response;
+
+    const rawBody = await safeParseJsonRequest(c.req.raw);
+    const parsed = AdminSettingsUpdateRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return json({ ok: false, reason: "invalid-payload" } as const, 400);
+    }
+
+    const branding = await saveSiteBranding(c.env, parsed.data);
+    log.info("system-admin:settings-updated", {
+      actor: auth.viewer.userId,
+      siteName: branding.siteName,
+      shortName: branding.shortName,
+    });
+    return json({ ok: true, branding } as const);
+  });
+
+  router.delete(`/admin/api/tokens/:patId`, async (c) => {
+    const log = c.var.logFor({ service: "SystemAdmin" });
+    const violation = sameOriginViolation(c);
+    if (violation) {
+      log.warn("system-admin:token-revoke-same-origin-violation");
+      return violation;
+    }
+    const auth = await requireAdminApiViewer(c);
+    if (!auth.ok) return auth.response;
+
+    const patId = c.req.param("patId");
+    const result = await revokePatAsAdmin(c.var.db, patId, Date.now());
+    if (result.ok) {
+      log.info("system-admin:token-revoked", { actor: auth.viewer.userId, patId });
+      return json({ ok: true, id: patId } as const);
+    }
+    if (result.reason === "not-found") {
+      log.warn("system-admin:token-revoke-not-found", { actor: auth.viewer.userId, patId });
+      return json({ ok: false, error: "Not found" } as const, 404);
+    }
+    log.debug("system-admin:token-already-revoked", { actor: auth.viewer.userId, patId });
+    return json({ ok: true, id: patId } as const);
+  });
 
   router.get(`/admin/api/overview`, async (c) => {
     const auth = await requireAdminApiViewer(c);
@@ -725,6 +967,10 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     handleDeleteDirectoryUser(c, c.req.param("namespaceId"))
   );
 
+  router.patch(`/admin/api/repositories/:repositoryId`, (c) =>
+    handleRepositoryPatch(c, c.req.param("repositoryId"), { requireAdmin: true })
+  );
+
   router.delete(`/admin/api/repositories/:repositoryId`, async (c) => {
     const log = c.var.logFor({ service: "SystemAdmin" });
     const violation = sameOriginViolation(c);
@@ -744,7 +990,7 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     }
 
     const isMember = await viewerIsNamespaceMember(db, viewer.userId, repo.namespaceId);
-    if (!isMember) {
+    if (!canAccessAdminPanel(viewer.role) && !isMember) {
       log.warn("system-admin:repo-delete-forbidden", {
         actor: viewer.userId,
         repositoryId,
@@ -753,7 +999,10 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     }
 
     const namespace = await findNamespaceById(db, repo.namespaceId);
-    const expectedConfirm = namespace ? `${namespace.slug}/${repo.slug}` : repo.slug;
+    if (!namespace) {
+      return json({ ok: false, reason: "not-found" } as const, 404);
+    }
+    const expectedConfirm = `${namespace.slug}/${repo.slug}`;
     const rawBody = await safeParseJsonRequest(c.req.raw);
     const parsed = AdminRepositoryDeleteRequestSchema.safeParse(rawBody);
     const confirm = parsed.success ? parsed.data.confirm : "";
@@ -769,26 +1018,37 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       );
     }
 
-    const deleted = await deleteRepositoryById(db, repositoryId);
-    if (!deleted) {
-      return json({ ok: false, reason: "not-found" } as const, 404);
-    }
-
-    if (namespace) {
-      enqueueRouteCacheSync(c, log, {
+    // Queue consumer owns D1 delete + ROUTES KV + R2 objects + DO storage cleanup
+    // so a queue-send outage returns 503 without partial state mutations.
+    const message: RepositoryDeleteMessage = {
+      kind: "repository-delete",
+      repositoryId,
+      namespaceId: repo.namespaceId,
+      namespaceSlug: namespace.slug,
+      repoSlug: repo.slug,
+      doName: repo.doName,
+      actor: viewer.userId,
+      requestedAt: Date.now(),
+    };
+    try {
+      await c.env.REPO_TASKS_QUEUE.send(message);
+    } catch (error) {
+      log.error("system-admin:repo-delete-enqueue-failed", {
+        actor: viewer.userId,
         repositoryId,
-        namespaceSlug: namespace.slug,
-        repoSlug: repo.slug,
+        error: String(error),
       });
+      return json({ ok: false, error: "Failed to enqueue delete; please retry" } as const, 503);
     }
 
-    log.info("system-admin:repo-deleted", {
+    log.info("system-admin:repo-delete-enqueued", {
       actor: viewer.userId,
       repositoryId,
-      namespaceSlug: namespace?.slug,
+      namespaceSlug: namespace.slug,
       slug: repo.slug,
+      requestedAt: message.requestedAt,
     });
 
-    return json({ ok: true, id: repositoryId } as const);
+    return json({ ok: true, id: repositoryId, queued: true } as const, 202);
   });
 }

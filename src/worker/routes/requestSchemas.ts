@@ -68,6 +68,10 @@ export const RepositoryPatchRequestSchema = z.preprocess(
       (value) => (typeof value === "boolean" ? value : undefined),
       z.boolean().optional()
     ),
+    homePinned: z.preprocess(
+      (value) => (typeof value === "boolean" ? value : undefined),
+      z.boolean().optional()
+    ),
   })
 );
 
@@ -124,9 +128,19 @@ const PatRepoCreateRequestSchema = z.object({
   level: NullablePatGrantLevelSchema,
 });
 
+const PatGlobalCreateRequestSchema = z.object({
+  scope: z.literal("global"),
+  name: TrimmedStringSchema,
+  level: NullablePatGrantLevelSchema,
+});
+
 export const PatCreateRequestSchema = z.preprocess(
   objectOrEmpty,
-  z.discriminatedUnion("scope", [PatNamespaceCreateRequestSchema, PatRepoCreateRequestSchema])
+  z.discriminatedUnion("scope", [
+    PatNamespaceCreateRequestSchema,
+    PatRepoCreateRequestSchema,
+    PatGlobalCreateRequestSchema,
+  ])
 );
 
 export const AdminCompactionRequestSchema = z.preprocess(
@@ -232,5 +246,27 @@ export const AdminRepositoryDeleteRequestSchema = z.preprocess(
   objectOrEmpty,
   z.object({
     confirm: TrimmedStringSchema,
+  })
+);
+
+const OptionalStringSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value : undefined),
+  z.string().optional()
+);
+
+export const AdminSettingsUpdateRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    siteName: OptionalStringSchema,
+    shortName: OptionalStringSchema,
+    tagline: OptionalStringSchema,
+    heroTitle: OptionalStringSchema,
+    heroDescription: OptionalStringSchema,
+    workspaceName: OptionalStringSchema,
+    websiteUrl: OptionalStringSchema,
+    websiteLabel: OptionalStringSchema,
+    docsUrl: OptionalStringSchema,
+    supportEmail: OptionalStringSchema,
+    footerText: OptionalStringSchema,
   })
 );

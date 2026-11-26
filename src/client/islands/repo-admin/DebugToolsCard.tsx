@@ -6,6 +6,7 @@ import { JsonResult } from "./JsonResult";
 
 export type DebugToolsCardProps = {
   oidResult: unknown;
+  oidError?: string | null;
   stateDump: unknown;
   pending: Record<string, boolean>;
   checkOid: (oid: string) => Promise<void>;
@@ -14,6 +15,7 @@ export type DebugToolsCardProps = {
 
 export function DebugToolsCard({
   oidResult,
+  oidError,
   stateDump,
   pending,
   checkOid,
@@ -23,10 +25,10 @@ export function DebugToolsCard({
 
   return (
     <Card>
-      <h2 className="mb-4 text-xl font-semibold">Debug Tools</h2>
-      <div className="space-y-4">
+      <h2 className="mb-3.5 text-[14px] font-semibold text-fg">Debug Tools</h2>
+      <div className="space-y-3.5">
         <div>
-          <label htmlFor="debug-oid" className="mb-2 block text-sm font-medium">
+          <label htmlFor="debug-oid" className="mb-1.5 block text-[12px] font-medium text-fgBody">
             Check Object ID Existence
           </label>
           <div className="flex gap-2">
@@ -34,8 +36,9 @@ export function DebugToolsCard({
               type="text"
               id="debug-oid"
               placeholder="Enter 40-character SHA-1 hash"
-              className="flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-accent-500 dark:border-zinc-700 dark:bg-zinc-800"
+              className="h-8 flex-1 rounded-md border border-border bg-canvas px-3 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
               pattern="[a-f0-9]{40}"
+              aria-invalid={oidError ? true : undefined}
               value={debugOid}
               onChange={(event) => setDebugOid(event.target.value)}
             />
@@ -47,13 +50,20 @@ export function DebugToolsCard({
               {pending["check-oid"] ? "Checking..." : "Check OID"}
             </Button>
           </div>
+          {oidError ? (
+            <p role="alert" className="m-0 mt-1.5 text-[12px] text-red-400">
+              {oidError}
+            </p>
+          ) : null}
           {oidResult ? <JsonResult data={oidResult} /> : null}
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium">Repository State Dump</label>
+          <label className="mb-1.5 block text-[12px] font-medium text-fgBody">
+            Repository State Dump
+          </label>
           <Button type="button" onClick={() => void dumpState()} disabled={pending["dump-state"]}>
-            <Database className="mr-2 inline h-4 w-4 align-[-2px]" aria-hidden="true" />
+            <Database className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" aria-hidden="true" />
             <span className="label">
               {pending["dump-state"] ? "Processing..." : "View DO State"}
             </span>

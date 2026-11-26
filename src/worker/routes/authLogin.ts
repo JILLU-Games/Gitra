@@ -10,15 +10,22 @@ import {
   DEFAULT_DEMO_USER_PASSWORD,
   DEFAULT_DEMO_USER_USERNAME,
   DEFAULT_POST_LOGIN_REDIRECT,
-  deriveNamespaceSlugForAdmin,
   isDemoModeEnabled,
   resolveAdminAuthConfig,
+  resolveInitialAdminNamespaceSlug,
   sanitizeNextRedirect,
   verifyAdminCredentials,
 } from "@/worker/auth/adminAuth";
 import { ensureDemoRepositoriesSeeded, ensureDemoTestUserSeeded } from "@/worker/auth/demoSeed";
 import { sameOriginViolation } from "@/worker/auth/origin";
 import { hashPassword, verifyPassword } from "@/worker/auth/passwords";
+import {
+  buildAuthRateLimitKey,
+  bumpAuthRateLimitFailure,
+  checkAuthRateLimit,
+  clearAuthRateLimit,
+  extractClientIp,
+} from "@/worker/auth/rateLimit";
 import {
   createSessionForUser,
   endSession,
@@ -33,13 +40,13 @@ import {
   findDirectoryAccountBySlug,
   findDirectoryAccountByUserId,
   findNamespaceBySlug,
-  findNamespaceDirectoryMeta,
+  findPrimaryAdminNamespace,
   findUserBySubject,
   insertMembershipIfMissing,
   insertUserIfNew,
   touchDirectoryLastActive,
+  updateDirectoryDisplayName,
   updateDirectoryPasswordHash,
-  upsertNamespaceDirectoryMeta,
   upsertNamespaceProfileMeta,
 } from "@/worker/db/d1/dal";
 import type { AppContext, AppRouter } from "./hono";
@@ -51,12 +58,28 @@ import {
 import { safeRedirect } from "./authShared";
 import { renderUiDocumentResponse } from "./uiResponse";
 
-function authErrorRedirect(c: AppContext, code: string, nextPath?: string): Response {
+function authErrorRedirect(
+  c: AppContext,
+  code: string,
+  nextPath?: string,
+  extraHeaders?: Record<string, string>
+): Response {
   const params = new URLSearchParams({ error: code });
   if (nextPath && nextPath !== DEFAULT_POST_LOGIN_REDIRECT) {
     params.set("next", nextPath);
   }
-  return safeRedirect(c, `/auth?${params.toString()}`, 303);
+  const response = safeRedirect(c, `/auth?${params.toString()}`, 303);
+  if (extraHeaders) {
+    for (const [key, value] of Object.entries(extraHeaders)) {
+      response.headers.set(key, value);
+    }
+  }
+  return response;
+}
+
+function wantsJsonAuthResponse(c: AppContext): boolean {
+  const accept = (c.req.header("accept") || "").toLowerCase();
+  return accept.includes("application/json") && !accept.includes("text/html");
 }
 
 async function readLoginPayload(c: AppContext): Promise<{
@@ -85,10 +108,10 @@ async function readLoginPayload(c: AppContext): Promise<{
 async function provisionAdminSession(args: {
   c: AppContext;
   subject: string;
-  namespaceSlug: string;
+  initialNamespaceSlug: string;
   seedDemoRepos: boolean;
 }): Promise<{ ok: true; userId: string } | { ok: false; reason: "session_create_failed" }> {
-  const { c, subject, namespaceSlug, seedDemoRepos } = args;
+  const { c, subject, initialNamespaceSlug, seedDemoRepos } = args;
   const log = c.var.logFor({ service: "AuthLogin" });
   const sessionConfig = loadSessionConfig(c.env);
   if (!sessionConfig.ok) {
@@ -116,21 +139,30 @@ async function provisionAdminSession(args: {
     userId = existing.id;
   }
 
-  // Ensure the admin owns their default namespace (e.g. `@admin`) so they can
-  // immediately browse, create, and customize repositories on the dashboard.
+  // Reuse the primary admin's existing namespace (preserving renames such as
+  // `@vibtools`), only claiming `initialNamespaceSlug` if none exists yet.
   let namespaceId: string | null = null;
-  const claimed = await claimNamespace(db, {
-    id: generateNamespaceId(),
-    slug: namespaceSlug,
-    createdBy: userId,
-    createdAt: now,
-  });
-  if (claimed) {
-    namespaceId = claimed.id;
+  let effectiveNamespaceSlug = initialNamespaceSlug;
+  const existingOwnedNamespace = await findPrimaryAdminNamespace(db, subject);
+  if (existingOwnedNamespace) {
+    namespaceId = existingOwnedNamespace.id;
+    effectiveNamespaceSlug = existingOwnedNamespace.slug;
   } else {
-    const existingNamespace = await findNamespaceBySlug(db, namespaceSlug);
-    if (existingNamespace && existingNamespace.createdBy === userId) {
-      namespaceId = existingNamespace.id;
+    const claimed = await claimNamespace(db, {
+      id: generateNamespaceId(),
+      slug: initialNamespaceSlug,
+      createdBy: userId,
+      createdAt: now,
+    });
+    if (claimed) {
+      namespaceId = claimed.id;
+      effectiveNamespaceSlug = claimed.slug;
+    } else {
+      const existingNamespace = await findNamespaceBySlug(db, initialNamespaceSlug);
+      if (existingNamespace && existingNamespace.createdBy === userId) {
+        namespaceId = existingNamespace.id;
+        effectiveNamespaceSlug = existingNamespace.slug;
+      }
     }
   }
 
@@ -149,7 +181,7 @@ async function provisionAdminSession(args: {
         log,
         userId,
         namespaceId,
-        namespaceSlug,
+        namespaceSlug: effectiveNamespaceSlug,
         now,
       });
     }
@@ -164,7 +196,11 @@ async function provisionAdminSession(args: {
     return { ok: false, reason: "session_create_failed" };
   }
 
-  log.info("auth:login-success", { userId, namespaceSlug, seedDemoRepos });
+  log.info("auth:login-success", {
+    userId,
+    namespaceSlug: effectiveNamespaceSlug,
+    seedDemoRepos,
+  });
   return { ok: true, userId };
 }
 
@@ -226,23 +262,46 @@ export function registerAuthLoginRoutes(router: AppRouter) {
       return authErrorRedirect(c, "missing_credentials", nextPath);
     }
 
+    const clientIp = extractClientIp(c.req.raw);
+    const rateLimitKey = buildAuthRateLimitKey("login", clientIp, body.username);
+    const rateLimit = await checkAuthRateLimit(c.env, rateLimitKey);
+    if (!rateLimit.allowed) {
+      log.warn("auth:login-rate-limited", {
+        ip: clientIp,
+        retryAfter: rateLimit.retryAfterSeconds,
+      });
+      if (wantsJsonAuthResponse(c)) {
+        return json(
+          { error: "Too many failed sign-in attempts", retryAfter: rateLimit.retryAfterSeconds },
+          429,
+          { "Retry-After": String(rateLimit.retryAfterSeconds), "Cache-Control": "no-store" }
+        );
+      }
+      return authErrorRedirect(c, "rate_limited", nextPath, {
+        "Retry-After": String(rateLimit.retryAfterSeconds),
+      });
+    }
+
     // 1. Primary admin credential path (demo mode or configured env secret)
     const verifiedAdmin = await verifyAdminCredentials(c.env, body.username, body.password);
     if (verifiedAdmin.ok) {
       const sessionResult = await provisionAdminSession({
         c,
         subject: verifiedAdmin.subject,
-        namespaceSlug: verifiedAdmin.namespaceSlug,
+        initialNamespaceSlug: verifiedAdmin.namespaceSlug,
         seedDemoRepos: verifiedAdmin.mode === "demo",
       });
 
       if (!sessionResult.ok) {
         return authErrorRedirect(c, sessionResult.reason, nextPath);
       }
+      await clearAuthRateLimit(c.env, rateLimitKey);
       return safeRedirect(c, nextPath, 303);
     }
 
-    // 2. Directory user account lookup by handle (`@slug` or `slug`)
+    // 2. Directory user account lookup by handle (`@slug` or `slug`).
+    // Primary admin accounts cannot sign in via their public `@namespace`
+    // handle—only via their configured `ADMIN_USERNAME` credential above.
     const normalizedHandle = body.username.trim().replace(/^@+/, "").toLowerCase();
     if (normalizedHandle === DEFAULT_DEMO_USER_USERNAME && isDemoModeEnabled(c.env)) {
       await ensureDemoTestUserSeeded({
@@ -252,14 +311,22 @@ export function registerAuthLoginRoutes(router: AppRouter) {
         log,
       });
     }
-    const account = normalizedHandle
-      ? await findDirectoryAccountBySlug(c.env.DB, c.var.db, normalizedHandle)
-      : null;
+    const primaryAdminSubject = buildLocalAccountSubject(resolveAdminAuthConfig(c.env).username);
+    const [account, primaryAdminUser] = await Promise.all([
+      normalizedHandle
+        ? findDirectoryAccountBySlug(c.env.DB, c.var.db, normalizedHandle)
+        : Promise.resolve(null),
+      findUserBySubject(c.var.db, primaryAdminSubject),
+    ]);
+    const isPrimaryAdminAccount = Boolean(
+      account && primaryAdminUser && account.userId === primaryAdminUser.id
+    );
 
-    if (account && account.passwordHash) {
+    if (account && !isPrimaryAdminAccount && account.passwordHash) {
       const passwordOk = await verifyPassword(body.password, account.passwordHash);
       if (passwordOk) {
         if (account.status === "disabled") {
+          await bumpAuthRateLimitFailure(c.env, rateLimitKey);
           log.warn("auth:login-account-disabled", {
             userId: account.userId,
             slug: account.slug,
@@ -282,6 +349,7 @@ export function registerAuthLoginRoutes(router: AppRouter) {
           return authErrorRedirect(c, "session_create_failed", nextPath);
         }
 
+        await clearAuthRateLimit(c.env, rateLimitKey);
         log.info("auth:directory-user-login-success", {
           userId: account.userId,
           slug: account.slug,
@@ -297,6 +365,7 @@ export function registerAuthLoginRoutes(router: AppRouter) {
       }
     }
 
+    await bumpAuthRateLimitFailure(c.env, rateLimitKey);
     log.info("auth:login-rejected", { reason: "invalid_credentials" });
     return authErrorRedirect(c, "invalid_credentials", nextPath);
   });
@@ -335,12 +404,33 @@ export function registerAuthLoginRoutes(router: AppRouter) {
       return json({ ok: false, reason: "password-not-set" } as const, 400);
     }
 
+    const clientIp = extractClientIp(c.req.raw);
+    const rateLimitKey = buildAuthRateLimitKey("change-password", clientIp, viewer.userId);
+    const rateLimit = await checkAuthRateLimit(c.env, rateLimitKey);
+    if (!rateLimit.allowed) {
+      log.warn("auth:change-password-rate-limited", {
+        userId: viewer.userId,
+        retryAfter: rateLimit.retryAfterSeconds,
+      });
+      return json(
+        {
+          ok: false,
+          reason: "rate-limited",
+          retryAfter: rateLimit.retryAfterSeconds,
+        } as const,
+        429,
+        { "Retry-After": String(rateLimit.retryAfterSeconds), "Cache-Control": "no-store" }
+      );
+    }
+
     const matchesCurrent = await verifyPassword(currentPassword, account.passwordHash);
     if (!matchesCurrent) {
+      await bumpAuthRateLimitFailure(c.env, rateLimitKey);
       log.warn("auth:change-password-invalid-current", { userId: viewer.userId });
       return json({ ok: false, reason: "invalid-current-password" } as const, 400);
     }
 
+    await clearAuthRateLimit(c.env, rateLimitKey);
     const nextHash = await hashPassword(newValidation.password);
     await updateDirectoryPasswordHash(c.env.DB, account.namespaceId, nextHash, Date.now());
     log.info("auth:change-password-success", {
@@ -380,19 +470,18 @@ export function registerAuthLoginRoutes(router: AppRouter) {
     }
 
     const now = Date.now();
-    const existingMeta = await findNamespaceDirectoryMeta(c.env.DB, namespace.id);
     const nextDisplayName = sanitizeDisplayName(
       parsed.data.displayName ?? viewer.displayName ?? namespace.slug,
       namespace.slug
     );
-    const role = viewer.isPrimaryAdmin ? "admin" : (existingMeta?.role ?? viewer.role);
-    const status = viewer.isPrimaryAdmin ? "active" : (existingMeta?.status ?? "active");
+    const fallbackRole = viewer.isPrimaryAdmin ? "admin" : viewer.role;
+    const fallbackStatus = "active";
 
-    await upsertNamespaceDirectoryMeta(c.env.DB, namespace.id, {
+    await updateDirectoryDisplayName(c.env.DB, namespace.id, {
       displayName: nextDisplayName,
-      role,
-      status,
-      lastActiveAt: existingMeta?.last_active_at ?? now,
+      fallbackRole,
+      fallbackStatus,
+      lastActiveAt: now,
       now,
     });
 
@@ -473,7 +562,7 @@ export function registerAuthLoginRoutes(router: AppRouter) {
     const sessionResult = await provisionAdminSession({
       c,
       subject: buildLocalAccountSubject(config.username),
-      namespaceSlug: deriveNamespaceSlugForAdmin(config.username),
+      initialNamespaceSlug: resolveInitialAdminNamespaceSlug(c.env),
       seedDemoRepos: true,
     });
 

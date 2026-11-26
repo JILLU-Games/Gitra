@@ -97,7 +97,30 @@ const BOOTSTRAP_STATEMENTS: readonly string[] = [
     CONSTRAINT chk_namespace_directory_role CHECK(role IN ('admin','member','viewer')),
     CONSTRAINT chk_namespace_directory_status CHECK(status IN ('active','disabled'))
   )`,
-  // Record the baseline Drizzle migration in Wrangler's `d1_migrations` table
+  `CREATE TABLE IF NOT EXISTS namespace_profile_meta (
+    namespace_id text PRIMARY KEY NOT NULL,
+    bio text NOT NULL DEFAULT '',
+    location text NOT NULL DEFAULT '',
+    website text NOT NULL DEFAULT '',
+    updated_at integer NOT NULL,
+    FOREIGN KEY (namespace_id) REFERENCES namespaces(id) ON UPDATE no action ON DELETE cascade
+  )`,
+  `CREATE TABLE IF NOT EXISTS repository_meta (
+    repository_id text PRIMARY KEY NOT NULL,
+    description text NOT NULL DEFAULT '',
+    pinned integer NOT NULL DEFAULT 0,
+    home_pinned integer NOT NULL DEFAULT 0,
+    updated_at integer NOT NULL,
+    FOREIGN KEY (repository_id) REFERENCES repositories(id) ON UPDATE no action ON DELETE cascade
+  )`,
+  `CREATE TABLE IF NOT EXISTS pat_global_grants (
+    pat_id text PRIMARY KEY NOT NULL,
+    level text NOT NULL,
+    created_at integer NOT NULL,
+    FOREIGN KEY (pat_id) REFERENCES personal_access_tokens(id) ON UPDATE no action ON DELETE cascade,
+    CONSTRAINT chk_pat_global_grants_level CHECK(level IN ('pull','push'))
+  )`,
+  // Record formal Drizzle migrations in Wrangler's `d1_migrations` table
   // so subsequent `wrangler d1 migrations apply` or Vitest `applyD1Migrations`
   // calls treat the bootstrapped schema as already applied instead of failing
   // on `CREATE TABLE users`.
@@ -107,6 +130,7 @@ const BOOTSTRAP_STATEMENTS: readonly string[] = [
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
   )`,
   `INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0000_gray_supernaut.sql')`,
+  `INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0001_outgoing_vin_gonzales.sql')`,
 ];
 
 const ensuredDatabases = new WeakMap<D1Database, Promise<void>>();
@@ -114,10 +138,19 @@ const ensuredDatabases = new WeakMap<D1Database, Promise<void>>();
 async function runSchemaCheck(db: D1Database): Promise<void> {
   const existing = await db
     .prepare(
-      `SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'users' LIMIT 1`
+      `SELECT COUNT(*) AS presentCount
+       FROM sqlite_master
+       WHERE type = 'table'
+         AND name IN (
+           'users',
+           'namespace_directory_meta',
+           'namespace_profile_meta',
+           'repository_meta',
+           'pat_global_grants'
+         )`
     )
-    .first<{ present: number }>();
-  if (existing) return;
+    .first<{ presentCount: number }>();
+  if (existing && existing.presentCount >= 5) return;
   await db.batch(BOOTSTRAP_STATEMENTS.map((sql) => db.prepare(sql)));
 }
 

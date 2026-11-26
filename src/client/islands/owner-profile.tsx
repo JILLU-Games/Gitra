@@ -5,6 +5,7 @@ import {
   BookOpen,
   FolderGit2,
   Globe,
+  Home,
   Lock,
   Pencil,
   Pin,
@@ -43,7 +44,7 @@ export function OwnerProfileActionIsland({
     return (
       <a
         href={`/${encodeURIComponent(owner)}/${PROFILE_REPO_SLUG}`}
-        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 no-underline hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
       >
         <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
         <span>Edit .vibtools profile</span>
@@ -93,13 +94,13 @@ export function OwnerProfileActionIsland({
         type="button"
         onClick={() => void handleQuickCreate()}
         disabled={creating}
-        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-600 bg-accent-600 px-3 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+        className="inline-flex h-8 items-center gap-1.5 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
       >
         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
         <span>{creating ? "Creating .vibtools…" : "Create .vibtools profile"}</span>
       </button>
       {error ? (
-        <span role="alert" className="text-[11px] text-red-600 dark:text-red-400">
+        <span role="alert" className="text-[11px] text-red-400">
           {error}
           {sessionExpired ? (
             <a href="/auth" className="ml-1.5 font-medium underline">
@@ -118,12 +119,15 @@ export type OwnerRepoSummary = {
   visibility: "public" | "private";
   description?: string;
   pinned?: boolean;
+  homePinned?: boolean;
   updatedAt?: number;
 };
 
 export type OwnerReposIslandProps = {
   owner: string;
   canManageProfile: boolean;
+  canPinRepos?: boolean;
+  canFeatureHomepage?: boolean;
   hasProfileRepo?: boolean;
   profileRepoVisibility?: "public" | "private";
   profileReadmeHtml?: string;
@@ -132,11 +136,14 @@ export type OwnerReposIslandProps = {
   repos: OwnerRepoSummary[];
 };
 
-type PinToggleResponse = { ok: true; pinned: boolean } | { ok: false; reason?: string };
+type PinToggleResponse =
+  { ok: true; pinned: boolean; homePinned?: boolean } | { ok: false; reason?: string };
 
 export function OwnerReposIsland({
   owner,
   canManageProfile,
+  canPinRepos = canManageProfile,
+  canFeatureHomepage = false,
   hasProfileRepo = false,
   profileRepoVisibility,
   profileReadmeHtml = "",
@@ -149,6 +156,7 @@ export function OwnerReposIsland({
   const [query, setQuery] = useState("");
   const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">("all");
   const [pinPendingId, setPinPendingId] = useState<string | null>(null);
+  const [homePinPendingId, setHomePinPendingId] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinSessionExpired, setPinSessionExpired] = useState(false);
 
@@ -178,7 +186,7 @@ export function OwnerReposIsland({
   }, [repos, query, visibilityFilter]);
 
   async function togglePin(repo: OwnerRepoSummary) {
-    if (!canManageProfile || !repo.id || pinPendingId) return;
+    if (!canPinRepos || !repo.id || pinPendingId) return;
     setPinPendingId(repo.id);
     setPinError(null);
     setPinSessionExpired(false);
@@ -210,13 +218,50 @@ export function OwnerReposIsland({
     }
   }
 
+  async function toggleHomePin(repo: OwnerRepoSummary) {
+    if (!canFeatureHomepage || !repo.id || homePinPendingId || repo.visibility === "private") {
+      return;
+    }
+    setHomePinPendingId(repo.id);
+    setPinError(null);
+    setPinSessionExpired(false);
+    const nextHomePinned = !repo.homePinned;
+    try {
+      const response = await fetch(`/auth/api/repositories/${encodeURIComponent(repo.id)}`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ homePinned: nextHomePinned }),
+      });
+      if (response.status === 401) {
+        setPinSessionExpired(true);
+        setPinError("Session expired — please sign in again.");
+        return;
+      }
+      const body = (await response.json().catch(() => null)) as PinToggleResponse | null;
+      if (!response.ok || !body || !body.ok) {
+        setPinError("Could not update homepage pin state.");
+        return;
+      }
+      setRepos((prev) =>
+        prev.map((item) =>
+          item.id === repo.id ? { ...item, homePinned: Boolean(body.homePinned) } : item
+        )
+      );
+    } catch {
+      setPinError("Network error while updating homepage pin state.");
+    } finally {
+      setHomePinPendingId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
-      {/* GitHub/Gitea Profile Underline Tabs */}
+      {/* Profile Underline Tabs */}
       <div
         role="tablist"
         aria-label="Profile sections"
-        className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-800"
+        className="flex items-center gap-1 border-b border-border"
       >
         <button
           type="button"
@@ -225,11 +270,11 @@ export function OwnerReposIsland({
           onClick={() => setTab("overview")}
           className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] transition-colors ${
             tab === "overview"
-              ? "border-accent-500 font-medium text-zinc-950 dark:text-zinc-50"
-              : "border-transparent font-normal text-zinc-600 hover:border-zinc-300 hover:text-zinc-950 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100"
+              ? "border-fg font-semibold text-fg"
+              : "border-transparent font-normal text-fgMuted hover:border-border hover:text-fg"
           }`}
         >
-          <BookOpen className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>Overview</span>
         </button>
         <button
@@ -239,13 +284,13 @@ export function OwnerReposIsland({
           onClick={() => setTab("repositories")}
           className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] transition-colors ${
             tab === "repositories"
-              ? "border-accent-500 font-medium text-zinc-950 dark:text-zinc-50"
-              : "border-transparent font-normal text-zinc-600 hover:border-zinc-300 hover:text-zinc-950 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100"
+              ? "border-fg font-semibold text-fg"
+              : "border-transparent font-normal text-fgMuted hover:border-border hover:text-fg"
           }`}
         >
-          <FolderGit2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <FolderGit2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>Repositories</span>
-          <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium text-zinc-700 tabular-nums dark:bg-zinc-800 dark:text-zinc-300">
+          <span className="rounded border border-borderSubtle bg-canvas px-1.5 py-0.5 font-mono text-[11px] font-medium text-fgMuted tabular-nums">
             {repos.length}
           </span>
         </button>
@@ -254,7 +299,7 @@ export function OwnerReposIsland({
       {pinError ? (
         <div
           role="alert"
-          className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300"
+          className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
         >
           <span>{pinError}</span>
           {pinSessionExpired ? (
@@ -271,31 +316,28 @@ export function OwnerReposIsland({
           {sanitizedReadmeHtml ? (
             <section
               aria-label="Organization profile README"
-              className="overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+              className="overflow-hidden rounded-md border border-border bg-surface"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50/70 px-3.5 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-950/50">
-                <div className="flex min-w-0 items-center gap-1.5 font-mono text-zinc-600 dark:text-zinc-300">
-                  <BookOpen
-                    className="h-3.5 w-3.5 shrink-0 text-accent-600 dark:text-accent-400"
-                    aria-hidden="true"
-                  />
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-borderSubtle px-3.5 py-2 text-[12px]">
+                <div className="flex min-w-0 items-center gap-1.5 font-mono text-fgBody">
+                  <BookOpen className="h-3.5 w-3.5 shrink-0 text-fgMuted" aria-hidden="true" />
                   <a
                     href={editProfileUrl}
-                    className="truncate text-zinc-700 no-underline hover:text-accent-600 dark:text-zinc-200 dark:hover:text-accent-400"
+                    className="truncate text-fg no-underline hover:text-accent hover:underline"
                   >
                     {owner}/{PROFILE_REPO_SLUG}
                   </a>
-                  <span className="text-zinc-400" aria-hidden="true">
+                  <span className="text-fgMuted" aria-hidden="true">
                     /
                   </span>
                   <a
                     href={`/${encodeURIComponent(owner)}/${PROFILE_REPO_SLUG}/blob?ref=${encodeURIComponent(profileRef)}&path=${encodeURIComponent(profileReadmePath)}`}
-                    className="truncate text-zinc-500 no-underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    className="truncate text-fgMuted no-underline hover:text-fg"
                   >
                     {profileReadmePath}
                   </a>
                   {profileRepoVisibility === "private" ? (
-                    <span className="ml-1 inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 font-sans text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                    <span className="ml-1 inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 font-sans text-[10px] font-medium text-amber-400">
                       <Lock className="h-2.5 w-2.5" aria-hidden="true" />
                       private
                     </span>
@@ -305,7 +347,7 @@ export function OwnerReposIsland({
                 {canManageProfile ? (
                   <a
                     href={editProfileUrl}
-                    className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-700 no-underline hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-canvas px-2 py-0.5 text-[11px] font-medium text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                   >
                     <Pencil className="h-3 w-3" aria-hidden="true" />
                     <span>Edit README</span>
@@ -320,30 +362,27 @@ export function OwnerReposIsland({
               </div>
             </section>
           ) : canManageProfile ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-zinc-300 bg-zinc-50/70 px-3.5 py-2.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
-              <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-                <Sparkles
-                  className="h-3.5 w-3.5 shrink-0 text-accent-600 dark:text-accent-400"
-                  aria-hidden="true"
-                />
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-border bg-surface px-3.5 py-2.5 text-[12px]">
+              <div className="flex items-center gap-2 text-fgBody">
+                <Sparkles className="h-3.5 w-3.5 shrink-0 text-fgMuted" aria-hidden="true" />
                 {hasProfileRepo ? (
                   <span>
-                    Your <code className="font-mono">{PROFILE_REPO_SLUG}</code> repository exists.
-                    Add <code className="font-mono">{PROFILE_README_PATH}</code> to display a custom
-                    profile card here.
+                    Your <code className="font-mono text-fg">{PROFILE_REPO_SLUG}</code> repository
+                    exists. Add <code className="font-mono text-fg">{PROFILE_README_PATH}</code> to
+                    display a custom profile card here.
                   </span>
                 ) : (
                   <span>
-                    Create a <code className="font-mono">{PROFILE_REPO_SLUG}</code> repository with{" "}
-                    <code className="font-mono">{PROFILE_README_PATH}</code> to design a custom
-                    profile banner here.
+                    Create a <code className="font-mono text-fg">{PROFILE_REPO_SLUG}</code>{" "}
+                    repository with <code className="font-mono text-fg">{PROFILE_README_PATH}</code>{" "}
+                    to design a custom profile banner here.
                   </span>
                 )}
               </div>
               {hasProfileRepo ? (
                 <a
                   href={editProfileUrl}
-                  className="inline-flex h-7 items-center gap-1 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 no-underline hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                 >
                   <Pencil className="h-3 w-3" aria-hidden="true" />
                   <span>Add {PROFILE_README_PATH}</span>
@@ -358,18 +397,18 @@ export function OwnerReposIsland({
               className="space-y-2.5"
             >
               <div className="flex items-center justify-between gap-2">
-                <h2 className="m-0 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                <h2 className="m-0 flex items-center gap-1.5 text-[14px] font-semibold text-fg">
                   {pinnedRepos.length > 0 ? (
-                    <Pin className="h-3.5 w-3.5 text-accent-500" aria-hidden="true" />
+                    <Pin className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                   ) : (
-                    <FolderGit2 className="h-3.5 w-3.5 text-accent-500" aria-hidden="true" />
+                    <FolderGit2 className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                   )}
                   <span>{pinnedRepos.length > 0 ? "Pinned" : "Popular repositories"}</span>
                 </h2>
                 <button
                   type="button"
                   onClick={() => setTab("repositories")}
-                  className="text-xs font-medium text-accent-600 hover:underline dark:text-accent-400"
+                  className="text-[12px] font-medium text-accent hover:underline"
                 >
                   View all {repos.length} repositories
                 </button>
@@ -381,39 +420,44 @@ export function OwnerReposIsland({
                   return (
                     <div
                       key={repo.slug}
-                      className="flex flex-col justify-between gap-2 rounded-md border border-zinc-200 bg-white p-3.5 dark:border-zinc-800 dark:bg-zinc-900"
+                      className="flex flex-col justify-between gap-2 rounded-md border border-border bg-surface p-3.5 transition-colors hover:border-fgMuted"
                     >
                       <div>
                         <div className="flex items-center justify-between gap-2">
                           <a
                             href={`/${encodeURIComponent(owner)}/${encodeURIComponent(repo.slug)}`}
-                            className="inline-flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold text-accent-600 no-underline hover:underline dark:text-accent-400"
+                            className="inline-flex min-w-0 items-center gap-1.5 truncate text-[14px] font-semibold text-fg no-underline hover:text-accent"
                           >
                             {isPrivate ? (
                               <Lock
-                                className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                                className="h-3.5 w-3.5 shrink-0 text-amber-400"
                                 aria-hidden="true"
                               />
                             ) : (
                               <Globe
-                                className="h-3.5 w-3.5 shrink-0 text-zinc-400 dark:text-zinc-500"
+                                className="h-3.5 w-3.5 shrink-0 text-fgMuted"
                                 aria-hidden="true"
                               />
                             )}
                             <span className="truncate">{repo.slug}</span>
                           </a>
                           <div className="flex shrink-0 items-center gap-1.5">
-                            <span className="rounded-md border border-zinc-200 px-1.5 py-0.5 text-[11px] font-medium capitalize text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+                            {repo.homePinned ? (
+                              <span className="rounded border border-border bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-fg">
+                                Homepage
+                              </span>
+                            ) : null}
+                            <span className="rounded border border-borderSubtle bg-canvas px-1.5 py-0.5 text-[11px] font-medium capitalize text-fgMuted">
                               {repo.visibility}
                             </span>
-                            {canManageProfile && repo.id ? (
+                            {canPinRepos && repo.id ? (
                               <button
                                 type="button"
                                 onClick={() => void togglePin(repo)}
                                 disabled={pinPendingId === repo.id}
                                 aria-label={repo.pinned ? `Unpin ${repo.slug}` : `Pin ${repo.slug}`}
                                 title={repo.pinned ? "Unpin repository" : "Pin repository"}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
                               >
                                 {repo.pinned ? (
                                   <PinOff className="h-3 w-3" aria-hidden="true" />
@@ -422,10 +466,34 @@ export function OwnerReposIsland({
                                 )}
                               </button>
                             ) : null}
+                            {canFeatureHomepage && repo.id && repo.visibility === "public" ? (
+                              <button
+                                type="button"
+                                onClick={() => void toggleHomePin(repo)}
+                                disabled={homePinPendingId === repo.id}
+                                aria-label={
+                                  repo.homePinned
+                                    ? `Unpin ${repo.slug} from homepage`
+                                    : `Pin ${repo.slug} to homepage`
+                                }
+                                title={
+                                  repo.homePinned
+                                    ? "Remove from public homepage"
+                                    : "Pin to public homepage"
+                                }
+                                className={`inline-flex h-6 w-6 items-center justify-center rounded-md border transition-colors disabled:opacity-50 ${
+                                  repo.homePinned
+                                    ? "border-accent/40 bg-accent/10 text-accent hover:bg-accent/15"
+                                    : "border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg"
+                                }`}
+                              >
+                                <Home className="h-3 w-3" aria-hidden="true" />
+                              </button>
+                            ) : null}
                           </div>
                         </div>
                         {repo.description ? (
-                          <p className="m-0 mt-1.5 line-clamp-2 text-xs text-zinc-600 dark:text-zinc-300">
+                          <p className="m-0 mt-1.5 line-clamp-2 text-[13px] leading-[1.45] text-fgBody">
                             {repo.description}
                           </p>
                         ) : null}
@@ -436,12 +504,10 @@ export function OwnerReposIsland({
               </div>
             </section>
           ) : (
-            <div className="rounded-md border border-zinc-200 bg-white px-4 py-8 text-center dark:border-zinc-800 dark:bg-zinc-900">
-              <FolderGit2 className="mx-auto mb-2 h-5 w-5 text-zinc-400" aria-hidden="true" />
-              <p className="m-0 text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                No repositories yet
-              </p>
-              <p className="m-0 mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <div className="rounded-md border border-border bg-surface px-4 py-8 text-center">
+              <FolderGit2 className="mx-auto mb-2 h-5 w-5 text-fgMuted" aria-hidden="true" />
+              <p className="m-0 text-[14px] font-semibold text-fg">No repositories yet</p>
+              <p className="m-0 mt-1 text-[13px] text-fgMuted">
                 Create or push a repository under @{owner} to get started.
               </p>
             </div>
@@ -451,18 +517,16 @@ export function OwnerReposIsland({
         /* Repositories Tab: Full Filterable Directory */
         <section
           aria-label="Repositories"
-          className="overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+          className="overflow-hidden rounded-md border border-border bg-surface"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-2.5 dark:border-zinc-800">
-            <h2 className="m-0 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              Repositories
-            </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-borderSubtle px-4 py-2.5">
+            <h2 className="m-0 text-[14px] font-semibold text-fg">Repositories</h2>
 
             {repos.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative">
                   <Search
-                    className="pointer-events-none absolute top-1/2 left-2 h-3 w-3 -translate-y-1/2 text-zinc-400"
+                    className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-fgMuted"
                     aria-hidden="true"
                   />
                   <input
@@ -471,19 +535,19 @@ export function OwnerReposIsland({
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="Find a repository..."
                     aria-label="Find a repository"
-                    className="h-7 w-44 rounded-md border border-zinc-200 bg-zinc-50 pr-2 pl-6.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                    className="h-7 w-48 rounded-md border border-border bg-canvas pr-2.5 pl-8 text-[12px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
                   />
                 </div>
-                <div className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 p-0.5 text-[11px] dark:border-zinc-700 dark:bg-zinc-950">
+                <div className="inline-flex rounded-md border border-border bg-canvas p-0.5 text-[11px]">
                   {(["all", "public", "private"] as const).map((option) => (
                     <button
                       key={option}
                       type="button"
                       onClick={() => setVisibilityFilter(option)}
-                      className={`rounded-md px-2 py-0.5 capitalize ${
+                      className={`rounded px-2 py-0.5 capitalize ${
                         visibilityFilter === option
-                          ? "bg-white font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
-                          : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+                          ? "bg-surfaceHover font-medium text-fg"
+                          : "text-fgMuted hover:text-fg"
                       }`}
                     >
                       {option}
@@ -495,67 +559,87 @@ export function OwnerReposIsland({
           </div>
 
           {filteredRepos.length > 0 ? (
-            <ul className="m-0 list-none divide-y divide-zinc-200 p-0 dark:divide-zinc-800">
+            <ul className="m-0 list-none divide-y divide-borderSubtle p-0">
               {filteredRepos.map((repo) => {
                 const isPrivate = repo.visibility === "private";
                 const isProfile = repo.slug === PROFILE_REPO_SLUG;
                 return (
                   <li
                     key={repo.slug}
-                    className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 transition-colors hover:bg-zinc-50/70 dark:hover:bg-zinc-800/35"
+                    className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 transition-colors hover:bg-surfaceHover/60"
                   >
                     <div className="min-w-0">
                       <div className="flex min-w-0 items-center gap-2">
                         {isPrivate ? (
                           <Lock
-                            className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                            className="h-3.5 w-3.5 shrink-0 text-amber-400"
                             aria-label="Private repository"
                           />
                         ) : (
                           <Globe
-                            className="h-3.5 w-3.5 shrink-0 text-zinc-400 dark:text-zinc-500"
+                            className="h-3.5 w-3.5 shrink-0 text-fgMuted"
                             aria-label="Public repository"
                           />
                         )}
                         <a
                           href={`/${encodeURIComponent(owner)}/${encodeURIComponent(repo.slug)}`}
-                          className="truncate text-sm font-semibold text-accent-600 no-underline hover:underline dark:text-accent-400"
+                          className="truncate text-[14px] font-semibold text-fg no-underline hover:text-accent"
                         >
-                          <span className="font-normal text-zinc-500 dark:text-zinc-400">
-                            {owner}/
-                          </span>
+                          <span className="font-normal text-fgMuted">{owner}/</span>
                           <span>{repo.slug}</span>
                         </a>
                         {isProfile ? (
-                          <span className="rounded-md border border-accent-500/30 bg-accent-500/10 px-1.5 py-0.5 text-[11px] font-medium text-accent-700 dark:text-accent-300">
+                          <span className="rounded border border-borderSubtle bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-fgBody">
                             profile
                           </span>
                         ) : null}
                       </div>
                       {repo.description ? (
-                        <p className="m-0 mt-1 line-clamp-1 pl-5.5 text-xs text-zinc-600 dark:text-zinc-300">
+                        <p className="m-0 mt-1 line-clamp-1 pl-5.5 text-[13px] text-fgBody">
                           {repo.description}
                         </p>
                       ) : null}
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                      {canManageProfile && repo.id ? (
+                    <div className="flex shrink-0 items-center gap-2 text-[12px] text-fgMuted">
+                      {canPinRepos && repo.id ? (
                         <button
                           type="button"
                           onClick={() => void togglePin(repo)}
                           disabled={pinPendingId === repo.id}
                           className={`inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors disabled:opacity-50 ${
                             repo.pinned
-                              ? "border-accent-500/40 bg-accent-500/10 text-accent-700 dark:text-accent-300"
-                              : "border-zinc-200 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                              ? "border-border bg-surfaceHover text-fg"
+                              : "border-border bg-canvas text-fgBody hover:bg-surfaceHover hover:text-fg"
                           }`}
                         >
                           <Pin className="h-2.5 w-2.5" aria-hidden="true" />
                           <span>{repo.pinned ? "Pinned" : "Pin"}</span>
                         </button>
                       ) : null}
-                      <span className="rounded-md border border-zinc-200 px-1.5 py-0.5 text-[11px] font-medium capitalize dark:border-zinc-700">
+                      {canFeatureHomepage && repo.id ? (
+                        <button
+                          type="button"
+                          onClick={() => void toggleHomePin(repo)}
+                          disabled={homePinPendingId === repo.id || repo.visibility === "private"}
+                          title={
+                            repo.visibility === "private"
+                              ? "Make public to pin on the public homepage"
+                              : repo.homePinned
+                                ? "Remove from public homepage"
+                                : "Pin to public homepage"
+                          }
+                          className={`inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                            repo.homePinned
+                              ? "border-accent/40 bg-accent/10 text-accent hover:bg-accent/15"
+                              : "border-border bg-canvas text-fgBody hover:bg-surfaceHover hover:text-fg"
+                          }`}
+                        >
+                          <Home className="h-2.5 w-2.5" aria-hidden="true" />
+                          <span>{repo.homePinned ? "On Home" : "Homepage"}</span>
+                        </button>
+                      ) : null}
+                      <span className="rounded border border-borderSubtle bg-canvas px-1.5 py-0.5 text-[11px] font-medium capitalize text-fgMuted">
                         {repo.visibility}
                       </span>
                       {typeof repo.updatedAt === "number" ? (
@@ -570,11 +654,11 @@ export function OwnerReposIsland({
             </ul>
           ) : (
             <div className="px-4 py-10 text-center">
-              <FolderGit2 className="mx-auto mb-2 h-5 w-5 text-zinc-400" aria-hidden="true" />
-              <p className="m-0 text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              <FolderGit2 className="mx-auto mb-2 h-5 w-5 text-fgMuted" aria-hidden="true" />
+              <p className="m-0 text-[14px] font-semibold text-fg">
                 {repos.length === 0 ? "No repositories yet" : "No matching repositories"}
               </p>
-              <p className="m-0 mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="m-0 mt-1 text-[13px] text-fgMuted">
                 {repos.length === 0
                   ? `Create or push a repository under @${owner} to get started.`
                   : "Adjust your search query or visibility filter."}

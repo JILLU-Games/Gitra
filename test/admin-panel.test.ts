@@ -29,6 +29,13 @@ import {
   validateUserPassword,
   type AdminNamespaceEntry,
 } from "@/shared/admin/panel";
+import {
+  DEFAULT_SITE_BRANDING,
+  extractHostLabel,
+  mergeAndSanitizeSiteBranding,
+  sanitizeBrandingUrl,
+  sanitizeSupportEmail,
+} from "@/shared/branding";
 
 describe("admin panel pure helpers", () => {
   it("normalizes handles by trimming, stripping @, and lowercasing", () => {
@@ -187,6 +194,10 @@ describe("admin panel pure helpers", () => {
     expect(resolveActiveSidebarItem("admin")).toBe("repositories");
     expect(resolveActiveSidebarItem("account")).toBe("account");
     expect(resolveActiveSidebarItem("system-admin")).toBe("admin");
+    expect(resolveActiveSidebarItem("system-admin-repositories")).toBe("admin");
+    expect(resolveActiveSidebarItem("system-admin-tokens")).toBe("admin");
+    expect(resolveActiveSidebarItem("system-admin-settings")).toBe("admin");
+    expect(resolveActiveSidebarItem("system-admin-security")).toBe("admin");
     expect(resolveActiveSidebarItem("system-admin-users")).toBe("admin-users");
     expect(resolveActiveSidebarItem("auth-signin")).toBeNull();
   });
@@ -267,5 +278,26 @@ describe("admin panel pure helpers", () => {
     const withoutDesc = buildDefaultRepoReadmeTemplate("alice", "core-kit");
     expect(withoutDesc).toContain("# core-kit");
     expect(withoutDesc).toContain("Repository hosted under `@alice`.");
+  });
+
+  it("sanitizes site branding URLs, support emails, and patch updates", () => {
+    expect(sanitizeBrandingUrl("https://git.acme.dev/org")).toBe("https://git.acme.dev/org");
+    expect(sanitizeBrandingUrl("javascript:alert(1)")).toBe("");
+    expect(sanitizeSupportEmail("help@acme.dev")).toBe("help@acme.dev");
+    expect(sanitizeSupportEmail("not-an-email")).toBe("");
+    expect(extractHostLabel("https://git.acme.dev/explore")).toBe("git.acme.dev");
+
+    const updated = mergeAndSanitizeSiteBranding(DEFAULT_SITE_BRANDING, {
+      shortName: "Acme Forge",
+      websiteUrl: "https://acme.dev",
+      websiteLabel: "acme.dev",
+      docsUrl: "",
+      supportEmail: "support@acme.dev",
+      footerText: "© 2026 Acme",
+    });
+    expect(updated.shortName).toBe("Acme Forge");
+    expect(updated.websiteUrl).toBe("https://acme.dev");
+    expect(updated.docsUrl).toBe("");
+    expect(updated.footerText).toBe("© 2026 Acme");
   });
 });

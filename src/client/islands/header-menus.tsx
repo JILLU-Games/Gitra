@@ -132,7 +132,7 @@ export function HeaderMenusIsland({
   return (
     <>
       <div ref={containerRef} className="relative flex items-center gap-1.5 sm:gap-2">
-        {/* Gitea-style "+" Create dropdown for members & admins */}
+        {/* "+" Create dropdown for members & admins */}
         {canWrite && namespaceSlug ? (
           <div className="relative">
             <button
@@ -142,17 +142,17 @@ export function HeaderMenusIsland({
               aria-expanded={openMenu === "create"}
               aria-label="Create new"
               title="Create new repository"
-              className="inline-flex h-8 items-center gap-1 rounded-md border border-zinc-200 bg-white px-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-canvas px-2 text-[12px] font-medium text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              <ChevronDown className="h-3 w-3 text-zinc-400" aria-hidden="true" />
+              <ChevronDown className="h-3 w-3 text-fgMuted" aria-hidden="true" />
             </button>
 
             {openMenu === "create" ? (
               <div
                 role="menu"
                 aria-label="Create menu"
-                className="absolute right-0 z-[110] mt-1.5 w-48 rounded-md border border-zinc-200 bg-white py-1 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+                className="absolute right-0 z-[110] mt-1.5 w-48 rounded-md border border-border bg-surface py-1 text-[12px]"
               >
                 <button
                   type="button"
@@ -165,24 +165,18 @@ export function HeaderMenusIsland({
                     setInitReadme(false);
                     setCreateModalOpen(true);
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-fgBody hover:bg-surfaceHover hover:text-fg"
                 >
-                  <FolderGit2
-                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                    aria-hidden="true"
-                  />
+                  <FolderGit2 className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                   <span>New Repository</span>
                 </button>
                 {isAdmin ? (
                   <a
                     href="/admin/users"
                     role="menuitem"
-                    className="flex w-full items-center gap-2 px-3 py-2 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                   >
-                    <Users
-                      className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                      aria-hidden="true"
-                    />
+                    <Users className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                     <span>Manage Users</span>
                   </a>
                 ) : null}
@@ -191,7 +185,7 @@ export function HeaderMenusIsland({
           </div>
         ) : null}
 
-        {/* Gitea-style User profile & Settings / Site Administration dropdown */}
+        {/* User profile & Settings / Site Administration dropdown */}
         <div className="relative">
           <button
             type="button"
@@ -199,33 +193,29 @@ export function HeaderMenusIsland({
             aria-haspopup="menu"
             aria-expanded={openMenu === "user"}
             aria-label="Account menu"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 text-xs font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/70 dark:text-zinc-100 dark:hover:bg-zinc-800"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-canvas px-2.5 text-[12px] font-medium text-fg transition-colors hover:bg-surfaceHover"
           >
-            <User className="h-3.5 w-3.5 text-accent-600 dark:text-accent-400" aria-hidden="true" />
+            <User className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
             <span className="max-w-[120px] truncate font-mono">{handle}</span>
-            <ChevronDown className="h-3 w-3 text-zinc-400" aria-hidden="true" />
+            <ChevronDown className="h-3 w-3 text-fgMuted" aria-hidden="true" />
           </button>
 
           {openMenu === "user" ? (
             <div
               role="menu"
               aria-label="User navigation menu"
-              className="absolute right-0 z-[110] mt-1.5 w-56 rounded-md border border-zinc-200 bg-white py-1 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+              className="absolute right-0 z-[110] mt-1.5 w-56 rounded-md border border-border bg-surface py-1 text-[12px]"
             >
-              <div className="border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-                <p className="m-0 text-[11px] text-zinc-500 dark:text-zinc-400">Signed in as</p>
+              <div className="border-b border-borderSubtle px-3 py-2">
+                <p className="m-0 text-[11px] text-fgMuted">Signed in as</p>
                 <div className="mt-0.5 flex items-center justify-between gap-2">
-                  <span className="truncate font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                    {handle}
-                  </span>
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  <span className="truncate font-mono font-semibold text-fg">{handle}</span>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-fgMuted">
                     {role}
                   </span>
                 </div>
                 {displayName ? (
-                  <p className="m-0 mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">
-                    {displayName}
-                  </p>
+                  <p className="m-0 mt-0.5 truncate text-[11px] text-fgMuted">{displayName}</p>
                 ) : null}
               </div>
 
@@ -234,129 +224,99 @@ export function HeaderMenusIsland({
                   <a
                     href={buildNamespaceProfileHref(namespaceSlug)}
                     role="menuitem"
-                    className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                    className="flex items-center gap-2 px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                   >
-                    <User
-                      className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                      aria-hidden="true"
-                    />
+                    <User className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                     <span>Public Profile Page</span>
                   </a>
                 ) : null}
                 <a
                   href="/user/profile"
                   role="menuitem"
-                  className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  className="flex items-center gap-2 px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                 >
-                  <SlidersHorizontal
-                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                    aria-hidden="true"
-                  />
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                   <span>Profile Settings</span>
                 </a>
                 <a
                   href="/user/account"
                   role="menuitem"
-                  className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  className="flex items-center gap-2 px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                 >
-                  <FolderGit2
-                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                    aria-hidden="true"
-                  />
+                  <FolderGit2 className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                   <span>Account &amp; Repos</span>
                 </a>
                 <a
                   href="/user/settings"
                   role="menuitem"
-                  className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  className="flex items-center gap-2 px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                 >
-                  <Settings
-                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                    aria-hidden="true"
-                  />
+                  <Settings className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                   <span>Settings</span>
                 </a>
                 <a
                   href="/user/settings/security"
                   role="menuitem"
-                  className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  className="flex items-center gap-2 px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                 >
-                  <Lock
-                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                    aria-hidden="true"
-                  />
+                  <Lock className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                   <span>Password &amp; Security</span>
                 </a>
                 <a
                   href="/user/settings/tokens"
                   role="menuitem"
-                  className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  className="flex items-center gap-2 px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                 >
-                  <KeyRound
-                    className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                    aria-hidden="true"
-                  />
+                  <KeyRound className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                   <span>Access Tokens</span>
                 </a>
               </div>
 
               {isAdmin ? (
-                <div className="border-t border-zinc-200 py-1 dark:border-zinc-800">
+                <div className="border-t border-borderSubtle py-1">
                   <a
                     href="/admin"
                     role="menuitem"
-                    className="flex items-center gap-2 px-3 py-1.5 font-medium text-accent-700 no-underline hover:bg-zinc-100 dark:text-accent-300 dark:hover:bg-zinc-800"
+                    className="flex items-center gap-2 px-3 py-1.5 font-medium text-fg no-underline hover:bg-surfaceHover"
                   >
-                    <Shield className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Shield className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
                     <span>Site Administration</span>
                   </a>
                   <a
                     href="/admin/users"
                     role="menuitem"
-                    className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                    className="flex items-center gap-2 px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                   >
-                    <Users
-                      className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                      aria-hidden="true"
-                    />
+                    <Users className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                     <span>Users &amp; Accounts</span>
                   </a>
                   <a
                     href="/admin/repositories"
                     role="menuitem"
-                    className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                    className="flex items-center gap-2 px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                   >
-                    <FolderGit2
-                      className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                      aria-hidden="true"
-                    />
+                    <FolderGit2 className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                     <span>Admin Repositories</span>
                   </a>
                   <a
                     href="/admin/settings"
                     role="menuitem"
-                    className="flex items-center gap-2 px-3 py-1.5 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                    className="flex items-center gap-2 px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                   >
-                    <SlidersHorizontal
-                      className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                      aria-hidden="true"
-                    />
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                     <span>Settings Control Panel</span>
                   </a>
                 </div>
               ) : null}
 
-              <div className="border-t border-zinc-200 py-1 dark:border-zinc-800">
+              <div className="border-t border-borderSubtle py-1">
                 <form method="post" action="/auth/sign-out">
                   <button
                     type="submit"
                     role="menuitem"
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-fgBody hover:bg-surfaceHover hover:text-fg"
                   >
-                    <LogOut
-                      className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400"
-                      aria-hidden="true"
-                    />
+                    <LogOut className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                     <span>Sign Out</span>
                   </button>
                 </form>
@@ -369,7 +329,7 @@ export function HeaderMenusIsland({
       {/* Top-bar Create Repository Modal */}
       {createModalOpen && namespaceSlug ? (
         <div
-          className="fixed inset-0 z-[140] flex items-center justify-center bg-zinc-950/60 p-4"
+          className="fixed inset-0 z-[140] flex items-center justify-center bg-black/75 p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="header-create-repo-title"
@@ -379,16 +339,13 @@ export function HeaderMenusIsland({
             }
           }}
         >
-          <div className="w-full max-w-md rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <div className="w-full max-w-md rounded-md border border-border bg-surface">
+            <div className="flex items-center justify-between border-b border-borderSubtle px-4 py-3">
               <div>
-                <h2
-                  id="header-create-repo-title"
-                  className="m-0 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
-                >
+                <h2 id="header-create-repo-title" className="m-0 text-[14px] font-semibold text-fg">
                   New Repository
                 </h2>
-                <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="m-0 mt-0.5 text-[12px] text-fgMuted">
                   Create a Git repository under <span className="font-mono">@{namespaceSlug}</span>.
                 </p>
               </div>
@@ -397,7 +354,7 @@ export function HeaderMenusIsland({
                 onClick={() => setCreateModalOpen(false)}
                 disabled={creating}
                 aria-label="Close modal"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg"
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
@@ -407,7 +364,7 @@ export function HeaderMenusIsland({
               {createError ? (
                 <div
                   role="alert"
-                  className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300"
+                  className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
                 >
                   {createError}
                 </div>
@@ -417,20 +374,20 @@ export function HeaderMenusIsland({
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <label
                     htmlFor="header-repo-slug"
-                    className="block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                    className="block text-[12px] font-medium text-fg"
                   >
                     Repository Name
                   </label>
                   <button
                     type="button"
                     onClick={() => setRepoSlug(PROFILE_REPO_SLUG)}
-                    className="rounded border border-zinc-200 px-1.5 py-0.5 font-mono text-[10px] text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                    className="rounded border border-border bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-fgBody hover:bg-surfaceHover hover:text-fg"
                   >
                     Use {PROFILE_REPO_SLUG}
                   </button>
                 </div>
-                <div className="flex items-center rounded-md border border-zinc-200 bg-white focus-within:border-accent-500 dark:border-zinc-700 dark:bg-zinc-950">
-                  <span className="border-r border-zinc-200 bg-zinc-50 px-2.5 py-2 font-mono text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+                <div className="flex items-center rounded-md border border-border bg-canvas focus-within:border-fgMuted">
+                  <span className="border-r border-border bg-surface px-2.5 py-1.5 font-mono text-[12px] text-fgMuted">
                     {namespaceSlug}/
                   </span>
                   <input
@@ -442,22 +399,22 @@ export function HeaderMenusIsland({
                     placeholder="my-service or .vibtools"
                     autoFocus
                     required
-                    className="h-9 min-w-0 flex-1 bg-transparent px-2.5 font-mono text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100"
+                    className="h-8 min-w-0 flex-1 bg-transparent px-2.5 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:outline-none"
                   />
                 </div>
-                <p className="m-0 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                <p className="m-0 mt-1 text-[12px] text-fgMuted">
                   Lowercase letters, digits, hyphens/dots, or{" "}
-                  <code className="font-mono">{PROFILE_REPO_SLUG}</code> for namespace profile
-                  README.
+                  <code className="font-mono text-fgBody">{PROFILE_REPO_SLUG}</code> for namespace
+                  profile README.
                 </p>
               </div>
 
               <div>
                 <label
                   htmlFor="header-repo-description"
-                  className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                  className="mb-1 block text-[12px] font-medium text-fg"
                 >
-                  Description <span className="font-normal text-zinc-400">(optional)</span>
+                  Description <span className="font-normal text-fgMuted">(optional)</span>
                 </label>
                 <input
                   id="header-repo-description"
@@ -467,12 +424,12 @@ export function HeaderMenusIsland({
                   disabled={creating}
                   maxLength={200}
                   placeholder="Short description of this repository"
-                  className="h-9 w-full rounded-md border border-zinc-200 bg-white px-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                  className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
                 />
               </div>
 
               {isProfileSlug ? (
-                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-accent-500/30 bg-accent-500/5 px-3 py-2 text-xs text-zinc-700 dark:text-zinc-200">
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-canvas px-3 py-2 text-[12px] text-fgBody">
                   <input
                     type="checkbox"
                     checked={initProfileReadme}
@@ -481,12 +438,12 @@ export function HeaderMenusIsland({
                     className="mt-0.5"
                   />
                   <span>
-                    Initialize <code className="font-mono">{PROFILE_README_PATH}</code> starter
-                    template for your namespace profile page.
+                    Initialize <code className="font-mono text-fg">{PROFILE_README_PATH}</code>{" "}
+                    starter template for your namespace profile page.
                   </span>
                 </label>
               ) : (
-                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-zinc-200">
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-canvas px-3 py-2 text-[12px] text-fgBody">
                   <input
                     type="checkbox"
                     checked={initReadme}
@@ -495,7 +452,8 @@ export function HeaderMenusIsland({
                     className="mt-0.5"
                   />
                   <span>
-                    Initialize repository with a <code className="font-mono">README.md</code> file
+                    Initialize repository with a{" "}
+                    <code className="font-mono text-fg">README.md</code> file
                   </span>
                 </label>
               )}
@@ -503,7 +461,7 @@ export function HeaderMenusIsland({
               <div>
                 <label
                   htmlFor="header-repo-visibility"
-                  className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                  className="mb-1 block text-[12px] font-medium text-fg"
                 >
                   Visibility
                 </label>
@@ -514,7 +472,7 @@ export function HeaderMenusIsland({
                     setRepoVisibility(e.target.value === "private" ? "private" : "public")
                   }
                   disabled={creating}
-                  className="h-9 w-full rounded-md border border-zinc-200 bg-white px-2.5 text-xs text-zinc-900 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                  className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fg focus:border-fgMuted focus:outline-none"
                 >
                   <option value="public">
                     Public — visible to everyone on homepage &amp; Explore
@@ -525,19 +483,19 @@ export function HeaderMenusIsland({
                 </select>
               </div>
 
-              <div className="flex items-center justify-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+              <div className="flex items-center justify-end gap-2 border-t border-borderSubtle pt-3">
                 <button
                   type="button"
                   onClick={() => setCreateModalOpen(false)}
                   disabled={creating}
-                  className="inline-flex h-8 items-center rounded-md border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  className="inline-flex h-8 items-center rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creating || !repoSlug.trim()}
-                  className="inline-flex h-8 items-center rounded-md border border-accent-600 bg-accent-600 px-3 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+                  className="inline-flex h-8 items-center rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
                 >
                   {creating ? "Creating..." : "Create Repository"}
                 </button>

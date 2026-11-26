@@ -24,7 +24,7 @@ export type MergeExpanderProps = {
 function MergeStatusRow({ message }: { message: string }) {
   return (
     <tr>
-      <td colSpan={4} className="text-zinc-500 dark:text-zinc-400">
+      <td colSpan={4} className="text-[12px] text-fgMuted">
         {message}
       </td>
     </tr>
@@ -93,7 +93,7 @@ export function MergeExpanderIsland({ owner, repo, commits }: MergeExpanderProps
       id="commits-table"
       data-owner={owner}
       data-repo={repo}
-      className="mt-4 overflow-hidden rounded-2xl border border-zinc-200 shadow-xs dark:border-zinc-800/60"
+      className="mt-3 overflow-hidden rounded-md border border-border bg-surface"
     >
       <thead>
         <tr>
@@ -113,7 +113,7 @@ export function MergeExpanderIsland({ owner, repo, commits }: MergeExpanderProps
             const mergeRows = mergeRowsByOid[mergeOid] || [];
             const error = errorByOid[mergeOid];
             const mergeRowClass = isMerge
-              ? "cursor-pointer bg-accent-50/40 hover:bg-accent-50/60 dark:bg-accent-900/15 dark:hover:bg-accent-900/25"
+              ? "cursor-pointer bg-surfaceHover/40 hover:bg-surfaceHover"
               : "";
 
             return (
@@ -154,7 +154,7 @@ export function MergeExpanderIsland({ owner, repo, commits }: MergeExpanderProps
           })
         ) : (
           <tr>
-            <td colSpan={4} className="text-zinc-500 dark:text-zinc-400">
+            <td colSpan={4} className="text-[12px] text-fgMuted">
               (none)
             </td>
           </tr>

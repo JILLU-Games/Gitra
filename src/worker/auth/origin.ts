@@ -45,8 +45,9 @@ export function isAllowedOrigin(
 
   for (const candidateHost of [forwardedHost, host]) {
     if (!candidateHost) continue;
+    if (/[\s/@]/.test(candidateHost)) continue;
     if (originUrl.host.toLowerCase() !== candidateHost.toLowerCase()) continue;
-    if (originUrl.protocol === effectiveProto || originUrl.protocol === "https:") {
+    if (originUrl.protocol === effectiveProto) {
       return true;
     }
   }

@@ -30,6 +30,12 @@ export type TypedStorage<S> = {
   delete<K extends keyof S & string>(key: K): Promise<boolean | void>;
 };
 
+export type TypedSyncStorage<S> = {
+  get<K extends keyof S & string>(key: K): S[K] | undefined;
+  put<K extends keyof S & string>(key: K, value: S[K]): void;
+  delete<K extends keyof S & string>(key: K): boolean;
+};
+
 export function asTypedStorage<S>(storage: DurableObjectStorage): TypedStorage<S> {
   async function get<K extends keyof S & string>(key: K): Promise<S[K] | undefined>;
   async function get<K extends keyof S & string>(keys: K[]): Promise<Map<K, S[K] | undefined>>;
@@ -40,6 +46,14 @@ export function asTypedStorage<S>(storage: DurableObjectStorage): TypedStorage<S
     storage.put(key as string, value);
   const del = <K extends keyof S & string>(key: K) => storage.delete(key as string);
   return { get: get as any, put: put as any, delete: del as any };
+}
+
+export function asTypedSyncStorage<S>(storage: DurableObjectStorage): TypedSyncStorage<S> {
+  return {
+    get: <K extends keyof S & string>(key: K) => storage.kv.get<S[K]>(key),
+    put: <K extends keyof S & string>(key: K, value: S[K]) => storage.kv.put<S[K]>(key, value),
+    delete: <K extends keyof S & string>(key: K) => storage.kv.delete(key),
+  };
 }
 
 // Key helpers for template-literal key families

@@ -134,7 +134,7 @@ const views: Record<string, ViewDefinition> = {
   "system-admin-settings": {
     kind: "document",
     title: "Instance Settings · Control Panel · git-on-cloudflare",
-    clientEntrypoints: [clientEntrypoints.shell],
+    clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.adminSettingsPage],
     render: renderWithProps((props: AdminSettingsPageProps) => <AdminSettingsPage {...props} />),
   },
   "system-admin-security": {

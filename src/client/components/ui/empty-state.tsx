@@ -10,15 +10,15 @@ type EmptyStateProps = {
 export function EmptyState({ icon, title, detail, large = false }: EmptyStateProps) {
   return (
     <div
-      className={`flex flex-col items-center text-center ${large ? "gap-3 py-10" : "gap-2 py-6"}`}
+      className={`flex flex-col items-center text-center ${large ? "gap-2.5 py-8" : "gap-1.5 py-5"}`}
     >
       <span
-        className={`inline-grid place-items-center rounded-full bg-zinc-100 dark:bg-zinc-800/60 ${large ? "h-14 w-14" : "h-10 w-10"}`}
+        className={`inline-grid place-items-center rounded-md border border-border bg-canvas text-fgMuted ${large ? "h-10 w-10" : "h-8 w-8"}`}
       >
         {icon}
       </span>
-      <p className="mb-0 text-sm text-zinc-600 dark:text-zinc-400">{title}</p>
-      {detail ? <p className="mb-0 text-xs text-zinc-500">{detail}</p> : null}
+      <p className="mb-0 text-[13px] font-medium text-fg">{title}</p>
+      {detail ? <p className="mb-0 text-[12px] text-fgMuted">{detail}</p> : null}
     </div>
   );
 }

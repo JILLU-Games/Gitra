@@ -59,6 +59,7 @@ type SeedRepoSpec = {
   visibility: "public" | "private";
   description?: string;
   pinned?: boolean;
+  homePinned?: boolean;
   commits: SeedCommitSpec[];
 };
 
@@ -706,6 +707,7 @@ const DEMO_TEST_USER_REPOSITORIES: readonly SeedRepoSpec[] = [
     description:
       "GitHub-ready TypeScript Worker starter kit with CI workflow, architecture docs, middleware, and tests.",
     pinned: true,
+    homePinned: true,
     commits: [
       {
         message: "chore: initialize package config, CI workflow, and MIT license\n",
@@ -900,10 +902,11 @@ async function seedSingleDemoRepository(args: {
   });
   if (!inserted) return;
 
-  if (args.spec.description || args.spec.pinned) {
+  if (args.spec.description || args.spec.pinned || args.spec.homePinned) {
     await upsertRepositoryMeta(args.env.DB, inserted.id, {
       description: args.spec.description,
       pinned: args.spec.pinned,
+      homePinned: args.spec.homePinned,
       now: args.now,
     });
   }

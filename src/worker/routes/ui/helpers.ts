@@ -346,6 +346,9 @@ export async function resolveAdminPageRepoAccess(
     }
     return { kind: "response", response: adminForbidden() };
   }
+  if (!canWriteRepositories(membership.viewer.role)) {
+    return { kind: "response", response: adminForbidden() };
+  }
 
   const cacheCtx = c.var.cacheCtx;
   markRequestPrivate(cacheCtx);
@@ -391,6 +394,9 @@ export async function resolveAdminApiRepoAccess(c: AppContext): Promise<AdminRep
     if (route.visibility === "private") {
       return { kind: "response", response: adminJsonError("Not found", 404) };
     }
+    return { kind: "response", response: adminJsonError("Forbidden", 403) };
+  }
+  if (!canWriteRepositories(membership.viewer.role)) {
     return { kind: "response", response: adminJsonError("Forbidden", 403) };
   }
 

@@ -12,6 +12,7 @@ export type OwnerPageRepo = {
   visibility: "public" | "private";
   description?: string;
   pinned?: boolean;
+  homePinned?: boolean;
   updatedAt?: number;
 };
 
@@ -23,6 +24,8 @@ export type OwnerPageProps = {
   location?: string;
   website?: string;
   canManageProfile?: boolean;
+  canPinRepos?: boolean;
+  canFeatureHomepage?: boolean;
   hasProfileRepo?: boolean;
   profileRepoVisibility?: "public" | "private";
   profileReadmeMd?: string;
@@ -43,6 +46,8 @@ export function OwnerPage({
   location,
   website,
   canManageProfile = false,
+  canPinRepos = canManageProfile,
+  canFeatureHomepage = false,
   hasProfileRepo = false,
   profileRepoVisibility,
   profileReadmeMd,
@@ -69,6 +74,8 @@ export function OwnerPage({
   const reposIslandProps = {
     owner,
     canManageProfile,
+    canPinRepos,
+    canFeatureHomepage,
     hasProfileRepo,
     profileRepoVisibility,
     profileReadmeHtml,
@@ -79,52 +86,43 @@ export function OwnerPage({
 
   return (
     <div className="space-y-4">
-      {/* Compact GitHub/Gitea-style Namespace Header */}
-      <header className="flex flex-col gap-3 rounded-md border border-zinc-200 bg-white px-5 py-4 sm:flex-row sm:items-start sm:justify-between dark:border-zinc-800 dark:bg-zinc-900">
+      {/* Compact Namespace Header */}
+      <header className="flex flex-col gap-3 rounded-md border border-border bg-surface p-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3.5">
           <div
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 text-lg font-semibold text-accent-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-accent-400"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border bg-canvas text-[16px] font-semibold text-fg"
             aria-hidden="true"
           >
             {avatarInitial}
           </div>
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="m-0 truncate text-lg font-semibold tracking-tight text-zinc-950 dark:text-zinc-100">
+              <h1 className="m-0 truncate text-[18px] font-semibold tracking-tight text-fg">
                 {resolvedName}
               </h1>
-              <span className="text-sm text-zinc-500 dark:text-zinc-400">@{owner}</span>
+              <span className="font-mono text-[12px] text-fgMuted">@{owner}</span>
               {role ? (
-                <span className="rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                <span className="rounded border border-border bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-fgMuted">
                   {role}
                 </span>
               ) : null}
             </div>
 
-            {bio ? (
-              <p className="m-0 text-[13px] leading-relaxed text-zinc-700 dark:text-zinc-300">
-                {bio}
-              </p>
-            ) : null}
+            {bio ? <p className="m-0 text-[13px] leading-relaxed text-fgBody">{bio}</p> : null}
 
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[12px] text-fgMuted">
               <span>
-                <span className="font-medium text-zinc-700 tabular-nums dark:text-zinc-300">
-                  {repos.length}
-                </span>{" "}
+                <span className="font-medium text-fg tabular-nums">{repos.length}</span>{" "}
                 {repos.length === 1 ? "repository" : "repositories"}
-                <span className="mx-1.5 text-zinc-300 dark:text-zinc-700" aria-hidden="true">
+                <span className="mx-1.5 text-fgMuted" aria-hidden="true">
                   ·
                 </span>
-                <span className="font-medium text-zinc-700 tabular-nums dark:text-zinc-300">
-                  {publicCount}
-                </span>{" "}
-                public
+                <span className="font-medium text-fg tabular-nums">{publicCount}</span> public
               </span>
 
               {location ? (
                 <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden="true" />
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-fgMuted" aria-hidden="true" />
                   <span>{location}</span>
                 </span>
               ) : null}
@@ -134,7 +132,7 @@ export function OwnerPage({
                   href={website}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-accent-600 no-underline hover:underline dark:text-accent-400"
+                  className="inline-flex items-center gap-1 text-accent no-underline hover:underline"
                 >
                   <Link2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   <span>{formatWebsiteLabel(website)}</span>
@@ -148,7 +146,7 @@ export function OwnerPage({
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <a
               href="/user/profile"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 no-underline hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
             >
               <Pencil className="h-3 w-3" aria-hidden="true" />
               <span>Edit profile</span>

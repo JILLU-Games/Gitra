@@ -1,5 +1,7 @@
 import { renderUiView } from "@/client/server/render";
 import type { Viewer } from "@/client/server/viewer";
+import type { SiteBrandingConfig } from "@/shared/branding";
+import { loadSiteBranding } from "@/worker/branding";
 
 const HTML_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
@@ -16,6 +18,8 @@ type RenderUiDocumentOptions = {
   // that want the signed-in header must call `loadViewer(c)` and pass the
   // result here. The renderer itself never reads cookies or D1.
   viewer?: Viewer | null;
+  branding?: SiteBrandingConfig;
+  origin?: string;
 };
 
 /**
@@ -29,7 +33,13 @@ export async function renderUiDocumentResponse(
   data: Record<string, unknown>,
   options: RenderUiDocumentOptions
 ): Promise<Response> {
-  const body = await renderUiView(env, view, data, { viewer: options.viewer ?? null });
+  const branding = options.branding ?? (await loadSiteBranding(env));
+  const origin = options.origin ?? (typeof data.origin === "string" ? data.origin : undefined);
+  const body = await renderUiView(env, view, data, {
+    viewer: options.viewer ?? null,
+    branding,
+    origin,
+  });
   if (!body) {
     return new Response(options.failureBody, { status: options.failureStatus ?? 500 });
   }

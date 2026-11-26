@@ -4,17 +4,20 @@ import type { Logger } from "@/worker/common/logger";
 import type { GitObjectType } from "@/worker/git/core/objects";
 import type { Limiter } from "@/worker/git/operations/limits";
 import type { TreeEntry } from "@/worker/git/operations/read/types";
+import type { Head, Ref } from "@/worker/do/repo/repoState";
 
 import { getRepoStub, hexToBytes, zeroOid } from "@/worker/common";
 import { shortRefName } from "@/shared/git/ref-display";
-import { touchRepositoryUpdatedAt } from "@/worker/db/d1/dal";
+import { OID_RE } from "@/shared/web";
+import { findRepositoryById, touchRepositoryUpdatedAt } from "@/worker/db/d1/dal";
 import { concatChunks } from "@/worker/git";
 import { createGitObject } from "@/worker/git/core/objects";
 import { readCommit } from "@/worker/git/operations/read/commits";
 import { readTree } from "@/worker/git/operations/read/tree";
+import { isValidRefName } from "@/worker/git/operations/validation";
 import { buildPackV2 } from "@/worker/git/pack/build";
 import { resolveDeltasAndWriteIdx, scanPack } from "@/worker/git/pack/indexer";
-import { doPrefix, r2PackKey } from "@/worker/keys";
+import { doPrefix, packIndexKey, packRefsKey, r2PackKey } from "@/worker/keys";
 
 const textEncoder = new TextEncoder();
 
@@ -41,7 +44,59 @@ export type CommitFileInput = {
 
 export type CommitFileResult =
   | { ok: true; commitOid: string; ref: string; unchanged: boolean }
-  | { ok: false; reason: "invalid-path" | "repo-busy" | "commit-failed"; detail?: string };
+  | {
+      ok: false;
+      reason: "invalid-path" | "invalid-ref" | "repo-busy" | "commit-failed";
+      detail?: string;
+    };
+
+function resolveEditableBranchRef(
+  rawTarget: string,
+  headAndRefs: { head: Head; refs: Ref[] }
+): string | null {
+  const target = rawTarget.trim();
+  if (!target || OID_RE.test(target)) return null;
+  if (target === "HEAD") {
+    const headTarget = headAndRefs.head.target;
+    return headTarget && headTarget.startsWith("refs/heads/") && isValidRefName(headTarget)
+      ? headTarget
+      : null;
+  }
+  if (target.startsWith("refs/")) {
+    return target.startsWith("refs/heads/") && isValidRefName(target) ? target : null;
+  }
+  const branchCandidate = `refs/heads/${target}`;
+  if (!isValidRefName(branchCandidate)) return null;
+  const hasBranch = headAndRefs.refs.some((ref) => ref.name === branchCandidate);
+  const hasTag = headAndRefs.refs.some((ref) => ref.name === `refs/tags/${target}`);
+  if (!hasBranch && hasTag) return null;
+  return branchCandidate;
+}
+
+async function cleanupFailedWebCommit(args: {
+  input: CommitFileInput;
+  stub: ReturnType<typeof getRepoStub>;
+  token: string;
+  packKey: string | undefined;
+}): Promise<void> {
+  await args.input.limiter
+    .run("do:commit-abort-receive", async () => await args.stub.abortReceive(args.token))
+    .catch(() => {});
+
+  if (!args.packKey) return;
+  const keys = [args.packKey, packIndexKey(args.packKey), packRefsKey(args.packKey)];
+  for (const key of keys) {
+    await args.input.limiter
+      .run("r2:commit-cleanup-staged", async () => await args.input.env.REPO_BUCKET.delete(key))
+      .catch((cleanupErr) => {
+        args.input.log.warn("web-commit:cleanup-r2-failed", {
+          repositoryId: args.input.repositoryId,
+          key,
+          error: String(cleanupErr),
+        });
+      });
+  }
+}
 
 function normalizeRepoFilePath(raw: string): string[] | null {
   const cleaned = raw.trim().replace(/^\/+/, "");
@@ -160,9 +215,14 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
   );
 
   const requestedTarget = input.targetRef || headAndRefs.head.target || "refs/heads/main";
-  const branchRef = requestedTarget.startsWith("refs/heads/")
-    ? requestedTarget
-    : `refs/heads/${requestedTarget.replace(/^refs\/[^/]+\//, "")}`;
+  const branchRef = resolveEditableBranchRef(requestedTarget, headAndRefs);
+  if (!branchRef) {
+    return {
+      ok: false,
+      reason: "invalid-ref",
+      detail: "Web commits must target a valid branch ref.",
+    };
+  }
 
   const existingRef = headAndRefs.refs.find((ref) => ref.name === branchRef);
   const oldOid = existingRef?.oid || zeroOid();
@@ -232,20 +292,21 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
   }
 
   const token = leaseResult.lease.token;
+  let stagedPackKey: string | undefined;
   try {
     const packData = await buildPackV2(Array.from(objectsByOid.values()));
-    const packKey = r2PackKey(
+    stagedPackKey = r2PackKey(
       doPrefix(stub.id.toString()),
       `pack-web-${now}-${crypto.randomUUID().slice(0, 8)}.pack`
     );
 
     await input.limiter.run("r2:commit-put-pack", () =>
-      input.env.REPO_BUCKET.put(packKey, packData)
+      input.env.REPO_BUCKET.put(stagedPackKey!, packData)
     );
 
     const scanResult = await scanPack({
       env: input.env,
-      packKey,
+      packKey: stagedPackKey,
       packSize: packData.byteLength,
       limiter: input.limiter,
       countSubrequest: () => {},
@@ -254,7 +315,7 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
 
     const resolveResult = await resolveDeltasAndWriteIdx({
       env: input.env,
-      packKey,
+      packKey: stagedPackKey,
       packSize: packData.byteLength,
       limiter: input.limiter,
       countSubrequest: () => {},
@@ -270,7 +331,7 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
           token,
           commands: [{ oldOid, newOid: commitOid, ref: branchRef }],
           stagedPack: {
-            packKey,
+            packKey: stagedPackKey!,
             packBytes: packData.byteLength,
             idxBytes: resolveResult.idxBytes,
             objectCount: resolveResult.objectCount,
@@ -283,6 +344,7 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
         repositoryId: input.repositoryId,
         status: finalized.status,
       });
+      await cleanupFailedWebCommit({ input, stub, token, packKey: stagedPackKey });
       return {
         ok: false,
         reason: "commit-failed",
@@ -290,38 +352,71 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
       };
     }
 
+    const prevRepo = await findRepositoryById(input.db, input.repositoryId);
+    const prevVersion = prevRepo ? String(prevRepo.updatedAt) : undefined;
+    const nextUpdatedAt = prevRepo ? Math.max(now, prevRepo.updatedAt + 1) : now;
+    await touchRepositoryUpdatedAt(input.db, input.repositoryId, nextUpdatedAt);
+
     const shortBranch = shortRefName(branchRef);
     const parentDir = parts.slice(0, -1).join("/");
-    const cacheDeletions = [
-      cacheDeleteJSON(
-        buildCacheKeyFrom(input.cacheCtx.req, "/_cache/refs", { repo: input.doName })
-      ),
-      cacheDeleteJSON(
-        buildCacheKeyFrom(input.cacheCtx.req, "/_cache/readme", {
-          repo: input.doName,
-          ref: shortBranch,
-        })
-      ),
-      cacheDeleteJSON(
-        buildCacheKeyFrom(input.cacheCtx.req, "/_cache/tree", {
-          repo: input.doName,
-          ref: shortBranch,
-          path: "",
-        })
-      ),
-    ];
-    if (parentDir) {
+    const versionsToPurge = Array.from(new Set<string | undefined>([prevVersion, undefined]));
+    const refVariants = Array.from(new Set([shortBranch, branchRef]));
+    const cacheDeletions: Promise<void>[] = [];
+    for (const v of versionsToPurge) {
       cacheDeletions.push(
         cacheDeleteJSON(
-          buildCacheKeyFrom(input.cacheCtx.req, "/_cache/tree", {
-            repo: input.doName,
-            ref: shortBranch,
-            path: parentDir,
-          })
+          buildCacheKeyFrom(input.cacheCtx.req, "/_cache/refs", { repo: input.doName, v })
         )
       );
+      for (const refKey of refVariants) {
+        cacheDeletions.push(
+          cacheDeleteJSON(
+            buildCacheKeyFrom(input.cacheCtx.req, "/_cache/readme", {
+              repo: input.doName,
+              ref: refKey,
+              v,
+            })
+          ),
+          cacheDeleteJSON(
+            buildCacheKeyFrom(input.cacheCtx.req, "/_cache/owner-profile-readme", {
+              repo: input.doName,
+              ref: refKey,
+              v,
+            })
+          ),
+          cacheDeleteJSON(
+            buildCacheKeyFrom(input.cacheCtx.req, "/_cache/tree", {
+              repo: input.doName,
+              ref: refKey,
+              path: "",
+              v,
+            })
+          ),
+          cacheDeleteJSON(
+            buildCacheKeyFrom(input.cacheCtx.req, "/_cache/commits", {
+              repo: input.doName,
+              ref: refKey,
+              per_page: "25",
+              page: "0",
+              offset: "0",
+              v,
+            })
+          )
+        );
+        if (parentDir) {
+          cacheDeletions.push(
+            cacheDeleteJSON(
+              buildCacheKeyFrom(input.cacheCtx.req, "/_cache/tree", {
+                repo: input.doName,
+                ref: refKey,
+                path: parentDir,
+                v,
+              })
+            )
+          );
+        }
+      }
     }
-    await touchRepositoryUpdatedAt(input.db, input.repositoryId, now);
     await Promise.all(cacheDeletions);
     input.log.info("web-commit:ok", {
       repositoryId: input.repositoryId,
@@ -338,9 +433,7 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
       path: parts.join("/"),
       error: String(error),
     });
-    await input.limiter
-      .run("do:commit-abort-receive", async () => await stub.abortReceive(token))
-      .catch(() => {});
+    await cleanupFailedWebCommit({ input, stub, token, packKey: stagedPackKey });
     return { ok: false, reason: "commit-failed", detail: String(error) };
   }
 }

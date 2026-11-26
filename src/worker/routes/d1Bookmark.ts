@@ -27,7 +27,9 @@ const CONTROL_CHARACTER_PATTERN = /[\x00-\x1F\x7F]/;
 const D1_BOOKMARK_COOKIE_PREFIX = "host";
 const D1_BOOKMARK_COOKIE_OPTIONS = {
   httpOnly: true,
-  sameSite: "Lax",
+  secure: true,
+  sameSite: "None",
+  partitioned: true,
   maxAge: D1_BOOKMARK_COOKIE_MAX_AGE_SECONDS,
   prefix: D1_BOOKMARK_COOKIE_PREFIX,
 } as const satisfies CookieOptions;

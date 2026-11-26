@@ -33,6 +33,7 @@ export type AdminAuthEnv = {
   AUTH_MODE?: string;
   ADMIN_USERNAME?: string;
   ADMIN_PASSWORD?: string;
+  ADMIN_NAMESPACE?: string;
 };
 
 export type AdminAuthMode = "demo" | "configured";
@@ -103,6 +104,24 @@ export function deriveNamespaceSlugForAdmin(username: string): string {
   const validated = validateSlugForRoute(normalized);
   if (validated.ok) return validated.slug;
   return DEFAULT_DEMO_ADMIN_USERNAME;
+}
+
+/**
+ * Resolves the initial public Git `@namespace` slug when provisioning a brand-new
+ * primary admin account for the first time. Prefers `ADMIN_NAMESPACE` when
+ * configured and valid so deployments can decouple the public namespace from the
+ * private `ADMIN_USERNAME` login credential from day one; otherwise derives from
+ * `ADMIN_USERNAME`. Once the primary admin owns a namespace in D1, D1 remains
+ * canonical across subsequent renames and sign-ins.
+ */
+export function resolveInitialAdminNamespaceSlug(env: AdminAuthEnv): string {
+  const configuredNamespace = normalizeAdminUsername(env.ADMIN_NAMESPACE);
+  if (configuredNamespace) {
+    const validated = validateSlugForRoute(configuredNamespace);
+    if (validated.ok) return validated.slug;
+  }
+  const configuredUsername = normalizeAdminUsername(env.ADMIN_USERNAME);
+  return deriveNamespaceSlugForAdmin(configuredUsername || DEFAULT_DEMO_ADMIN_USERNAME);
 }
 
 export function buildLocalAccountSubject(username: string): string {
@@ -199,7 +218,7 @@ export async function verifyAdminCredentials(
     ok: true,
     mode: config.mode,
     username: config.username,
-    namespaceSlug: deriveNamespaceSlugForAdmin(config.username),
+    namespaceSlug: resolveInitialAdminNamespaceSlug(env),
     subject: buildLocalAccountSubject(config.username),
   };
 }

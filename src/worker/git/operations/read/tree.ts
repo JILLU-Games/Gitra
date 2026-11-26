@@ -32,21 +32,44 @@ export async function readPath(
   const startObj = await readLooseObjectRaw(env, repoId, startOid, cacheCtx);
   if (!startObj) throw new Error("Object not found");
 
-  let currentTreeOid: string | undefined;
-  if (startObj.type === "commit") {
-    const { tree } = await readCommit(env, repoId, startOid, cacheCtx);
-    currentTreeOid = tree;
-  } else if (startObj.type === "tree") {
-    currentTreeOid = startOid;
-  } else if (startObj.type === "tag") {
-    const t = parseTagTarget(startObj.payload);
+  const MAX_TAG_DEPTH = 8;
+  let currentOid = startOid;
+  let currentObj = startObj;
+  let tagHops = 0;
+  while (currentObj.type === "tag") {
+    if (tagHops >= MAX_TAG_DEPTH) {
+      throw new Error("Tag chain exceeded max depth");
+    }
+    const t = parseTagTarget(currentObj.payload);
     if (!t || !t.targetOid) throw new Error("Unsupported object type");
-    const target = t.targetOid;
-    const { tree } = await readCommit(env, repoId, target, cacheCtx);
+    currentOid = t.targetOid;
+    const nextObj = await readLooseObjectRaw(env, repoId, currentOid, cacheCtx);
+    if (!nextObj) throw new Error("Object not found");
+    currentObj = nextObj;
+    tagHops++;
+  }
+
+  let currentTreeOid: string | undefined;
+  if (currentObj.type === "commit") {
+    const { tree } = await readCommit(env, repoId, currentOid, cacheCtx);
     currentTreeOid = tree;
-  } else if (startObj.type === "blob") {
+  } else if (currentObj.type === "tree") {
+    currentTreeOid = currentOid;
+  } else if (currentObj.type === "blob") {
     if (path && path !== "") throw new Error("Path not a directory");
-    return { type: "blob", oid: startOid, content: startObj.payload, base: "" };
+    const MAX_SIZE = 5 * 1024 * 1024;
+    const actualSize = currentObj.payload.byteLength;
+    if (actualSize > MAX_SIZE) {
+      return {
+        type: "blob",
+        oid: currentOid,
+        content: new Uint8Array(0),
+        base: "",
+        size: actualSize,
+        tooLarge: true,
+      };
+    }
+    return { type: "blob", oid: currentOid, content: currentObj.payload, base: "" };
   } else {
     throw new Error("Unsupported object type");
   }

@@ -27,68 +27,75 @@ export function RepoOverviewCard({
   tagCount,
 }: RepoOverviewCardProps) {
   const [copiedDoId, setCopiedDoId] = useState(false);
+  const [copyError, setCopyError] = useState(false);
   const activePackCount = Array.isArray(state.activePacks) ? state.activePacks.length : packCount;
 
   async function copyDoId(doId: string) {
+    setCopyError(false);
     try {
       await navigator.clipboard.writeText(doId);
       setCopiedDoId(true);
       window.setTimeout(() => setCopiedDoId(false), 1200);
-    } catch (error) {
-      window.alert(`Failed to copy DO ID: ${String(error)}`);
+    } catch {
+      setCopiedDoId(false);
+      setCopyError(true);
+      window.setTimeout(() => setCopyError(false), 2000);
     }
   }
 
   return (
     <Card>
-      <h2 className="mb-4 text-xl font-semibold">Repository Overview</h2>
+      <h2 className="mb-3.5 text-[14px] font-semibold text-fg">Repository Overview</h2>
       <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
         <div>
-          <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">
             R2 Packs Storage
           </div>
-          <div className="font-mono text-sm">{storageSize || "0 bytes"}</div>
+          <div className="font-mono text-[13px] text-fg">{storageSize || "0 bytes"}</div>
         </div>
         <div>
-          <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            Active Packs
-          </div>
-          <div className="font-mono text-sm">
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">Active Packs</div>
+          <div className="font-mono text-[13px] text-fg">
             {activePackCount}
             {supersededPackCount > 0 ? (
-              <span className="ml-1 text-xs text-zinc-500">({supersededPackCount} superseded)</span>
+              <span className="ml-1 text-[11px] text-fgMuted">
+                ({supersededPackCount} superseded)
+              </span>
             ) : null}
           </div>
         </div>
         {state?.meta?.doId ? (
           <div>
-            <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">
               Durable Object ID
             </div>
-            <div className="relative font-mono text-sm">
+            <div className="relative font-mono text-[13px] text-fg">
               <span title={state.meta.doId}>{shortValue(String(state.meta.doId), 12)}</span>
               <button
                 type="button"
-                className="absolute -top-0.5 ml-2 rounded border border-zinc-300 p-1 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                title="Copy DO ID"
+                className="ml-2 inline-flex rounded border border-border bg-canvas p-1 text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
+                title={copiedDoId ? "Copied" : copyError ? "Copy failed" : "Copy DO ID"}
                 aria-label="Copy DO ID"
-                style={{ marginLeft: "0.5rem", top: "-2px" }}
                 onClick={() => void copyDoId(String(state.meta?.doId || ""))}
               >
-                <Clipboard className="block h-4 w-4" aria-hidden="true" />
+                <Clipboard className="block h-3.5 w-3.5" aria-hidden="true" />
               </button>
-              <span className="invisible">{copiedDoId ? "copied" : "___copy"}</span>
+              {copiedDoId ? (
+                <span className="ml-1.5 text-[11px] text-emerald-400">copied</span>
+              ) : copyError ? (
+                <span className="ml-1.5 text-[11px] text-red-400">copy failed</span>
+              ) : null}
             </div>
           </div>
         ) : null}
         {state.looseR2SampleBytes ? (
           <div>
-            <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">
               R2 Loose (sample)
             </div>
-            <div className="font-mono text-sm">
+            <div className="font-mono text-[13px] text-fg">
               {formatSampleBytes(state.looseR2SampleBytes)}
-              <span className="ml-1 text-xs text-zinc-500">
+              <span className="ml-1 text-[11px] text-fgMuted">
                 ({state.looseR2SampleCount || 0} objs{state.looseR2Truncated ? ", truncated" : ""})
               </span>
             </div>
@@ -96,47 +103,41 @@ export function RepoOverviewCard({
         ) : null}
         {state.dbSizeBytes ? (
           <div>
-            <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">
               Durable Object Storage
             </div>
-            <div className="font-mono text-sm">{formatSampleBytes(state.dbSizeBytes)}</div>
+            <div className="font-mono text-[13px] text-fg">
+              {formatSampleBytes(state.dbSizeBytes)}
+            </div>
           </div>
         ) : null}
         <div>
-          <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            Receive Lease
-          </div>
-          <div className="font-mono text-sm">{state.receiveLease ? "Active" : "Idle"}</div>
-        </div>
-        <div>
-          <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            Compaction
-          </div>
-          <div className="font-mono text-sm text-accent-600 dark:text-accent-400">
-            {compactionStatus}
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">Receive Lease</div>
+          <div className="font-mono text-[13px] text-fg">
+            {state.receiveLease ? "Active" : "Idle"}
           </div>
         </div>
         <div>
-          <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">Compaction</div>
+          <div className="font-mono text-[13px] text-accent">{compactionStatus}</div>
+        </div>
+        <div>
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">
             Catalog Version
           </div>
-          <div className="font-mono text-sm">
+          <div className="font-mono text-[13px] text-fg">
             {typeof state.packCatalogVersion === "number" ? state.packCatalogVersion : "n/a"}
           </div>
         </div>
         <div>
-          <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            HEAD
-          </div>
-          <div className="font-mono text-sm">
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">HEAD</div>
+          <div className="font-mono text-[13px] text-fg">
             {head?.target ? shortRefName(String(head.target)) : head?.unborn ? "unborn" : "unknown"}
           </div>
         </div>
         <div>
-          <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            Branches/Tags
-          </div>
-          <div className="font-mono text-sm">
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">Branches/Tags</div>
+          <div className="font-mono text-[13px] text-fg">
             {branchCount}/{tagCount}
           </div>
         </div>

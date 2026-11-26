@@ -23,26 +23,22 @@ type ButtonAsAnchor = ButtonBaseProps &
 export type ButtonProps = ButtonAsButton | ButtonAsAnchor;
 
 const shared =
-  "inline-flex items-center justify-center gap-1.5 rounded-md font-medium no-underline whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:opacity-50 disabled:pointer-events-none";
+  "inline-flex items-center justify-center gap-1.5 rounded-md no-underline whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:opacity-50 disabled:pointer-events-none";
 
-// Anchor-backed buttons still match the global link rules in app.css, so each
-// variant declares text colors for hover states instead of relying on cascade.
-// Hover color swaps are intentionally instant; animating them can create muddy
-// intermediate colors across browsers. Only the active press scale transitions.
 const variants: Record<ButtonVariant, string> = {
   primary:
-    "border border-transparent bg-accent-600 text-white hover:bg-accent-500 hover:text-white active:scale-[0.98] transition-transform",
+    "border border-transparent bg-fg text-canvas font-semibold hover:bg-fgHover hover:text-canvas",
   secondary:
-    "border border-zinc-200 bg-zinc-50 text-zinc-800 hover:bg-zinc-100 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 dark:hover:text-white active:scale-[0.98] transition-transform",
+    "border border-border bg-canvas text-fgBody font-medium hover:bg-surfaceHover hover:text-fg",
   danger:
-    "border border-red-500/25 bg-red-500/10 text-red-700 hover:bg-red-500/20 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 active:scale-[0.98] transition-transform",
+    "border border-red-500/30 bg-transparent text-red-400 font-medium hover:bg-red-500/10 hover:text-red-300",
   ghost:
-    "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 active:scale-[0.97] transition-transform",
+    "border border-transparent bg-transparent text-fgBody font-medium hover:bg-surfaceHover hover:text-fg",
 };
 
 const sizes: Record<ButtonSize, string> = {
-  sm: "px-2.5 py-1 text-xs",
-  md: "px-3.5 py-1.5 text-sm",
+  sm: "h-7 px-3 text-[12px]",
+  md: "h-8 px-3.5 text-[12px]",
 };
 
 export function buttonClasses(variant: ButtonVariant = "primary", size: ButtonSize = "md"): string {

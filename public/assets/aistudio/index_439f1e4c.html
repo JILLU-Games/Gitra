@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vib Git — Vib Tools Open-Source Repositories</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: [
+                '"Segoe UI"',
+                "-apple-system",
+                "BlinkMacSystemFont",
+                "Helvetica",
+                "Arial",
+                "sans-serif",
+              ],
+              mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
+            },
+            colors: {
+              canvas: "#09090b",
+              surface: "#111114",
+              surfaceHover: "#18181c",
+              border: "#242429",
+              borderSubtle: "#1c1c21",
+              fg: "#f4f4f5",
+              fgBody: "#a1a1aa",
+              fgMuted: "#71717a",
+              accent: "#60a5fa",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        background-color: #09090b;
+        color: #f4f4f5;
+        font-family:
+          "Segoe UI",
+          -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      ::-webkit-scrollbar {
+        width: 7px;
+        height: 7px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #09090b;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #27272a;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #3f3f46;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen flex flex-col">
+    <!-- Top Navigation (48px, Clean & Aligned) -->
+    <header class="sticky top-0 z-30 h-12 bg-canvas/95 backdrop-blur border-b border-border">
+      <div class="max-w-[1160px] h-full mx-auto px-5 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-6">
+          <a href="#" class="flex items-center gap-2 text-fg">
+            <svg class="w-4 h-4 text-fg shrink-0" viewBox="0 0 16 16" fill="currentColor">
+              <path
+                d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm6.25 7.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM8.5 7.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm-4.25 4.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z"
+              />
+              <path
+                d="M4.25 4.75v6a.75.75 0 0 1-1.5 0v-6a.75.75 0 0 1 1.5 0Zm7 1.75v2.75a.75.75 0 0 1-1.5 0V6.5a1 1 0 0 0-1-1H6.5a.75.75 0 0 1 0-1.5h2.25a2.5 2.5 0 0 1 2.5 2.5Z"
+              />
+            </svg>
+            <span class="font-semibold text-[14px] tracking-tight">Vib Git</span>
+            <span class="hidden sm:inline text-border">/</span>
+            <span class="hidden sm:inline text-[12px] text-fgMuted">git.vibtools.io</span>
+          </a>
+
+          <nav class="hidden md:flex items-center gap-5 h-12 text-[13px]">
+            <a
+              href="#"
+              class="h-full inline-flex items-center text-fg font-medium border-b-2 border-fg"
+              >Explore</a
+            >
+            <a
+              href="#repositories"
+              class="h-full inline-flex items-center text-fgMuted hover:text-fg transition-colors"
+              >Repositories</a
+            >
+            <a
+              href="#teams"
+              class="h-full inline-flex items-center text-fgMuted hover:text-fg transition-colors"
+              >Teams</a
+            >
+            <a
+              href="https://docs.vib.tools"
+              target="_blank"
+              class="h-full inline-flex items-center text-fgMuted hover:text-fg transition-colors"
+              >Docs</a
+            >
+          </nav>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button
+            id="themeBtn"
+            title="Toggle theme"
+            class="w-7 h-7 rounded text-fgMuted hover:text-fg hover:bg-surfaceHover flex items-center justify-center transition-colors"
+          >
+            <svg
+              class="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
+              />
+            </svg>
+          </button>
+          <a href="#signin" class="text-[12px] text-fgMuted hover:text-fg transition-colors"
+            >Sign in</a
+          >
+        </div>
+      </div>
+    </header>
+
+    <!-- Flat Open Hero Band (No Heavy Box-in-Box) -->
+    <section class="bg-surface border-b border-border">
+      <div class="max-w-[1160px] mx-auto px-5 py-6 space-y-5">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div class="space-y-1.5 max-w-2xl">
+            <div class="flex items-center gap-2 text-[12px] text-fgMuted">
+              <span class="text-fgBody font-medium">Vib Tools · Open-Source Forge</span>
+              <span>·</span>
+              <span class="inline-flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                Public Git Online
+              </span>
+            </div>
+            <h1 class="text-[20px] font-semibold text-fg tracking-tight">
+              Vib Tools Open-Source Repositories
+            </h1>
+            <p class="text-[13px] text-fgBody">
+              Practical software for real developer workflows. Browse public source code,
+              edge-native starter kits, SDKs, and production tools maintained by Vib Tools.
+            </p>
+          </div>
+
+          <div class="flex items-center gap-2.5 shrink-0">
+            <a
+              href="https://vibtools.io"
+              target="_blank"
+              class="h-8 px-3.5 rounded-md bg-canvas hover:bg-surfaceHover border border-border text-fg text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors"
+            >
+              vibtools.io
+              <svg
+                class="w-3 h-3 text-fgMuted"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"
+                />
+              </svg>
+            </a>
+            <a
+              href="https://docs.vib.tools"
+              target="_blank"
+              class="h-8 px-3.5 rounded-md bg-fg hover:bg-white text-canvas text-[12px] font-semibold inline-flex items-center transition-colors"
+            >
+              Documentation
+            </a>
+          </div>
+        </div>
+
+        <!-- Clean Inline Metrics -->
+        <div
+          class="pt-4 border-t border-borderSubtle flex flex-wrap items-center justify-between gap-3 text-[12px] text-fgMuted"
+        >
+          <div class="flex flex-wrap items-center gap-6">
+            <span><strong class="text-fg font-semibold">3</strong> Public Repositories</span>
+            <span><strong class="text-fg font-semibold">2</strong> Maintainer Namespaces</span>
+            <span><strong class="text-fg font-semibold">2</strong> Pinned Releases</span>
+          </div>
+          <span>Free public HTTPS cloning · No account required</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main 2-Column Content -->
+    <main class="flex-1 max-w-[1160px] w-full mx-auto px-5 py-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <!-- Left Workspace (8 cols) -->
+        <div class="lg:col-span-8 space-y-6">
+          <!-- Pinned Repositories -->
+          <section class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h2 class="text-[14px] font-semibold text-fg">Pinned Repositories</h2>
+              <span class="text-[12px] text-fgMuted">Flagship releases &amp; starter kits</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <!-- Pinned 1 -->
+              <article
+                class="bg-surface border border-border hover:border-[#36363e] rounded-md p-4 flex flex-col justify-between gap-3.5 transition-colors"
+              >
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between gap-2">
+                    <a href="#" class="text-[14px] font-semibold truncate">
+                      <span class="text-fgMuted font-normal">alex-dev / </span>
+                      <span class="text-fg hover:text-accent transition-colors"
+                        >cloud-forge-kit</span
+                      >
+                    </a>
+                    <span class="text-[12px] text-fgMuted">Public</span>
+                  </div>
+                  <p class="text-[13px] text-fgBody line-clamp-2">
+                    GitHub-ready TypeScript Worker starter kit with CI workflow, architecture docs,
+                    middleware, and tests.
+                  </p>
+                </div>
+                <div class="flex items-center justify-between text-[12px] text-fgMuted pt-1">
+                  <div class="flex items-center gap-3.5">
+                    <span class="inline-flex items-center gap-1.5 text-fgBody">
+                      <span class="w-2 h-2 rounded-full bg-[#3178c6]"></span>TypeScript
+                    </span>
+                    <span>MIT</span>
+                    <span class="font-mono">v1.4.0</span>
+                  </div>
+                  <button
+                    onclick="
+                      copyClone('https://git.vibtools.io/alex-dev/cloud-forge-kit.git', this)
+                    "
+                    class="text-fgBody hover:text-fg font-medium transition-colors"
+                  >
+                    Clone
+                  </button>
+                </div>
+              </article>
+
+              <!-- Pinned 2 -->
+              <article
+                class="bg-surface border border-border hover:border-[#36363e] rounded-md p-4 flex flex-col justify-between gap-3.5 transition-colors"
+              >
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between gap-2">
+                    <a href="#" class="text-[14px] font-semibold truncate">
+                      <span class="text-fgMuted font-normal">vibtools / </span>
+                      <span class="text-fg hover:text-accent transition-colors">licenx</span>
+                    </a>
+                    <span class="text-[12px] text-fgMuted">Public</span>
+                  </div>
+                  <p class="text-[13px] text-fgBody line-clamp-2">
+                    Lightweight software licensing SDK for desktop &amp; edge apps with Cloudflare
+                    Durable Objects sync.
+                  </p>
+                </div>
+                <div class="flex items-center justify-between text-[12px] text-fgMuted pt-1">
+                  <div class="flex items-center gap-3.5">
+                    <span class="inline-flex items-center gap-1.5 text-fgBody">
+                      <span class="w-2 h-2 rounded-full bg-[#3572A5]"></span>Python
+                    </span>
+                    <span>MIT</span>
+                    <span class="font-mono">v1.2.9</span>
+                  </div>
+                  <button
+                    onclick="copyClone('https://git.vibtools.io/vibtools/licenx.git', this)"
+                    class="text-fgBody hover:text-fg font-medium transition-colors"
+                  >
+                    Clone
+                  </button>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- All Public Repositories -->
+          <section id="repositories" class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h2 class="text-[14px] font-semibold text-fg">All Repositories</h2>
+              <div class="flex items-center gap-3 text-[12px] text-fgMuted">
+                <a href="#vibtools-config" class="hover:text-fg transition-colors"
+                  >.vibtools configs</a
+                >
+                <span>·</span>
+                <span id="repoCountLabel">3 repositories</span>
+              </div>
+            </div>
+
+            <div class="bg-surface border border-border rounded-md overflow-hidden">
+              <!-- Toolbar: Search + Dropdowns -->
+              <div
+                class="p-3 border-b border-borderSubtle flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+              >
+                <div class="relative flex-1">
+                  <svg
+                    class="w-3.5 h-3.5 text-fgMuted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.3-4.3" />
+                  </svg>
+                  <input
+                    id="searchInput"
+                    type="text"
+                    placeholder="Search repositories, topics, or descriptions..."
+                    class="w-full h-8 pl-8 pr-7 rounded-md bg-canvas border border-border text-[13px] text-fg placeholder:text-fgMuted focus:outline-none focus:border-fgMuted"
+                  />
+                  <kbd
+                    class="hidden sm:inline-block absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-mono text-fgMuted"
+                    >/</kbd
+                  >
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <select
+                    id="langFilter"
+                    class="h-8 px-2.5 rounded-md bg-canvas hover:bg-surfaceHover border border-border text-[12px] text-fgBody focus:outline-none focus:border-fgMuted cursor-pointer"
+                  >
+                    <option value="all">Language: All</option>
+                    <option value="TypeScript">TypeScript</option>
+                    <option value="Python">Python</option>
+                  </select>
+                  <select
+                    id="sortFilter"
+                    class="h-8 px-2.5 rounded-md bg-canvas hover:bg-surfaceHover border border-border text-[12px] text-fgBody focus:outline-none focus:border-fgMuted cursor-pointer"
+                  >
+                    <option value="updated">Sort: Recently updated</option>
+                    <option value="name">Sort: Name (A–Z)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Team Filter Strip -->
+              <div
+                class="px-3.5 py-2 bg-canvas/50 border-b border-border flex flex-wrap items-center gap-1.5 text-[12px]"
+              >
+                <span class="text-fgMuted mr-1">Teams:</span>
+                <button
+                  data-team="all"
+                  class="team-pill px-2.5 py-0.5 rounded bg-fg text-canvas font-medium transition-colors"
+                >
+                  All <span class="opacity-70 ml-0.5">3</span>
+                </button>
+                <button
+                  data-team="vibtools"
+                  class="team-pill px-2.5 py-0.5 rounded text-fgBody hover:text-fg hover:bg-surfaceHover transition-colors"
+                >
+                  @vibtools <span class="text-fgMuted ml-0.5">2</span>
+                </button>
+                <button
+                  data-team="alex-dev"
+                  class="team-pill px-2.5 py-0.5 rounded text-fgBody hover:text-fg hover:bg-surfaceHover transition-colors"
+                >
+                  @alex-dev <span class="text-fgMuted ml-0.5">1</span>
+                </button>
+              </div>
+
+              <!-- Repository Rows -->
+              <div id="repoList" class="divide-y divide-borderSubtle"></div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Right Sidebar (4 cols) -->
+        <aside class="lg:col-span-4 space-y-5">
+          <!-- Organization Details -->
+          <section class="bg-surface border border-border rounded-md p-4 space-y-3">
+            <div class="text-[12px] font-semibold text-fg">Organization</div>
+            <p class="text-[13px] text-fgBody">
+              Official open-source releases, developer kits, and edge-native Git repositories
+              maintained by Vib Tools.
+            </p>
+            <div class="pt-3 border-t border-borderSubtle space-y-2 text-[12px]">
+              <a
+                href="https://vibtools.io"
+                target="_blank"
+                class="flex items-center justify-between text-fgBody hover:text-fg transition-colors"
+              >
+                <span>vibtools.io</span>
+                <svg
+                  class="w-3 h-3 text-fgMuted"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"
+                  />
+                </svg>
+              </a>
+              <a
+                href="mailto:support@vibtools.io"
+                class="block text-fgBody hover:text-fg transition-colors"
+              >
+                support@vibtools.io
+              </a>
+            </div>
+          </section>
+
+          <!-- Teams & Namespaces -->
+          <section id="teams" class="bg-surface border border-border rounded-md overflow-hidden">
+            <div
+              class="px-4 py-3 border-b border-borderSubtle flex items-center justify-between text-[12px]"
+            >
+              <span class="font-semibold text-fg">Teams &amp; Namespaces</span>
+              <span class="text-fgMuted">2</span>
+            </div>
+
+            <div class="divide-y divide-borderSubtle">
+              <div class="p-4 space-y-2">
+                <div class="flex items-baseline justify-between gap-2">
+                  <div class="truncate">
+                    <span class="text-[13px] font-semibold text-fg">Vib Tools Core</span>
+                    <span class="text-[12px] text-fgMuted ml-1.5">@vibtools</span>
+                  </div>
+                  <span class="text-[12px] text-fgMuted shrink-0">2 repos</span>
+                </div>
+                <p class="text-[13px] text-fgBody">
+                  Core engineering team maintaining licensing SDKs, MCP tooling, and edge developer
+                  infrastructure.
+                </p>
+                <div class="flex items-center justify-between pt-1 text-[12px]">
+                  <button
+                    onclick="setTeamFilter('vibtools')"
+                    class="text-fgBody hover:text-fg transition-colors"
+                  >
+                    Filter repos
+                  </button>
+                  <a href="#" class="text-accent hover:underline">Profile →</a>
+                </div>
+              </div>
+
+              <div class="p-4 space-y-2">
+                <div class="flex items-baseline justify-between gap-2">
+                  <div class="truncate">
+                    <span class="text-[13px] font-semibold text-fg">Alex Rivera</span>
+                    <span class="text-[12px] text-fgMuted ml-1.5">@alex-dev</span>
+                  </div>
+                  <span class="text-[12px] text-fgMuted shrink-0">1 repo</span>
+                </div>
+                <p class="text-[13px] text-fgBody">
+                  Edge systems developer building TypeScript starter kits on Cloudflare Workers.
+                </p>
+                <div class="flex items-center justify-between pt-1 text-[12px]">
+                  <button
+                    onclick="setTeamFilter('alex-dev')"
+                    class="text-fgBody hover:text-fg transition-colors"
+                  >
+                    Filter repos
+                  </button>
+                  <a href="#" class="text-accent hover:underline">Profile →</a>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Developer Access -->
+          <section class="bg-surface border border-border rounded-md p-4 space-y-2.5">
+            <div class="text-[12px] font-semibold text-fg">Developer Access</div>
+            <p class="text-[13px] text-fgBody">
+              All public repositories support anonymous HTTPS cloning under permissive open-source
+              licenses.
+            </p>
+            <div
+              class="px-3 py-2 rounded bg-canvas border border-borderSubtle font-mono text-[12px] text-fgBody truncate"
+            >
+              git clone https://git.vibtools.io/&lt;ns&gt;/&lt;repo&gt;.git
+            </div>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <!-- Minimal Footer -->
+    <footer class="border-t border-borderSubtle mt-8">
+      <div
+        class="max-w-[1160px] mx-auto px-5 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-[12px] text-fgMuted"
+      >
+        <span>© 2026 Vib Tools · Open-Source Git Forge</span>
+        <div class="flex items-center gap-5">
+          <a href="https://vibtools.io" class="hover:text-fg transition-colors">Website</a>
+          <a href="https://docs.vib.tools" class="hover:text-fg transition-colors">Documentation</a>
+          <a href="#" class="hover:text-fg transition-colors">Status</a>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Interactive Logic -->
+    <script>
+      const REPOS = [
+        {
+          owner: "alex-dev",
+          name: "cloud-forge-kit",
+          description:
+            "GitHub-ready TypeScript Worker starter kit with CI workflow, architecture docs, middleware, and tests.",
+          language: "TypeScript",
+          langColor: "#3178c6",
+          license: "MIT",
+          branch: "main",
+          version: "v1.4.0",
+          pinned: true,
+          topics: ["cloudflare-workers", "typescript", "starter-kit"],
+          updatedLabel: "Updated 2h ago",
+          updatedOrder: 1,
+          cloneUrl: "https://git.vibtools.io/alex-dev/cloud-forge-kit.git",
+        },
+        {
+          owner: "vibtools",
+          name: "licenx",
+          description:
+            "Lightweight software licensing SDK for desktop & edge apps with Cloudflare Durable Objects sync.",
+          language: "Python",
+          langColor: "#3572A5",
+          license: "MIT",
+          branch: "main",
+          version: "v1.2.9",
+          pinned: true,
+          topics: ["licensing", "python", "durable-objects"],
+          updatedLabel: "Updated 5h ago",
+          updatedOrder: 2,
+          cloneUrl: "https://git.vibtools.io/vibtools/licenx.git",
+        },
+        {
+          owner: "vibtools",
+          name: "vps-mcp",
+          description:
+            "Model Context Protocol server for Ubuntu VPS deployments, Docker stack orchestration, and Cloudflare DNS.",
+          language: "TypeScript",
+          langColor: "#3178c6",
+          license: "MIT",
+          branch: "main",
+          version: "v0.9.4",
+          pinned: false,
+          topics: ["mcp", "devops", "docker", "cloudflare"],
+          updatedLabel: "Updated 1d ago",
+          updatedOrder: 3,
+          cloneUrl: "https://git.vibtools.io/vibtools/vps-mcp.git",
+        },
+      ];
+
+      let activeTeam = "all";
+
+      function renderRepos() {
+        const q = document.getElementById("searchInput").value.trim().toLowerCase();
+        const lang = document.getElementById("langFilter").value;
+        const sort = document.getElementById("sortFilter").value;
+
+        let filtered = REPOS.filter((r) => {
+          const matchTeam = activeTeam === "all" || r.owner === activeTeam;
+          const matchLang = lang === "all" || r.language === lang;
+          const matchQuery =
+            !q ||
+            r.name.toLowerCase().includes(q) ||
+            r.owner.toLowerCase().includes(q) ||
+            r.description.toLowerCase().includes(q) ||
+            r.topics.some((t) => t.toLowerCase().includes(q));
+          return matchTeam && matchLang && matchQuery;
+        });
+
+        if (sort === "name") {
+          filtered.sort((a, b) => a.name.localeCompare(b.name));
+        } else {
+          filtered.sort((a, b) => a.updatedOrder - b.updatedOrder);
+        }
+
+        const container = document.getElementById("repoList");
+        document.getElementById("repoCountLabel").textContent =
+          `${filtered.length} ${filtered.length === 1 ? "repository" : "repositories"}`;
+
+        if (filtered.length === 0) {
+          container.innerHTML = `<div class="p-8 text-center text-fgMuted text-[13px]">No public repositories match your current filter.</div>`;
+          return;
+        }
+
+        container.innerHTML = filtered
+          .map(
+            (r) => `
+        <article class="p-4 hover:bg-surfaceHover/60 transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div class="space-y-2 min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <a href="#" class="text-[14px] font-semibold">
+                <span class="text-fgMuted font-normal">${r.owner} / </span>
+                <span class="text-fg hover:text-accent transition-colors">${r.name}</span>
+              </a>
+              <span class="text-[12px] text-fgMuted">Public${r.pinned ? " · Pinned" : ""}</span>
+            </div>
+
+            <p class="text-[13px] text-fgBody max-w-2xl">${r.description}</p>
+
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-0.5 text-[12px] text-fgMuted">
+              <span class="inline-flex items-center gap-1.5 text-fgBody">
+                <span class="w-2 h-2 rounded-full" style="background:${r.langColor}"></span>
+                ${r.language}
+              </span>
+              <span>${r.license}</span>
+              <span class="font-mono">${r.branch} · ${r.version}</span>
+              <span>${r.updatedLabel}</span>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+              ${r.topics.map((t) => `<span class="px-2 py-0.5 rounded bg-canvas border border-borderSubtle text-[12px] text-fgMuted">${t}</span>`).join("")}
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0 pt-0.5">
+            <button onclick="copyClone('${r.cloneUrl}', this)" class="h-7 px-3 rounded-md bg-canvas hover:bg-surfaceHover border border-border text-[12px] text-fgBody hover:text-fg transition-colors">
+              Clone
+            </button>
+            <a href="#commits" class="h-7 px-3 rounded-md bg-canvas hover:bg-surfaceHover border border-border text-[12px] text-fgBody hover:text-fg inline-flex items-center transition-colors">
+              Commits
+            </a>
+          </div>
+        </article>
+      `
+          )
+          .join("");
+      }
+
+      function setTeamFilter(team) {
+        activeTeam = team;
+        document.querySelectorAll(".team-pill").forEach((btn) => {
+          const isActive = btn.dataset.team === team;
+          btn.className = isActive
+            ? "team-pill px-2.5 py-0.5 rounded bg-fg text-canvas font-medium transition-colors"
+            : "team-pill px-2.5 py-0.5 rounded text-fgBody hover:text-fg hover:bg-surfaceHover transition-colors";
+        });
+        renderRepos();
+      }
+
+      function copyClone(url, btn) {
+        navigator.clipboard?.writeText(`git clone ${url}`);
+        const original = btn.textContent;
+        btn.textContent = "Copied";
+        btn.classList.add("text-emerald-400");
+        setTimeout(() => {
+          btn.textContent = original;
+          btn.classList.remove("text-emerald-400");
+        }, 1300);
+      }
+
+      document.querySelectorAll(".team-pill").forEach((btn) => {
+        btn.addEventListener("click", () => setTeamFilter(btn.dataset.team));
+      });
+      document.getElementById("searchInput").addEventListener("input", renderRepos);
+      document.getElementById("langFilter").addEventListener("change", renderRepos);
+      document.getElementById("sortFilter").addEventListener("change", renderRepos);
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "/" && document.activeElement.tagName !== "INPUT") {
+          e.preventDefault();
+          document.getElementById("searchInput").focus();
+        }
+      });
+
+      renderRepos();
+    </script>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 import type { Ref } from "@/worker/git";
 import { classifyRef, formatRefOption } from "@/shared/git/ref-display";
+import { findRepositoryById } from "@/worker/db/d1/dal/repositories";
 import { isRequestPrivate, loadHeadAndRefsCached, resolveUiRepoAccess } from "./helpers";
 import type { AppContext } from "../hono";
 
@@ -11,7 +12,13 @@ export async function handleRefsApi(c: AppContext<"/:owner/:repo/api/refs">) {
   if (access.kind === "response") return access.response;
   const { route, cacheCtx } = access;
   try {
-    const refsData = await loadHeadAndRefsCached(env, cacheCtx, route.doName);
+    const repoRow = await findRepositoryById(c.var.db, route.repositoryId);
+    const refsData = await loadHeadAndRefsCached(
+      env,
+      cacheCtx,
+      route.doName,
+      repoRow ? String(repoRow.updatedAt) : undefined
+    );
     const refs: Ref[] = refsData?.refs || [];
     const branches = refs.filter((ref) => classifyRef(ref.name) === "branch").map(formatRefOption);
     const tags = refs.filter((ref) => classifyRef(ref.name) === "tag").map(formatRefOption);

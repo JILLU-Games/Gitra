@@ -63,10 +63,9 @@ export function CommitsPage({
         canManageRepo={canManageRepo}
       />
       <ProgressBanner progress={progress} />
-      <span className="mb-1 inline-block text-xs font-semibold uppercase tracking-wider text-accent-500 dark:text-accent-400">
-        History
-      </span>
-      <h2 className="font-display tracking-tight">Commits on {refLabel}</h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="m-0 text-[14px] font-semibold text-fg">Commits on {refLabel}</h2>
+      </div>
       <Pager pager={pager} />
       <IslandHost name="merge-expander" props={{ owner, repo, commits }}>
         <MergeExpanderIsland owner={owner} repo={repo} commits={commits} />

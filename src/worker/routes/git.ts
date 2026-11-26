@@ -13,7 +13,7 @@ import { loadPeeledTagTargets } from "@/worker/git/object-store";
 import { handleFetchV2Streaming } from "@/worker/git/operations/uploadStream";
 import { handleStreamingReceivePackPOST } from "@/worker/git/receive/streamReceivePack";
 import { asBodyInit, gunzip } from "@/worker/common";
-import { buildCacheKeyFrom, cacheOrLoadJSONForRequest } from "@/worker/cache";
+import { buildCacheKeyFrom, cacheDeleteJSON, cacheOrLoadJSONForRequest } from "@/worker/cache";
 import { markRequestPrivate, responseCacheControl } from "@/worker/cache/policy";
 import { isValidOwnerRepo } from "@/shared/web";
 import { resolveRepositoryRoute, type RepositoryRoute } from "@/worker/repositories/route";
@@ -25,7 +25,7 @@ import {
 } from "@/worker/auth/gitAuth";
 import type { Db } from "@/worker/db/d1/client";
 import type { Logger } from "@/worker/common/logger";
-import { touchRepositoryUpdatedAt } from "@/worker/db/d1/dal/repositories";
+import { findRepositoryById, touchRepositoryUpdatedAt } from "@/worker/db/d1/dal/repositories";
 import { workerExecutionContext, type AppContext, type AppRouter } from "./hono";
 
 type GitService = "git-upload-pack" | "git-receive-pack";
@@ -99,7 +99,9 @@ async function handleUploadPackPOST(
   env: Env,
   route: RepositoryRoute,
   request: Request,
-  cacheCtx: CacheContext
+  cacheCtx: CacheContext,
+  db: Db,
+  log: Logger
 ) {
   const decodedBody = await decodeUploadPackBody(request);
   if (decodedBody instanceof Response) return decodedBody;
@@ -114,15 +116,21 @@ async function handleUploadPackPOST(
   }
 
   if (command === "ls-refs") {
+    const repoRow = await findRepositoryById(db, route.repositoryId);
+    const cacheVersion = repoRow ? String(repoRow.updatedAt) : undefined;
     const loader = async (): Promise<{ head: HeadInfo | undefined; refs: Ref[] } | null> => {
       try {
         const result = await getHeadAndRefs(env, route.doName, cacheCtx);
         return { head: result.head, refs: result.refs };
-      } catch {
+      } catch (error) {
+        log.debug("git:ls-refs-load-failed", { repoId: route.doName, error: String(error) });
         return null;
       }
     };
-    const cacheKeyRefs = buildCacheKeyFrom(request, "/_cache/refs", { repo: route.doName });
+    const cacheKeyRefs = buildCacheKeyFrom(request, "/_cache/refs", {
+      repo: route.doName,
+      v: cacheVersion,
+    });
     const refsData = await cacheOrLoadJSONForRequest<{ head: HeadInfo | undefined; refs: Ref[] }>(
       cacheCtx,
       cacheKeyRefs,
@@ -152,7 +160,9 @@ async function handleUploadPackPOST(
         if (tagRefs.length > 0) {
           peeledByRef = await loadPeeledTagTargets(env, route.doName, tagRefs, cacheCtx);
         }
-      } catch {}
+      } catch (error) {
+        log.warn("git:peel-tags-failed", { repoId: route.doName, error: String(error) });
+      }
     }
 
     const chunks: Uint8Array[] = [];
@@ -211,8 +221,20 @@ async function handleReceivePackPOST(
     onRepoStateChanged: async ({ changed }) => {
       if (!changed) return;
       try {
-        await touchRepositoryUpdatedAt(db, route.repositoryId, Date.now());
-        log.debug("receive:repo-updated-at-touched", { repositoryId: route.repositoryId });
+        const prevRepo = await findRepositoryById(db, route.repositoryId);
+        const prevVersion = prevRepo ? String(prevRepo.updatedAt) : undefined;
+        const nextUpdatedAt = prevRepo ? Math.max(Date.now(), prevRepo.updatedAt + 1) : Date.now();
+        await touchRepositoryUpdatedAt(db, route.repositoryId, nextUpdatedAt);
+        const versionsToPurge = Array.from(new Set<string | undefined>([prevVersion, undefined]));
+        await Promise.all(
+          versionsToPurge.map((v) =>
+            cacheDeleteJSON(buildCacheKeyFrom(request, "/_cache/refs", { repo: route.doName, v }))
+          )
+        );
+        log.debug("receive:repo-updated-at-touched", {
+          repositoryId: route.repositoryId,
+          updatedAt: nextUpdatedAt,
+        });
       } catch (error) {
         log.warn("receive:repo-updated-at-failed", {
           repositoryId: route.repositoryId,
@@ -457,7 +479,14 @@ export function registerGitRoutes(router: AppRouter) {
       "read"
     );
     if (authorized.kind === "response") return authorized.response;
-    return handleUploadPackPOST(c.env, route, c.req.raw, authorized.cacheCtx);
+    return handleUploadPackPOST(
+      c.env,
+      route,
+      c.req.raw,
+      authorized.cacheCtx,
+      c.var.db,
+      c.var.logFor({ service: "UploadPack", repoId: route.doName })
+    );
   });
 
   router.post(`/:owner/:repo/git-receive-pack`, async (c) => {

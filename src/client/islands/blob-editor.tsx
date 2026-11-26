@@ -83,7 +83,7 @@ export function BlobEditorIsland({
 
   if (!editing) {
     return (
-      <div className="flex items-center justify-end border-b border-zinc-200 bg-zinc-50/70 px-3 py-2 text-xs dark:border-zinc-800/60 dark:bg-zinc-950/30">
+      <div className="flex items-center justify-end border-b border-borderSubtle bg-surface px-3 py-2 text-[12px]">
         <button
           type="button"
           onClick={() => {
@@ -93,9 +93,9 @@ export function BlobEditorIsland({
             setError(null);
             setEditing(true);
           }}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
         >
-          <Pencil className="h-3 w-3 text-accent-600 dark:text-accent-400" aria-hidden="true" />
+          <Pencil className="h-3 w-3 text-fgMuted" aria-hidden="true" />
           <span>Edit file</span>
         </button>
       </div>
@@ -105,27 +105,25 @@ export function BlobEditorIsland({
   return (
     <form
       onSubmit={(event) => void handleSave(event)}
-      className="space-y-3 border-b border-zinc-200 bg-white p-4 text-xs dark:border-zinc-800/60 dark:bg-zinc-900/70"
+      className="space-y-3 border-b border-borderSubtle bg-surface p-4 text-[12px]"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 font-mono text-xs text-zinc-700 dark:text-zinc-200">
-          <Pencil className="h-3.5 w-3.5 text-accent-600 dark:text-accent-400" aria-hidden="true" />
+        <div className="flex items-center gap-2 font-mono text-[12px] text-fg">
+          <Pencil className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
           <span>Editing {filePath}</span>
-          <span className="rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[11px] dark:border-zinc-700 dark:bg-zinc-800">
+          <span className="rounded border border-borderSubtle bg-canvas px-1.5 py-0.5 text-[11px] text-fgBody">
             {refShort}
           </span>
         </div>
 
         <div className="flex items-center gap-1.5">
           {isMarkdown ? (
-            <div className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 p-0.5 dark:border-zinc-700 dark:bg-zinc-950">
+            <div className="inline-flex rounded-md border border-border bg-canvas p-0.5">
               <button
                 type="button"
                 onClick={() => setTab("write")}
                 className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium ${
-                  tab === "write"
-                    ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
-                    : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+                  tab === "write" ? "bg-surfaceHover text-fg" : "text-fgMuted hover:text-fg"
                 }`}
               >
                 <Pencil className="h-2.5 w-2.5" aria-hidden="true" />
@@ -135,9 +133,7 @@ export function BlobEditorIsland({
                 type="button"
                 onClick={() => setTab("preview")}
                 className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium ${
-                  tab === "preview"
-                    ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
-                    : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+                  tab === "preview" ? "bg-surfaceHover text-fg" : "text-fgMuted hover:text-fg"
                 }`}
               >
                 <Eye className="h-2.5 w-2.5" aria-hidden="true" />
@@ -150,7 +146,7 @@ export function BlobEditorIsland({
             onClick={() => setEditing(false)}
             disabled={saving}
             aria-label="Cancel file editing"
-            className="inline-flex h-7 items-center gap-1 rounded border border-zinc-200 px-2 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="inline-flex h-7 items-center gap-1 rounded border border-border bg-canvas px-2 text-[12px] text-fgBody hover:bg-surfaceHover hover:text-fg"
           >
             <X className="h-3 w-3" aria-hidden="true" />
             <span>Cancel</span>
@@ -161,7 +157,7 @@ export function BlobEditorIsland({
       {error ? (
         <div
           role="alert"
-          className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300"
+          className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
         >
           {error}
         </div>
@@ -175,10 +171,10 @@ export function BlobEditorIsland({
           spellCheck={false}
           disabled={saving}
           aria-label={`Edit ${filePath}`}
-          className="w-full rounded-md border border-zinc-300 bg-zinc-50 p-3 font-mono text-xs leading-5 text-zinc-900 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+          className="w-full rounded-md border border-border bg-canvas p-3 font-mono text-[12px] leading-5 text-fg focus:border-fgMuted focus:outline-none"
         />
       ) : (
-        <div className="rounded-md border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
+        <div className="rounded-md border border-border bg-canvas p-4">
           <MarkdownContent
             markdown={content || "_Nothing to preview yet._"}
             context={{
@@ -191,7 +187,7 @@ export function BlobEditorIsland({
         </div>
       )}
 
-      <div className="flex flex-col gap-2 border-t border-zinc-200 pt-3 sm:flex-row sm:items-center dark:border-zinc-800">
+      <div className="flex flex-col gap-2 border-t border-borderSubtle pt-3 sm:flex-row sm:items-center">
         <input
           type="text"
           value={commitMessage}
@@ -199,12 +195,12 @@ export function BlobEditorIsland({
           disabled={saving}
           placeholder={`Update ${filePath}`}
           aria-label="Commit message"
-          className="h-8 flex-1 rounded-md border border-zinc-200 bg-white px-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+          className="h-8 flex-1 rounded-md border border-border bg-canvas px-2.5 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
         />
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md bg-accent-600 px-3.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+          className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
         >
           <Check className="h-3.5 w-3.5" aria-hidden="true" />
           <span>{saving ? "Committing…" : "Save & commit"}</span>

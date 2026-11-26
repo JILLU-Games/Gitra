@@ -14,11 +14,15 @@
 import type { CacheContext, RequestMemo } from "@/worker/cache";
 import type { PackCatalogRow } from "@/worker/git/object-store/types";
 import { parseCommitRefs, parseTagTarget } from "@/worker/git/core/object-parse";
+import { parseTree } from "@/worker/git/operations/read/objects";
+import { isTreeMode } from "@/worker/git/operations/read/tree";
 import { readObject, findObject } from "@/worker/git/object-store/store";
 
 import type { ConnectivityCheckOptions } from "./types";
 
 const MAX_TAG_DEPTH = 8;
+const MAX_COMMIT_WALK = 256;
+const MAX_TREE_WALK = 2000;
 
 export async function runPackConnectivityCheck(opts: ConnectivityCheckOptions): Promise<void> {
   const {
@@ -61,16 +65,63 @@ export async function runPackConnectivityCheck(opts: ConnectivityCheckOptions): 
   );
 
   // Per-run caches to avoid repeated reads.
-  const hasCache = new Map<string, boolean>();
+  const locationCache = new Map<string, string | null>();
   const kindCache = new Map<string, FinalKind>();
+  const verifiedTrees = new Set<string>();
+  const verifiedCommits = new Set<string>();
+  let treesWalked = 0;
+
+  const findLocation = async (oid: string): Promise<string | null> => {
+    const lc = oid.toLowerCase();
+    const cached = locationCache.get(lc);
+    if (cached !== undefined) return cached;
+    const loc = await findObject(env, repoId, lc, scopedCacheCtx);
+    const packKey = loc ? loc.source.packKey : null;
+    locationCache.set(lc, packKey);
+    return packKey;
+  };
 
   const hasObject = async (oid: string): Promise<boolean> => {
-    const lc = oid.toLowerCase();
-    const cached = hasCache.get(lc);
-    if (cached !== undefined) return cached;
-    const found = !!(await findObject(env, repoId, lc, scopedCacheCtx));
-    hasCache.set(lc, found);
-    return found;
+    return (await findLocation(oid)) !== null;
+  };
+
+  const verifyTree = async (treeOid: string, visiting = new Set<string>()): Promise<boolean> => {
+    const lc = treeOid.toLowerCase();
+    if (verifiedTrees.has(lc) || visiting.has(lc)) return true;
+
+    const packKey = await findLocation(lc);
+    if (!packKey) return false;
+
+    // Trees already residing in committed active packs were validated on prior pushes.
+    if (packKey !== newPackKey) {
+      verifiedTrees.add(lc);
+      return true;
+    }
+
+    if (treesWalked >= MAX_TREE_WALK) {
+      log.warn("connectivity:tree-walk-limit", { repoId, limit: MAX_TREE_WALK });
+      return true;
+    }
+    treesWalked++;
+    visiting.add(lc);
+
+    const obj = await readObject(env, repoId, lc, scopedCacheCtx);
+    if (!obj || obj.type !== "tree") return false;
+
+    const entries = parseTree(obj.payload);
+    for (const entry of entries) {
+      // Gitlinks (mode 160000) reference external submodule commits, not objects in this repo.
+      if (entry.mode === "160000") continue;
+      if (isTreeMode(entry.mode)) {
+        if (!(await verifyTree(entry.oid, visiting))) return false;
+      } else {
+        if (!(await hasObject(entry.oid))) return false;
+      }
+    }
+
+    visiting.delete(lc);
+    verifiedTrees.add(lc);
+    return true;
   };
 
   const readKind = async (oid: string): Promise<FinalKind> => {
@@ -158,23 +209,67 @@ export async function runPackConnectivityCheck(opts: ConnectivityCheckOptions): 
 
         switch (kind.type) {
           case "commit": {
-            // Require root tree exists.
-            if (!kind.tree || !(await hasObject(kind.tree))) {
-              log.warn("connectivity:missing-tree", { ref: cmd.ref, tree: kind.tree });
-              statuses[i] = { ref: cmd.ref, ok: false, msg: "missing-objects" };
-              break;
-            }
-            // Require all parents exist.
-            for (const p of kind.parents) {
-              if (!(await hasObject(p))) {
-                log.warn("connectivity:missing-parent", { ref: cmd.ref, parent: p });
-                statuses[i] = { ref: cmd.ref, ok: false, msg: "missing-objects" };
+            const queue: Array<Extract<FinalKind, { type: "commit" }>> = [kind];
+            let commitsWalked = 0;
+            let missing = false;
+
+            while (queue.length > 0) {
+              const current = queue.shift()!;
+              if (verifiedCommits.has(current.oid)) continue;
+              verifiedCommits.add(current.oid);
+              commitsWalked++;
+
+              if (!current.tree || !(await verifyTree(current.tree))) {
+                log.warn("connectivity:missing-tree", {
+                  ref: cmd.ref,
+                  commit: current.oid,
+                  tree: current.tree,
+                });
+                missing = true;
                 break;
               }
+
+              for (const parentOid of current.parents) {
+                const parentPackKey = await findLocation(parentOid);
+                if (!parentPackKey) {
+                  log.warn("connectivity:missing-parent", { ref: cmd.ref, parent: parentOid });
+                  missing = true;
+                  break;
+                }
+                if (
+                  parentPackKey === newPackKey &&
+                  !verifiedCommits.has(parentOid.toLowerCase()) &&
+                  commitsWalked < MAX_COMMIT_WALK
+                ) {
+                  const parentKind = await readKind(parentOid);
+                  if (parentKind.type !== "commit") {
+                    log.warn("connectivity:invalid-parent-type", {
+                      ref: cmd.ref,
+                      parent: parentOid,
+                      type: parentKind.type,
+                    });
+                    missing = true;
+                    break;
+                  }
+                  queue.push(parentKind);
+                }
+              }
+
+              if (missing) break;
+            }
+
+            if (missing) {
+              statuses[i] = { ref: cmd.ref, ok: false, msg: "missing-objects" };
             }
             break;
           }
-          case "tree":
+          case "tree": {
+            if (!(await verifyTree(kind.oid))) {
+              log.warn("connectivity:missing-tree-entry", { ref: cmd.ref, tree: kind.oid });
+              statuses[i] = { ref: cmd.ref, ok: false, msg: "missing-objects" };
+            }
+            break;
+          }
           case "blob":
             // Already found by readObject — accept.
             break;

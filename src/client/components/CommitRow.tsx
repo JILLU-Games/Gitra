@@ -35,7 +35,7 @@ export function CommitRow({
 }: CommitRowProps) {
   const classes = [
     compact
-      ? "text-sm subrow bg-accent-50/20 dark:bg-accent-900/10 border-l-2 border-b border-b-zinc-200 border-l-accent-400 dark:border-b-zinc-800 dark:border-l-accent-700"
+      ? "text-[12px] subrow bg-canvas/70 border-l-2 border-b border-b-borderSubtle border-l-fgMuted"
       : "",
     rowClass || "",
   ]
@@ -63,16 +63,21 @@ export function CommitRow({
       tabIndex={onToggle ? 0 : undefined}
       aria-expanded={onToggle ? mergeExpanded : undefined}
     >
-      <td>
-        <a href={`/${owner}/${repo}/commit/${commit.oid}`}>{commit.shortOid}</a>
+      <td className="font-mono text-[12px]">
+        <a
+          href={`/${owner}/${repo}/commit/${commit.oid}`}
+          className="text-accent no-underline hover:underline"
+        >
+          {commit.shortOid}
+        </a>
       </td>
-      <td className={compact ? "pl-6" : undefined}>
+      <td className={`${compact ? "pl-6" : ""} text-fg`}>
         {isMerge ? (
           <span
-            className={`merge-badge mr-2 inline-block rounded px-2 py-0.5 text-xs ${
+            className={`merge-badge mr-2 inline-block rounded px-1.5 py-0.5 text-[11px] font-medium ${
               mergeExpanded
-                ? "bg-amber-200 text-amber-900 dark:border dark:border-amber-500/40 dark:bg-amber-900/40 dark:text-amber-200"
-                : "bg-sky-100 text-sky-900 dark:border dark:border-sky-500/40 dark:bg-sky-500/20 dark:text-sky-300"
+                ? "border border-amber-500/40 bg-amber-900/40 text-amber-200"
+                : "border border-sky-500/40 bg-sky-500/20 text-sky-300"
             }`}
           >
             Merge
@@ -80,8 +85,8 @@ export function CommitRow({
         ) : null}
         {commit.firstLine}
       </td>
-      <td className="text-zinc-500 dark:text-zinc-400">{commit.authorName}</td>
-      <td className="text-zinc-500 dark:text-zinc-400">{commit.when}</td>
+      <td className="text-[12px] text-fgMuted">{commit.authorName}</td>
+      <td className="text-[12px] text-fgMuted">{commit.when}</td>
     </tr>
   );
 }

@@ -15,24 +15,27 @@ export function Breadcrumbs({ items, parentHref }: BreadcrumbsProps) {
 
   return (
     <nav
-      className="mb-4 flex items-center gap-2 rounded-xl bg-zinc-100 dark:bg-zinc-800/30 p-3 text-sm"
+      className="mb-3 flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-surface px-3.5 py-2 font-mono text-[12px]"
       aria-label="Breadcrumbs"
     >
       {parentHref ? (
         <>
-          <a
-            href={parentHref}
-            className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-          >
+          <a href={parentHref} className="text-fgMuted no-underline hover:text-fg hover:underline">
             ..
           </a>
-          <span className="text-zinc-400 dark:text-zinc-500">/</span>
+          <span className="text-fgMuted">/</span>
         </>
       ) : null}
       {items.map((item, index) => (
         <span key={`${item.name}-${index}`}>
-          {item.href ? <a href={item.href}>{item.name}</a> : <strong>{item.name}</strong>}
-          {index < items.length - 1 ? " / " : null}
+          {item.href ? (
+            <a href={item.href} className="text-accent no-underline hover:underline">
+              {item.name}
+            </a>
+          ) : (
+            <strong className="font-semibold text-fg">{item.name}</strong>
+          )}
+          {index < items.length - 1 ? <span className="text-fgMuted"> / </span> : null}
         </span>
       ))}
     </nav>

@@ -52,19 +52,14 @@ export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePass
 
   if (isPrimaryAdmin) {
     return (
-      <div className="flex items-start gap-2.5 rounded-md border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-        <ShieldCheck
-          className="mt-0.5 h-4 w-4 shrink-0 text-accent-600 dark:text-accent-400"
-          aria-hidden="true"
-        />
+      <div className="flex items-start gap-2.5 rounded-md border border-border bg-surface px-4 py-3 text-[12px] text-fgBody">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-fgMuted" aria-hidden="true" />
         <div>
-          <p className="m-0 font-medium text-zinc-900 dark:text-zinc-100">
-            Managed by environment configuration
-          </p>
+          <p className="m-0 font-semibold text-fg">Managed by environment configuration</p>
           <p className="m-0 mt-0.5 leading-relaxed">
-            Primary admin sign-in uses <span className="font-mono">ADMIN_PASSWORD</span> (or Live
-            Preview demo credentials when unset). Directory account passwords are managed inside
-            Site Administration.
+            Primary admin sign-in uses <span className="font-mono text-fg">ADMIN_PASSWORD</span> (or
+            Live Preview demo credentials when unset). Directory account passwords are managed
+            inside Site Administration.
           </p>
         </div>
       </div>
@@ -73,8 +68,8 @@ export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePass
 
   if (!hasPassword) {
     return (
-      <div className="flex items-start gap-2.5 rounded-md border border-zinc-200 bg-white px-4 py-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-        <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" aria-hidden="true" />
+      <div className="flex items-start gap-2.5 rounded-md border border-border bg-surface px-4 py-3 text-[12px] text-fgBody">
+        <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-fgMuted" aria-hidden="true" />
         <p className="m-0 leading-relaxed">
           No local password is set for this account yet. Ask an administrator to assign an initial
           password.
@@ -144,21 +139,19 @@ export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePass
   }
 
   return (
-    <div className="rounded-md border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="rounded-md border border-border bg-surface p-4">
       <form onSubmit={handleSubmit} className="space-y-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="m-0 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-              Change password
-            </h3>
-            <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <h3 className="m-0 text-[14px] font-semibold text-fg">Change password</h3>
+            <p className="m-0 mt-0.5 text-[12px] text-fgMuted">
               Update your sign-in password ({PASSWORD_MIN_LENGTH}–{PASSWORD_MAX_LENGTH} characters).
             </p>
           </div>
           <button
             type="button"
             onClick={() => setShowPasswords((prev) => !prev)}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
           >
             {showPasswords ? (
               <>
@@ -177,7 +170,7 @@ export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePass
         {error ? (
           <div
             role="alert"
-            className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300"
+            className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
           >
             {error}
           </div>
@@ -186,7 +179,7 @@ export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePass
         {saved ? (
           <div
             role="status"
-            className="flex items-center gap-2 rounded-md border border-emerald-600/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-300"
+            className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300"
           >
             <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>Password updated. Use your new password the next time you sign in.</span>
@@ -197,7 +190,7 @@ export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePass
           <div>
             <label
               htmlFor="account-current-password"
-              className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+              className="mb-1 block text-[12px] font-medium text-fg"
             >
               Current password
             </label>
@@ -209,14 +202,14 @@ export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePass
               disabled={busy}
               autoComplete="current-password"
               required
-              className="h-9 w-full rounded-md border border-zinc-200 bg-white px-2.5 font-mono text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              className="h-8 w-full rounded-md border border-border bg-canvas px-3 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-60"
             />
           </div>
 
           <div>
             <label
               htmlFor="account-new-password"
-              className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+              className="mb-1 block text-[12px] font-medium text-fg"
             >
               New password
             </label>
@@ -230,14 +223,14 @@ export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePass
               minLength={PASSWORD_MIN_LENGTH}
               maxLength={PASSWORD_MAX_LENGTH}
               required
-              className="h-9 w-full rounded-md border border-zinc-200 bg-white px-2.5 font-mono text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              className="h-8 w-full rounded-md border border-border bg-canvas px-3 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-60"
             />
           </div>
 
           <div>
             <label
               htmlFor="account-confirm-password"
-              className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+              className="mb-1 block text-[12px] font-medium text-fg"
             >
               Confirm new password
             </label>
@@ -251,7 +244,7 @@ export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePass
               minLength={PASSWORD_MIN_LENGTH}
               maxLength={PASSWORD_MAX_LENGTH}
               required
-              className="h-9 w-full rounded-md border border-zinc-200 bg-white px-2.5 font-mono text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              className="h-8 w-full rounded-md border border-border bg-canvas px-3 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-60"
             />
           </div>
         </div>
@@ -260,7 +253,7 @@ export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePass
           <button
             type="submit"
             disabled={busy}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-600 bg-accent-600 px-3 text-xs font-medium text-white transition-colors hover:bg-accent-700 disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas transition-colors hover:bg-fgHover disabled:opacity-50"
           >
             <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
             <span>{busy ? "Updating..." : "Update password"}</span>

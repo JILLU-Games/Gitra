@@ -1,11 +1,19 @@
 import { applyD1Migrations } from "cloudflare:test";
 import { env, exports as workerExports } from "cloudflare:workers";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { newPrefixedId } from "@/worker/common";
 import { SESSION_COOKIE_HEADER_NAME } from "@/worker/auth/cookies";
+import { createDb } from "@/worker/db/d1/client";
+import {
+  insertMembershipIfMissing,
+  insertUserIfNew,
+  upsertNamespaceDirectoryMeta,
+} from "@/worker/db/d1/dal";
 
 import { extractSessionToken, sessionCookieHeader } from "./util/authCookies";
 import { readAppD1Migrations } from "./util/d1Migrations";
+import { mintSessionCookie, setupRepoForTests } from "./util/repoSeed";
 
 beforeAll(async () => {
   await applyD1Migrations(env.DB, readAppD1Migrations());
@@ -195,6 +203,72 @@ describe("admin login and session lifecycle", () => {
       expect(res.headers.get("location")).toBe("/auth");
     } finally {
       env.SESSION_SECRET = original;
+    }
+  });
+
+  it("revokes session when user account is disabled in namespace directory meta", async () => {
+    const owner = `sess-dis-${Math.random().toString(36).slice(2, 8)}`;
+    const seeded = await setupRepoForTests(env, owner, "site");
+    await upsertNamespaceDirectoryMeta(env.DB, seeded.namespaceId, {
+      displayName: owner,
+      role: "member",
+      status: "disabled",
+      now: Date.now(),
+    });
+
+    const res = await workerExports.default.fetch("https://example.com/auth/account", {
+      headers: { Cookie: seeded.cookieHeader },
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/auth");
+  });
+
+  it("defaults users without a directory account row to least-privilege viewer role", async () => {
+    const owner = `sess-ns-${Math.random().toString(36).slice(2, 8)}`;
+    const seeded = await setupRepoForTests(env, owner, "site", { visibility: "public" });
+    const db = createDb(env.DB);
+    const userId = newPrefixedId("user");
+    await insertUserIfNew(db, {
+      id: userId,
+      tesseraSub: `nodir-${userId}`,
+      createdAt: Date.now(),
+    });
+    await insertMembershipIfMissing(db, {
+      namespaceId: seeded.namespaceId,
+      userId,
+      createdAt: Date.now(),
+    });
+    const cookie = await mintSessionCookie(env, userId);
+
+    // A user with no directory account row falls back to viewer (403 on admin UI).
+    const res = await workerExports.default.fetch(`https://example.com/${owner}/site/admin`, {
+      headers: { Cookie: cookie },
+      redirect: "manual",
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("fails closed when D1 directory metadata lookup throws", async () => {
+    const owner = `sess-err-${Math.random().toString(36).slice(2, 8)}`;
+    const seeded = await setupRepoForTests(env, owner, "site");
+
+    const origPrepare = env.DB.prepare.bind(env.DB);
+    const spy = vi.spyOn(env.DB, "prepare").mockImplementation((sql: string) => {
+      if (sql.includes("namespace_directory_meta")) {
+        throw new Error("Simulated D1 outage");
+      }
+      return origPrepare(sql);
+    });
+    try {
+      const res = await workerExports.default.fetch("https://example.com/auth/account", {
+        headers: { Cookie: seeded.cookieHeader },
+        redirect: "manual",
+      });
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toBe("/auth");
+    } finally {
+      spy.mockRestore();
     }
   });
 });

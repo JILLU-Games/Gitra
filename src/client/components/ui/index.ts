@@ -6,3 +6,5 @@ export { Badge } from "./badge";
 export { EmptyState } from "./empty-state";
 export { ErrorBanner } from "./error-banner";
 export { PageHeader } from "./page-header";
+export { ConfirmModal } from "./confirm-modal";
+export type { ConfirmModalProps } from "./confirm-modal";

@@ -9,21 +9,22 @@ import type { Logger } from "@/worker/common/logger";
 import type { PackCatalogRow } from "../../db/schema";
 import type { RepoLease, RepoStateSchema } from "../../repoState";
 
-import { asTypedStorage } from "../../repoState";
+import { asTypedStorage, asTypedSyncStorage } from "../../repoState";
 import {
   getDb,
-  getPackCatalogRow,
-  listActivePackCatalog,
-  supersedePackCatalogRows,
-  upsertPackCatalogRow,
+  getPackCatalogRowSync,
+  listActivePackCatalogSync,
+  supersedePackCatalogRowsSync,
+  upsertPackCatalogRowSync,
 } from "../../db";
 import { clearExpiredLeases } from "../leases";
 import { getActivePackCatalogSnapshot } from "../state";
 import {
-  bumpPacksetVersion,
+  bumpPacksetVersionSync,
   COMPACT_LEASE_TTL_MS,
   COMPACTION_REARM_DELAY_MS,
   ensureRepoMetadataDefaults,
+  ensureRepoMetadataDefaultsSync,
   LEASE_RETRY_AFTER_SECONDS,
 } from "../shared";
 import { activeLeaseOrUndefined } from "../activity";
@@ -127,7 +128,7 @@ export async function beginCompactionState(args: {
 
 /**
  * Atomically commit a compaction result: insert the new pack, supersede source
- * packs, bump the packset version, and mirror legacy keys.
+ * packs, bump the packset version, and update compactionWantedAt/lease inside `transactionSync`.
  *
  * Rejects with `status: "retry"` when the lease is stale, a receive lease
  * appeared, the packset version changed, or source packs were modified since
@@ -148,104 +149,116 @@ export async function commitCompactionState(args: {
   };
   logger?: Logger;
 }): Promise<CommitCompactionResult> {
-  const store = asTypedStorage<RepoStateSchema>(args.ctx.storage);
-  await ensureRepoMetadataDefaults(store);
+  const txResult = args.ctx.storage.transactionSync((): CommitCompactionResult => {
+    const kv = asTypedSyncStorage<RepoStateSchema>(args.ctx.storage);
+    ensureRepoMetadataDefaultsSync(kv);
 
-  const lease = await store.get("compactLease");
-  if (!lease || lease.token !== args.token) {
+    const lease = kv.get("compactLease");
+    if (!lease || lease.token !== args.token) {
+      return {
+        status: "retry",
+        reason: "lease-mismatch",
+        message: "Compaction lease is no longer active for this request.",
+      };
+    }
+
+    const now = Date.now();
+    const receiveLease = activeLeaseOrUndefined(kv.get("receiveLease"), now);
+    if (receiveLease) {
+      kv.delete("compactLease");
+      return {
+        status: "retry",
+        reason: "receive-active",
+        message: "A receive lease became active before compaction could commit.",
+      };
+    }
+
+    const currentPacksetVersion = kv.get("packsetVersion") || 0;
+    if (currentPacksetVersion !== args.packsetVersion) {
+      kv.delete("compactLease");
+      return {
+        status: "retry",
+        reason: "packset-changed",
+        message: "The active pack catalog changed before compaction could commit.",
+      };
+    }
+
+    const db = getDb(args.ctx.storage);
+    const currentRows: PackCatalogRow[] = [];
+    for (const sourcePack of args.sourcePacks) {
+      const row = getPackCatalogRowSync(db, sourcePack.packKey);
+      if (row) currentRows.push(row);
+    }
+    if (!rowsMatchForCommit(args.sourcePacks, currentRows)) {
+      kv.delete("compactLease");
+      return {
+        status: "retry",
+        reason: "source-changed",
+        message: "One or more source packs changed before compaction could commit.",
+      };
+    }
+
+    let seqLo = args.sourcePacks[0]!.seqLo;
+    let seqHi = args.sourcePacks[0]!.seqHi;
+    for (const sourcePack of args.sourcePacks) {
+      if (sourcePack.seqLo < seqLo) seqLo = sourcePack.seqLo;
+      if (sourcePack.seqHi > seqHi) seqHi = sourcePack.seqHi;
+    }
+
+    upsertPackCatalogRowSync(db, {
+      packKey: args.stagedPack.packKey,
+      kind: "compact",
+      state: "active",
+      tier: args.targetTier,
+      seqLo,
+      seqHi,
+      objectCount: args.stagedPack.objectCount,
+      packBytes: args.stagedPack.packBytes,
+      idxBytes: args.stagedPack.idxBytes,
+      createdAt: now,
+      supersededBy: null,
+    });
+    supersedePackCatalogRowsSync(
+      db,
+      args.sourcePacks.map((row) => row.packKey),
+      args.stagedPack.packKey
+    );
+
+    const activeCatalog = listActivePackCatalogSync(db);
+    const nextPackCatalogVersion = bumpPacksetVersionSync(kv);
+
+    const shouldRequeue = catalogNeedsCompaction(activeCatalog);
+    if (shouldRequeue) {
+      kv.put("compactionWantedAt", now);
+    } else {
+      kv.delete("compactionWantedAt");
+    }
+
+    kv.delete("compactLease");
     return {
-      status: "retry",
-      reason: "lease-mismatch",
-      message: "Compaction lease is no longer active for this request.",
+      status: "committed",
+      packCatalogVersion: nextPackCatalogVersion,
+      shouldRequeue,
+      supersededPackKeys: args.sourcePacks.map((row) => row.packKey),
+      targetPackKey: args.stagedPack.packKey,
     };
-  }
-
-  const receiveLease = activeLeaseOrUndefined(await store.get("receiveLease"), Date.now());
-  if (receiveLease) {
-    await store.delete("compactLease");
-    return {
-      status: "retry",
-      reason: "receive-active",
-      message: "A receive lease became active before compaction could commit.",
-    };
-  }
-
-  const currentPacksetVersion = (await store.get("packsetVersion")) || 0;
-  if (currentPacksetVersion !== args.packsetVersion) {
-    await store.delete("compactLease");
-    return {
-      status: "retry",
-      reason: "packset-changed",
-      message: "The active pack catalog changed before compaction could commit.",
-    };
-  }
-
-  const db = getDb(args.ctx.storage);
-  const currentRows: PackCatalogRow[] = [];
-  for (const sourcePack of args.sourcePacks) {
-    const row = await getPackCatalogRow(db, sourcePack.packKey);
-    if (row) currentRows.push(row);
-  }
-  if (!rowsMatchForCommit(args.sourcePacks, currentRows)) {
-    await store.delete("compactLease");
-    return {
-      status: "retry",
-      reason: "source-changed",
-      message: "One or more source packs changed before compaction could commit.",
-    };
-  }
-
-  let seqLo = args.sourcePacks[0]!.seqLo;
-  let seqHi = args.sourcePacks[0]!.seqHi;
-  for (const sourcePack of args.sourcePacks) {
-    if (sourcePack.seqLo < seqLo) seqLo = sourcePack.seqLo;
-    if (sourcePack.seqHi > seqHi) seqHi = sourcePack.seqHi;
-  }
-
-  await upsertPackCatalogRow(db, {
-    packKey: args.stagedPack.packKey,
-    kind: "compact",
-    state: "active",
-    tier: args.targetTier,
-    seqLo,
-    seqHi,
-    objectCount: args.stagedPack.objectCount,
-    packBytes: args.stagedPack.packBytes,
-    idxBytes: args.stagedPack.idxBytes,
-    createdAt: Date.now(),
-    supersededBy: null,
   });
-  await supersedePackCatalogRows(
-    db,
-    args.sourcePacks.map((row) => row.packKey),
-    args.stagedPack.packKey
-  );
 
-  const activeCatalog = await listActivePackCatalog(db);
-  const nextPackCatalogVersion = await bumpPacksetVersion(store);
+  if (txResult.status !== "committed") {
+    return txResult;
+  }
 
-  const shouldRequeue = catalogNeedsCompaction(activeCatalog);
-  if (shouldRequeue) {
-    await store.put("compactionWantedAt", Date.now());
+  if (txResult.shouldRequeue) {
     await scheduleCompactionWake(args.ctx, args.env);
-  } else {
-    await store.delete("compactionWantedAt");
   }
 
-  await store.delete("compactLease");
   args.logger?.info("compaction:commit", {
-    targetPackKey: args.stagedPack.packKey,
-    supersededCount: args.sourcePacks.length,
-    shouldRequeue,
-    packCatalogVersion: nextPackCatalogVersion,
+    targetPackKey: txResult.targetPackKey,
+    supersededCount: txResult.supersededPackKeys.length,
+    shouldRequeue: txResult.shouldRequeue,
+    packCatalogVersion: txResult.packCatalogVersion,
   });
-  return {
-    status: "committed",
-    packCatalogVersion: nextPackCatalogVersion,
-    shouldRequeue,
-    supersededPackKeys: args.sourcePacks.map((row) => row.packKey),
-    targetPackKey: args.stagedPack.packKey,
-  };
+  return txResult;
 }
 
 /**

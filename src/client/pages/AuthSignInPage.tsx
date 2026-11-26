@@ -16,6 +16,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   missing_credentials: "Enter both a username and password to sign in.",
   invalid_credentials: "Invalid username or password. Check your credentials and try again.",
   account_disabled: "This account is disabled. Contact an administrator to restore access.",
+  rate_limited: "Too many failed sign-in attempts. Wait a few minutes and try again.",
   session_create_failed:
     "Could not start a session after sign-in. Try again, then check the worker logs if it persists.",
 };
@@ -37,17 +38,15 @@ export function AuthSignInPage({
   const errorText = describeError(errorCode);
 
   return (
-    <div className="mx-auto max-w-md py-8 sm:py-12">
+    <div className="mx-auto max-w-md py-6 sm:py-10">
       <div className="mb-4">
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <h1 className="m-0 text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-            Sign in
-          </h1>
+          <h1 className="m-0 text-[18px] font-semibold tracking-tight text-fg">Sign in</h1>
           <span
             className={
               demoMode
-                ? "inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-amber-700 dark:text-amber-300"
-                : "inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+                ? "inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-amber-300"
+                : "inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-emerald-400"
             }
           >
             {demoMode ? (
@@ -63,10 +62,10 @@ export function AuthSignInPage({
             )}
           </span>
         </div>
-        <p className="m-0 text-[13px] leading-5 text-zinc-600 dark:text-zinc-300">
+        <p className="m-0 text-[13px] leading-relaxed text-fgBody">
           Team member &amp; Admin login — sign in with your username or{" "}
-          <span className="font-mono text-zinc-800 dark:text-zinc-200">@handle</span> and password
-          to access repositories and workspace settings.
+          <span className="font-mono text-fg">@handle</span> and password to access repositories and
+          workspace settings.
         </p>
       </div>
 
@@ -76,8 +75,8 @@ export function AuthSignInPage({
         </div>
       ) : null}
 
-      <Card className="p-4 sm:p-5">
-        <form method="post" action="/auth/login" className="grid gap-4">
+      <Card className="p-4">
+        <form method="post" action="/auth/login" className="grid gap-3.5">
           {nextPath ? <input type="hidden" name="next" value={nextPath} /> : null}
           <Input
             label="Username or @handle"
@@ -99,18 +98,18 @@ export function AuthSignInPage({
             required
           />
           <Button type="submit" variant="primary" size="md" className="w-full">
-            <LogIn className="h-4 w-4" aria-hidden="true" />
+            <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
             Sign in
           </Button>
         </form>
 
         {demoMode ? (
-          <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-            <div className="mb-2.5 flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold tracking-wide text-zinc-700 uppercase dark:text-zinc-300">
+          <div className="mt-4 border-t border-border pt-3.5">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold tracking-wider text-fgMuted uppercase">
                 Local Dev Quick Access
               </span>
-              <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span className="font-mono text-[11px] text-fgMuted">
                 Disabled in production builds
               </span>
             </div>
@@ -132,23 +131,23 @@ export function AuthSignInPage({
                 </Button>
               </form>
             </div>
-            <div className="mt-2.5 grid gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-700/80 dark:bg-zinc-800/45 dark:text-zinc-300">
+            <div className="mt-2.5 grid gap-1 rounded-md border border-border bg-canvas px-3 py-2 text-[12px] text-fgBody">
               <p className="m-0 flex items-center justify-between gap-3">
                 <span>Admin demo account</span>
-                <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">
+                <span className="font-mono font-medium text-fg">
                   {`${demoUsername} / ${demoPassword}`}
                 </span>
               </p>
               <p className="m-0 flex items-center justify-between gap-3">
                 <span>Test user (Users Panel)</span>
-                <span className="font-mono font-medium text-zinc-900 dark:text-zinc-100">
+                <span className="font-mono font-medium text-fg">
                   {`${demoUserUsername} / ${demoUserPassword}`}
                 </span>
               </p>
             </div>
           </div>
         ) : (
-          <div className="mt-4 border-t border-zinc-200 pt-3 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+          <div className="mt-4 border-t border-border pt-3 text-[12px] text-fgMuted">
             Authenticated sessions use encrypted HttpOnly cookies backed by Cloudflare D1.
           </div>
         )}

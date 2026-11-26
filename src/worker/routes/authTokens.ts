@@ -1,4 +1,4 @@
-import { canWriteRepositories } from "@/shared/admin/panel";
+import { canAccessAdminPanel, canIssueGlobalPat, canWriteRepositories } from "@/shared/admin/panel";
 import { safeParseJsonRequest } from "@/shared/web";
 import { validateRepoSlugForRoute, validateSlugForRoute } from "@/shared/slugs";
 import { json, newPrefixedId } from "@/worker/common";
@@ -6,6 +6,7 @@ import {
   findNamespaceBySlug,
   findRepositoryByNamespaceAndSlug,
   getNamespaceProfileMeta,
+  insertPatGlobalGrant,
   insertPatWithGrants,
   listNamespacesForUser,
   listPatsForUser,
@@ -46,7 +47,7 @@ async function renderUserSettingsView(
   const primaryNs =
     namespaces.find((ns) => ns.slug === viewer.primaryNamespaceSlug) ?? namespaces[0];
   const [tokens, profileMeta, repoMeta] = await Promise.all([
-    summarizeTokens(db, tokenRows),
+    summarizeTokens(db, tokenRows, c.env.DB),
     primaryNs
       ? getNamespaceProfileMeta(c.env.DB, primaryNs.id)
       : Promise.resolve({ bio: "", location: "", website: "" }),
@@ -77,6 +78,7 @@ async function renderUserSettingsView(
         visibility: row.repository.visibility,
         description: repoMeta.get(row.repository.id)?.description ?? "",
         pinned: repoMeta.get(row.repository.id)?.pinned ?? false,
+        homePinned: repoMeta.get(row.repository.id)?.homePinned ?? false,
         updatedAt: row.repository.updatedAt,
       })),
       tokens,
@@ -112,7 +114,7 @@ export function registerAuthTokenRoutes(router: AppRouter) {
     if (!viewer) return json({ error: "Unauthorized" }, 401);
     const db = c.var.db;
     const tokens = await listPatsForUser(db, viewer.userId);
-    const summaries = await summarizeTokens(db, tokens);
+    const summaries = await summarizeTokens(db, tokens, c.env.DB);
     return json({ tokens: summaries });
   });
 
@@ -132,6 +134,7 @@ export function registerAuthTokenRoutes(router: AppRouter) {
     // Required tagged-union body shape:
     //   { scope: "namespace", name, namespaceSlug, level }
     //   { scope: "repo", name, namespaceSlug, repoSlug, level }
+    //   { scope: "global", name, level } (admin only)
     // `scope` and `level` are both required so contract drift surfaces as
     // a 400 instead of silently coercing. `level === "push"` includes pull
     // access by construction (see `pat_*_grants.level` CHECK).
@@ -139,7 +142,7 @@ export function registerAuthTokenRoutes(router: AppRouter) {
     const parsedBody = PatCreateRequestSchema.safeParse(rawBody);
     if (!parsedBody.success) {
       log.warn("pat:create-invalid-scope");
-      return json({ error: "Body must include scope: 'namespace' or 'repo'" }, 400);
+      return json({ error: "Body must include scope: 'namespace', 'repo', or 'global'" }, 400);
     }
     const body = parsedBody.data;
 
@@ -157,6 +160,43 @@ export function registerAuthTokenRoutes(router: AppRouter) {
       log.warn("pat:create-viewer-push-blocked", { userId: viewer.userId, role: viewer.role });
       return json({ error: "Viewer accounts can only create read-only (pull) tokens" }, 403);
     }
+
+    const db = c.var.db;
+    if (body.scope === "global") {
+      if (!canIssueGlobalPat(viewer.role)) {
+        log.warn("pat:create-global-forbidden", { userId: viewer.userId, role: viewer.role });
+        return json({ error: "Only active administrators can create all-namespace tokens" }, 403);
+      }
+      const generated = generatePatPlaintext();
+      const hash = await hashPatPlaintext(generated.plaintext);
+      const now = Date.now();
+      const patId = newPrefixedId("pat");
+      await insertPatWithGrants(db, {
+        pat: {
+          id: patId,
+          userId: viewer.userId,
+          name: nameValidation.name,
+          prefix: generated.publicPrefix,
+          hash,
+          createdAt: now,
+          expiresAt: null,
+          revokedAt: null,
+          lastUsedAt: null,
+        },
+        namespaceGrants: [],
+        repoGrants: [],
+      });
+      await insertPatGlobalGrant(c.env.DB, { patId, level, createdAt: now });
+      log.info("pat:create-ok", {
+        userId: viewer.userId,
+        patId,
+        prefix: generated.publicPrefix,
+        scope: "global",
+        level,
+      });
+      return json({ id: patId, plaintext: generated.plaintext, prefix: generated.publicPrefix });
+    }
+
     const slugValidation = validateSlugForRoute(body.namespaceSlug);
     if (!slugValidation.ok) {
       log.warn("pat:create-invalid-namespace-slug", { reason: slugValidation.reason });
@@ -171,13 +211,13 @@ export function registerAuthTokenRoutes(router: AppRouter) {
       }
       repoSlug = repoSlugValidation.slug;
     }
-    const db = c.var.db;
     const namespace = await findNamespaceBySlug(db, slugValidation.slug);
     if (!namespace) {
       log.warn("pat:create-namespace-not-found", { namespaceSlug: slugValidation.slug });
       return json({ error: "Namespace not found" }, 404);
     }
-    if (!(await viewerIsNamespaceMember(db, viewer.userId, namespace.id))) {
+    const isMember = await viewerIsNamespaceMember(db, viewer.userId, namespace.id);
+    if (!canAccessAdminPanel(viewer.role) && !isMember) {
       log.warn("pat:create-not-member", {
         userId: viewer.userId,
         namespaceId: namespace.id,

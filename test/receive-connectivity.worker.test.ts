@@ -328,3 +328,111 @@ it("receive-pack connectivity: accepts nested tag->tag->tree present", async () 
   expect(lines.some((l) => l.startsWith("unpack ok"))).toBe(true);
   expect(lines).toContain("ok refs/tags/v2");
 });
+
+it("receive-pack connectivity: rejects commit with missing nested blob and missing subtree", async () => {
+  const { buildTreePayload } = await import("./util/packed-repo");
+  const { encodeGitObject } = await import("@/worker/git/core/objects");
+
+  const owner = "o";
+  const repo = uniqueRepoId("r-nested-tree-missing");
+  await setupRepoForTests(env, owner, repo);
+  const url = `https://example.com/${owner}/${repo}/git-receive-pack`;
+
+  // 1. Subtree references a missing blob
+  const missingBlobOid = "d".repeat(40);
+  const subTreePayload = buildTreePayload([
+    { mode: "100644", name: "missing.txt", oid: missingBlobOid },
+  ]);
+  const subTree = await encodeGitObject("tree", subTreePayload);
+  const rootTreePayload = buildTreePayload([{ mode: "40000", name: "src", oid: subTree.oid }]);
+  const rootTree = await encodeGitObject("tree", rootTreePayload);
+  const author = "You <you@example.com> 0 +0000";
+  const commitPayload = new TextEncoder().encode(
+    `tree ${rootTree.oid}\nauthor ${author}\ncommitter ${author}\n\nmissing nested blob\n`
+  );
+  const commit = await encodeGitObject("commit", commitPayload);
+  const pack1 = await buildPack([
+    { type: "tree", payload: subTreePayload },
+    { type: "tree", payload: rootTreePayload },
+    { type: "commit", payload: commitPayload },
+  ]);
+  const res1 = await postReceivePack(
+    url,
+    concatChunks([
+      pktLine(`${zero40()} ${commit.oid} refs/heads/main\0 report-status ofs-delta agent=test\n`),
+      flushPkt(),
+      pack1,
+    ])
+  );
+  const lines1 = decodePktLines(new Uint8Array(await res1.arrayBuffer()))
+    .filter((i) => i.type === "line")
+    .map((i: any) => (i.text as string).trim());
+  expect(lines1.some((l) => l.startsWith("ng refs/heads/main") && /missing-objects/.test(l))).toBe(
+    true
+  );
+
+  // 2. Direct tree ref push referencing a missing subtree
+  const missingSubtreeOid = "e".repeat(40);
+  const badDirectTreePayload = buildTreePayload([
+    { mode: "40000", name: "lib", oid: missingSubtreeOid },
+  ]);
+  const badDirectTree = await encodeGitObject("tree", badDirectTreePayload);
+  const pack2 = await buildPack([{ type: "tree", payload: badDirectTreePayload }]);
+  const res2 = await postReceivePack(
+    url,
+    concatChunks([
+      pktLine(
+        `${zero40()} ${badDirectTree.oid} refs/tags/bad-tree\0 report-status ofs-delta agent=test\n`
+      ),
+      flushPkt(),
+      pack2,
+    ])
+  );
+  const lines2 = decodePktLines(new Uint8Array(await res2.arrayBuffer()))
+    .filter((i) => i.type === "line")
+    .map((i: any) => (i.text as string).trim());
+  expect(
+    lines2.some((l) => l.startsWith("ng refs/tags/bad-tree") && /missing-objects/.test(l))
+  ).toBe(true);
+});
+
+it("receive-pack connectivity: accepts commit trees containing 160000 submodule gitlinks", async () => {
+  const { buildTreePayload } = await import("./util/packed-repo");
+  const { encodeGitObject } = await import("@/worker/git/core/objects");
+
+  const owner = "o";
+  const repo = uniqueRepoId("r-gitlink-ok");
+  await setupRepoForTests(env, owner, repo);
+  const url = `https://example.com/${owner}/${repo}/git-receive-pack`;
+
+  const blobPayload = new TextEncoder().encode("main file\n");
+  const blob = await encodeGitObject("blob", blobPayload);
+  const treePayload = buildTreePayload([
+    { mode: "100644", name: "README.md", oid: blob.oid },
+    { mode: "160000", name: "vendor/submod", oid: "f".repeat(40) },
+  ]);
+  const tree = await encodeGitObject("tree", treePayload);
+  const author = "You <you@example.com> 0 +0000";
+  const commitPayload = new TextEncoder().encode(
+    `tree ${tree.oid}\nauthor ${author}\ncommitter ${author}\n\nwith submodule gitlink\n`
+  );
+  const commit = await encodeGitObject("commit", commitPayload);
+  const pack = await buildPack([
+    { type: "blob", payload: blobPayload },
+    { type: "tree", payload: treePayload },
+    { type: "commit", payload: commitPayload },
+  ]);
+
+  const res = await postReceivePack(
+    url,
+    concatChunks([
+      pktLine(`${zero40()} ${commit.oid} refs/heads/main\0 report-status ofs-delta agent=test\n`),
+      flushPkt(),
+      pack,
+    ])
+  );
+  const lines = decodePktLines(new Uint8Array(await res.arrayBuffer()))
+    .filter((i) => i.type === "line")
+    .map((i: any) => (i.text as string).trim());
+  expect(lines).toContain("ok refs/heads/main");
+});

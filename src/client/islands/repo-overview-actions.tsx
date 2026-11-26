@@ -10,6 +10,7 @@ import {
   FilePlus2,
   GitBranch,
   Globe,
+  Home,
   Lock,
   Pencil,
   Pin,
@@ -111,12 +112,9 @@ export function RepoOverviewActionsIsland({
         <button
           type="button"
           onClick={() => triggerNewFile(true)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
         >
-          <FilePlus2
-            className="h-3.5 w-3.5 text-accent-600 dark:text-accent-400"
-            aria-hidden="true"
-          />
+          <FilePlus2 className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
           <span>Add README</span>
         </button>
       ) : null}
@@ -125,9 +123,9 @@ export function RepoOverviewActionsIsland({
         <button
           type="button"
           onClick={() => triggerNewFile(false)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
         >
-          <FilePlus2 className="h-3.5 w-3.5" aria-hidden="true" />
+          <FilePlus2 className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
           <span>Add file</span>
         </button>
       ) : null}
@@ -138,7 +136,7 @@ export function RepoOverviewActionsIsland({
           onClick={() => setCodeOpen((open) => !open)}
           aria-expanded={codeOpen}
           aria-haspopup="dialog"
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-xs font-medium text-white hover:bg-accent-700"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md bg-fg px-3 text-[12px] font-semibold text-canvas hover:bg-fgHover"
         >
           <Code2 className="h-3.5 w-3.5" aria-hidden="true" />
           <span>Code</span>
@@ -149,36 +147,36 @@ export function RepoOverviewActionsIsland({
           <div
             role="dialog"
             aria-label="Clone repository"
-            className="absolute right-0 z-30 mt-1.5 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-zinc-200 bg-white p-3.5 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+            className="absolute right-0 z-30 mt-1.5 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-surface p-3.5 text-[12px]"
           >
             <div className="mb-2 flex items-center justify-between">
-              <span className="font-semibold text-zinc-900 dark:text-zinc-100">Clone HTTPS</span>
+              <span className="font-semibold text-fg">Clone HTTPS</span>
               <button
                 type="button"
                 onClick={() => setCodeOpen(false)}
                 aria-label="Close clone dialog"
-                className="rounded p-0.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                className="rounded p-0.5 text-fgMuted hover:bg-surfaceHover hover:text-fg"
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </div>
-            <div className="flex items-center overflow-hidden rounded-md border border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950">
+            <div className="flex items-center overflow-hidden rounded-md border border-border bg-canvas">
               <input
                 type="text"
                 readOnly
                 value={cloneUrl}
                 aria-label="HTTPS clone URL"
                 onFocus={(event) => event.currentTarget.select()}
-                className="h-8 min-w-0 flex-1 bg-transparent px-2.5 font-mono text-[11px] text-zinc-800 focus:outline-none dark:text-zinc-200"
+                className="h-8 min-w-0 flex-1 bg-transparent px-2.5 font-mono text-[12px] text-fg focus:outline-none"
               />
               <button
                 type="button"
                 onClick={() => void copyText(cloneUrl, "url")}
-                className="inline-flex h-8 shrink-0 items-center gap-1 border-l border-zinc-200 bg-white px-2.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                className="inline-flex h-8 shrink-0 items-center gap-1 border-l border-border bg-surface px-2.5 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
               >
                 {copiedUrl ? (
                   <>
-                    <Check className="h-3 w-3 text-emerald-500" aria-hidden="true" />
+                    <Check className="h-3 w-3 text-emerald-400" aria-hidden="true" />
                     <span>Copied</span>
                   </>
                 ) : (
@@ -190,16 +188,16 @@ export function RepoOverviewActionsIsland({
               </button>
             </div>
             {copyError ? (
-              <p role="alert" className="m-0 mt-2 text-[11px] text-amber-700 dark:text-amber-300">
+              <p role="alert" className="m-0 mt-2 text-[11px] text-amber-300">
                 Clipboard unavailable — select the URL above and copy manually.
               </p>
             ) : null}
-            <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+            <div className="mt-2.5 flex items-center justify-between gap-2 text-[11px] text-fgMuted">
               <span>Use a scoped PAT for private clones or pushes.</span>
               <button
                 type="button"
                 onClick={() => void copyText(`git clone ${cloneUrl}`, "snippet")}
-                className="shrink-0 font-medium text-accent-600 hover:underline dark:text-accent-400"
+                className="shrink-0 font-medium text-accent hover:underline"
               >
                 {copiedSnippet ? "Copied command" : "Copy git clone"}
               </button>
@@ -316,29 +314,24 @@ export function RepoFileCreatorIsland({
   return (
     <form
       onSubmit={(event) => void handleCommitFile(event)}
-      className="rounded-md border border-zinc-200 bg-white p-3.5 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+      className="rounded-md border border-border bg-surface p-3.5 text-[12px]"
     >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 pb-2.5 dark:border-zinc-800">
-        <div className="flex items-center gap-2 font-medium text-zinc-900 dark:text-zinc-100">
-          <FilePlus2
-            className="h-3.5 w-3.5 text-accent-600 dark:text-accent-400"
-            aria-hidden="true"
-          />
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-borderSubtle pb-2.5">
+        <div className="flex items-center gap-2 font-semibold text-fg">
+          <FilePlus2 className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
           <span>Commit new file to</span>
-          <code className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] dark:bg-zinc-800">
+          <code className="rounded border border-borderSubtle bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-fgBody">
             {refShort}
           </code>
         </div>
         <div className="flex items-center gap-1.5">
           {isMarkdownFile ? (
-            <div className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 p-0.5 dark:border-zinc-700 dark:bg-zinc-950">
+            <div className="inline-flex rounded-md border border-border bg-canvas p-0.5">
               <button
                 type="button"
                 onClick={() => setEditorTab("write")}
                 className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium ${
-                  editorTab === "write"
-                    ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
-                    : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+                  editorTab === "write" ? "bg-surfaceHover text-fg" : "text-fgMuted hover:text-fg"
                 }`}
               >
                 <Pencil className="h-2.5 w-2.5" aria-hidden="true" />
@@ -348,9 +341,7 @@ export function RepoFileCreatorIsland({
                 type="button"
                 onClick={() => setEditorTab("preview")}
                 className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium ${
-                  editorTab === "preview"
-                    ? "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
-                    : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
+                  editorTab === "preview" ? "bg-surfaceHover text-fg" : "text-fgMuted hover:text-fg"
                 }`}
               >
                 <Eye className="h-2.5 w-2.5" aria-hidden="true" />
@@ -363,7 +354,7 @@ export function RepoFileCreatorIsland({
             onClick={() => setOpen(false)}
             disabled={committing}
             aria-label="Cancel new file"
-            className="rounded border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            className="rounded border border-border bg-canvas p-1 text-fgMuted hover:bg-surfaceHover hover:text-fg"
           >
             <X className="h-3 w-3" aria-hidden="true" />
           </button>
@@ -373,7 +364,7 @@ export function RepoFileCreatorIsland({
       {commitError ? (
         <div
           role="alert"
-          className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300"
+          className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
         >
           <span>{commitError}</span>
           {sessionExpired ? (
@@ -386,10 +377,7 @@ export function RepoFileCreatorIsland({
 
       <div className="space-y-3">
         <div>
-          <label
-            htmlFor="new-file-path"
-            className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400"
-          >
+          <label htmlFor="new-file-path" className="mb-1 block text-[12px] font-medium text-fg">
             File path
           </label>
           <input
@@ -400,7 +388,7 @@ export function RepoFileCreatorIsland({
             disabled={committing}
             placeholder="README.md or docs/getting-started.md"
             required
-            className="h-8 w-full rounded-md border border-zinc-300 bg-zinc-50 px-2.5 font-mono text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+            className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
           />
         </div>
 
@@ -408,7 +396,7 @@ export function RepoFileCreatorIsland({
           <div>
             <label
               htmlFor="new-file-content"
-              className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400"
+              className="mb-1 block text-[12px] font-medium text-fg"
             >
               Contents
             </label>
@@ -420,11 +408,11 @@ export function RepoFileCreatorIsland({
               spellCheck={false}
               disabled={committing}
               placeholder="Enter file contents..."
-              className="w-full rounded-md border border-zinc-300 bg-zinc-50 p-2.5 font-mono text-xs leading-5 text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              className="w-full rounded-md border border-border bg-canvas p-2.5 font-mono text-[12px] leading-5 text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
             />
           </div>
         ) : (
-          <div className="rounded-md border border-zinc-200 bg-zinc-50/50 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/40">
+          <div className="rounded-md border border-border bg-canvas p-3.5">
             <MarkdownContent
               markdown={fileContent || "_Nothing to preview yet._"}
               context={{ owner, repo, ref: refShort, baseDir: "" }}
@@ -440,21 +428,21 @@ export function RepoFileCreatorIsland({
             disabled={committing}
             placeholder={filePath.trim() ? `Add ${filePath.trim()}` : "Commit message"}
             aria-label="Commit message"
-            className="h-8 flex-1 rounded-md border border-zinc-200 bg-white px-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+            className="h-8 flex-1 rounded-md border border-border bg-canvas px-2.5 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
           />
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setOpen(false)}
               disabled={committing}
-              className="inline-flex h-8 items-center rounded-md border border-zinc-200 px-2.5 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              className="inline-flex h-8 items-center rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={committing || !filePath.trim()}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
             >
               <Check className="h-3.5 w-3.5" aria-hidden="true" />
               <span>{committing ? "Committing…" : "Commit file"}</span>
@@ -472,32 +460,41 @@ export type RepoAboutCardIslandProps = {
   repositoryId?: string;
   initialDescription: string;
   initialPinned: boolean;
+  initialHomePinned?: boolean;
   visibility: "public" | "private";
   defaultBranch: string;
   branchCount: number;
   tagCount: number;
   canEditRepo: boolean;
+  canPinRepo?: boolean;
+  canFeatureHomepage?: boolean;
 };
 
 type PatchRepoResponse =
-  { ok: true; description: string; pinned: boolean } | { ok: false; reason?: string };
+  | { ok: true; description: string; pinned: boolean; homePinned?: boolean }
+  | { ok: false; reason?: string };
 
 export function RepoAboutCardIsland({
   repositoryId,
   initialDescription,
   initialPinned,
+  initialHomePinned = false,
   visibility,
   defaultBranch,
   branchCount,
   tagCount,
   canEditRepo,
+  canPinRepo = canEditRepo,
+  canFeatureHomepage = false,
 }: RepoAboutCardIslandProps) {
   const [description, setDescription] = useState(initialDescription);
   const [draftDescription, setDraftDescription] = useState(initialDescription);
   const [editingDesc, setEditingDesc] = useState(false);
   const [pinned, setPinned] = useState(initialPinned);
+  const [homePinned, setHomePinned] = useState(initialHomePinned);
   const [savingDesc, setSavingDesc] = useState(false);
   const [togglingPin, setTogglingPin] = useState(false);
+  const [togglingHomePin, setTogglingHomePin] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
 
@@ -565,15 +562,48 @@ export function RepoAboutCardIsland({
     }
   }
 
+  async function toggleHomePin() {
+    if (!repositoryId || togglingHomePin || visibility === "private") return;
+    setTogglingHomePin(true);
+    setError(null);
+    setSessionExpired(false);
+    try {
+      const response = await fetch(`/auth/api/repositories/${encodeURIComponent(repositoryId)}`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ homePinned: !homePinned }),
+      });
+      if (response.status === 401) {
+        setSessionExpired(true);
+        setError("Session expired — please sign in again.");
+        return;
+      }
+      const body = (await response.json().catch(() => null)) as PatchRepoResponse | null;
+      if (!response.ok || !body || !body.ok) {
+        const reason = body && !body.ok ? body.reason : undefined;
+        setError(
+          reason === "private-repo-cannot-feature"
+            ? "Only public repositories can be pinned to the public homepage."
+            : "Could not update homepage pin state."
+        );
+        return;
+      }
+      setHomePinned(Boolean(body.homePinned));
+    } catch {
+      setError("Network error while updating homepage pin.");
+    } finally {
+      setTogglingHomePin(false);
+    }
+  }
+
   return (
     <section
       aria-label="About repository"
-      className="rounded-md border border-zinc-200 bg-white p-3.5 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+      className="rounded-md border border-border bg-surface p-3.5 text-[12px]"
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-          About
-        </h3>
+        <h3 className="m-0 text-[13px] font-semibold text-fg">About</h3>
         {canEditRepo && repositoryId && !editingDesc ? (
           <button
             type="button"
@@ -584,7 +614,7 @@ export function RepoAboutCardIsland({
               setSessionExpired(false);
             }}
             aria-label="Edit repository description"
-            className="inline-flex items-center gap-1 rounded border border-zinc-200 px-1.5 py-0.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            className="inline-flex items-center gap-1 rounded border border-border bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
           >
             <Pencil className="h-2.5 w-2.5" aria-hidden="true" />
             <span>Edit</span>
@@ -593,7 +623,7 @@ export function RepoAboutCardIsland({
       </div>
 
       {error ? (
-        <p role="alert" className="m-0 mb-2 text-[11px] text-red-600 dark:text-red-400">
+        <p role="alert" className="m-0 mb-2 text-[11px] text-red-400">
           <span>{error}</span>
           {sessionExpired ? (
             <a href="/auth" className="ml-1.5 font-medium underline">
@@ -613,100 +643,126 @@ export function RepoAboutCardIsland({
             disabled={savingDesc}
             placeholder="Short description of this repository..."
             aria-label="Repository description"
-            className="w-full rounded-md border border-zinc-300 bg-zinc-50 p-2 text-xs text-zinc-900 focus:border-accent-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+            className="w-full rounded-md border border-border bg-canvas p-2 text-[12px] text-fg focus:border-fgMuted focus:outline-none"
           />
           <div className="flex items-center justify-end gap-1.5">
             <button
               type="button"
               onClick={() => setEditingDesc(false)}
               disabled={savingDesc}
-              className="rounded border border-zinc-200 px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+              className="rounded border border-border bg-canvas px-2 py-1 text-[11px] text-fgBody hover:bg-surfaceHover hover:text-fg"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={savingDesc}
-              className="rounded bg-accent-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+              className="rounded bg-fg px-2.5 py-1 text-[11px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
             >
               {savingDesc ? "Saving…" : "Save"}
             </button>
           </div>
         </form>
       ) : (
-        <p className="m-0 mb-3 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">
+        <p className="m-0 mb-3 text-[13px] leading-[1.45] text-fgBody">
           {description || (
-            <span className="italic text-zinc-400 dark:text-zinc-500">
+            <span className="italic text-fgMuted">
               No description, website, or topics provided.
             </span>
           )}
         </p>
       )}
 
-      <dl className="m-0 space-y-1.5 border-t border-zinc-200 pt-2.5 text-xs dark:border-zinc-800">
+      <dl className="m-0 space-y-1.5 border-t border-borderSubtle pt-2.5 text-[12px]">
         <div className="flex items-center justify-between gap-2">
-          <dt className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
+          <dt className="flex items-center gap-1.5 text-fgMuted">
             {visibility === "private" ? (
-              <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+              <Lock className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
             ) : (
-              <Globe
-                className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400"
-                aria-hidden="true"
-              />
+              <Globe className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
             )}
             <span>Visibility</span>
           </dt>
-          <dd className="m-0 text-xs font-medium capitalize text-zinc-800 dark:text-zinc-200">
-            {visibility}
-          </dd>
+          <dd className="m-0 text-[12px] font-medium capitalize text-fg">{visibility}</dd>
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <dt className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
+          <dt className="flex items-center gap-1.5 text-fgMuted">
             <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Branches</span>
           </dt>
-          <dd className="m-0 text-xs text-zinc-800 tabular-nums dark:text-zinc-200">
+          <dd className="m-0 text-[12px] text-fg tabular-nums">
             <span>{branchCount}</span>{" "}
-            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              (default: <code className="font-mono">{defaultBranch}</code>)
+            <span className="text-[11px] text-fgMuted">
+              (default: <code className="font-mono text-fgBody">{defaultBranch}</code>)
             </span>
           </dd>
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <dt className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
+          <dt className="flex items-center gap-1.5 text-fgMuted">
             <Tag className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Tags</span>
           </dt>
-          <dd className="m-0 text-xs text-zinc-800 tabular-nums dark:text-zinc-200">{tagCount}</dd>
+          <dd className="m-0 text-[12px] text-fg tabular-nums">{tagCount}</dd>
         </div>
       </dl>
 
-      {canEditRepo && repositoryId ? (
-        <div className="mt-3 border-t border-zinc-200 pt-2.5 dark:border-zinc-800">
-          <button
-            type="button"
-            onClick={() => void togglePin()}
-            disabled={togglingPin}
-            className={`inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-md border text-[11px] font-medium transition-colors disabled:opacity-50 ${
-              pinned
-                ? "border-accent-500/40 bg-accent-500/10 text-accent-700 hover:bg-accent-500/15 dark:text-accent-300"
-                : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950/60 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            }`}
-          >
-            {pinned ? (
-              <>
-                <PinOff className="h-3 w-3" aria-hidden="true" />
-                <span>Pinned to profile · Unpin</span>
-              </>
-            ) : (
-              <>
-                <Pin className="h-3 w-3" aria-hidden="true" />
-                <span>Pin to profile</span>
-              </>
-            )}
-          </button>
+      {(canPinRepo || canFeatureHomepage) && repositoryId ? (
+        <div className="mt-3 space-y-1.5 border-t border-borderSubtle pt-2.5">
+          {canPinRepo ? (
+            <button
+              type="button"
+              onClick={() => void togglePin()}
+              disabled={togglingPin}
+              className={`inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-md border text-[12px] font-medium transition-colors disabled:opacity-50 ${
+                pinned
+                  ? "border-border bg-surfaceHover text-fg"
+                  : "border-border bg-canvas text-fgBody hover:bg-surfaceHover hover:text-fg"
+              }`}
+            >
+              {pinned ? (
+                <>
+                  <PinOff className="h-3 w-3" aria-hidden="true" />
+                  <span>Pinned to profile · Unpin</span>
+                </>
+              ) : (
+                <>
+                  <Pin className="h-3 w-3" aria-hidden="true" />
+                  <span>Pin to profile</span>
+                </>
+              )}
+            </button>
+          ) : null}
+
+          {canFeatureHomepage ? (
+            <button
+              type="button"
+              onClick={() => void toggleHomePin()}
+              disabled={togglingHomePin || visibility === "private"}
+              title={
+                visibility === "private"
+                  ? "Make repository public to pin it on the public homepage"
+                  : homePinned
+                    ? "Remove from main public homepage"
+                    : "Feature on main public homepage"
+              }
+              className={`inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-md border text-[12px] font-medium transition-colors disabled:opacity-50 ${
+                homePinned
+                  ? "border-accent/40 bg-accent/10 text-accent hover:bg-accent/15"
+                  : "border-border bg-canvas text-fgBody hover:bg-surfaceHover hover:text-fg"
+              }`}
+            >
+              <Home className="h-3 w-3" aria-hidden="true" />
+              <span>
+                {visibility === "private"
+                  ? "Homepage pin (public only)"
+                  : homePinned
+                    ? "Pinned on homepage · Unpin"
+                    : "Pin to homepage"}
+              </span>
+            </button>
+          ) : null}
         </div>
       ) : null}
     </section>

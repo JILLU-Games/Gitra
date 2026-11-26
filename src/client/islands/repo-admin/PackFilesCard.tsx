@@ -49,43 +49,44 @@ function PackRow({
         : "Reference sidecar status could not be checked";
 
   return (
-    <tr className="border-b border-zinc-100 dark:border-zinc-800">
-      <td className="py-2 font-mono text-xs">
+    <tr className="border-b border-borderSubtle">
+      <td className="py-2 font-mono text-[12px] text-fg">
         <span title={packStat.key}>{shortValue(packName, 35)}</span>
       </td>
       <td className="py-2">
         <span
-          className={`rounded px-2 py-1 text-xs ${
+          className={`rounded border px-1.5 py-0.5 font-mono text-[11px] ${
             packStat.state === "active"
-              ? "bg-green-100 dark:bg-green-900"
-              : "bg-zinc-200 dark:bg-zinc-800"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+              : "border-border bg-canvas text-fgMuted"
           }`}
         >
           {packStat.state}
         </span>
       </td>
-      <td className="py-2">{packKindLabel(packStat.kind)}</td>
-      <td className="py-2 text-right font-mono text-xs">{packStat.tier}</td>
-      <td className="py-2 text-right font-mono text-xs">{packStat.objectCount}</td>
-      <td className="py-2 text-right font-mono text-xs">{formatSampleBytes(packStat.packSize)}</td>
-      <td className="py-2 text-right font-mono text-xs">{formatSampleBytes(packStat.indexSize)}</td>
+      <td className="py-2 text-[12px] text-fgBody">{packKindLabel(packStat.kind)}</td>
+      <td className="py-2 text-right font-mono text-[12px] text-fgBody">{packStat.tier}</td>
+      <td className="py-2 text-right font-mono text-[12px] text-fgBody">{packStat.objectCount}</td>
+      <td className="py-2 text-right font-mono text-[12px] text-fgBody">
+        {formatSampleBytes(packStat.packSize)}
+      </td>
+      <td className="py-2 text-right font-mono text-[12px] text-fgBody">
+        {formatSampleBytes(packStat.indexSize)}
+      </td>
       <td className="py-2 text-center">
         {packStat.hasIndex ? (
-          <Check className="inline h-4 w-4 text-green-600 dark:text-green-400" aria-hidden="true" />
+          <Check className="inline h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
         ) : (
-          <X className="inline h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
+          <X className="inline h-3.5 w-3.5 text-red-400" aria-hidden="true" />
         )}
       </td>
       <td className="py-2 text-center" title={refTitle}>
         {refStatus === "present" ? (
-          <Check className="inline h-4 w-4 text-green-600 dark:text-green-400" aria-hidden="true" />
+          <Check className="inline h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
         ) : refStatus === "missing" ? (
-          <X className="inline h-4 w-4 text-red-600 dark:text-red-400" aria-hidden="true" />
+          <X className="inline h-3.5 w-3.5 text-red-400" aria-hidden="true" />
         ) : (
-          <span
-            className="inline-block font-mono text-xs text-zinc-500 dark:text-zinc-400"
-            aria-hidden="true"
-          >
+          <span className="inline-block font-mono text-[12px] text-fgMuted" aria-hidden="true">
             ?
           </span>
         )}
@@ -93,7 +94,7 @@ function PackRow({
       <td className="py-2 text-center">
         <button
           type="button"
-          className="rounded p-1 text-red-600 transition-colors hover:bg-red-100 hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400 dark:hover:bg-red-900/20 dark:hover:text-red-300"
+          className="rounded p-1 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
           title={
             canDelete
               ? "Delete this superseded pack"
@@ -103,7 +104,7 @@ function PackRow({
           onClick={() => void removePack(packName)}
           disabled={!canDelete || pending[`remove-pack:${packName}`]}
         >
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
+          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </td>
     </tr>
@@ -123,8 +124,8 @@ export function PackFilesCard({ packCount, packStats, pending, removePack }: Pac
   if (packStats.length === 0 && packCount > 0) {
     return (
       <Card>
-        <h2 className="mb-4 text-xl font-semibold">Pack Catalog</h2>
-        <p className="text-zinc-600 dark:text-zinc-400">
+        <h2 className="mb-2 text-[14px] font-semibold text-fg">Pack Catalog</h2>
+        <p className="text-[13px] text-fgBody">
           {packCount} pack rows exist but detailed catalog data was not loaded.
         </p>
       </Card>
@@ -141,13 +142,13 @@ export function PackFilesCard({ packCount, packStats, pending, removePack }: Pac
 
   return (
     <Card>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xl font-semibold">Pack Catalog ({headerCount})</h2>
+      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[14px] font-semibold text-fg">Pack Catalog ({headerCount})</h2>
         {hasSuperseded ? (
           <button
             type="button"
             onClick={() => setShowSuperseded((prev) => !prev)}
-            className="inline-flex items-center gap-1.5 rounded border border-zinc-300 px-2.5 py-1 text-xs text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
             aria-expanded={showSuperseded}
           >
             {showSuperseded ? (
@@ -165,9 +166,9 @@ export function PackFilesCard({ packCount, packStats, pending, removePack }: Pac
         ) : null}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-[12px]">
           <thead>
-            <tr className="border-b border-zinc-200 dark:border-zinc-800">
+            <tr className="border-b border-border">
               <th className="py-2 text-left">Pack Name</th>
               <th className="py-2 text-left">State</th>
               <th className="py-2 text-left">Kind</th>
@@ -192,10 +193,10 @@ export function PackFilesCard({ packCount, packStats, pending, removePack }: Pac
             {showSuperseded && hasSuperseded ? (
               <>
                 {activeRows.length > 0 ? (
-                  <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                  <tr className="border-b border-border">
                     <td
                       colSpan={10}
-                      className="py-1 text-center text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
+                      className="py-1 text-center text-[11px] uppercase tracking-wide text-fgMuted"
                     >
                       superseded history
                     </td>

@@ -3,13 +3,19 @@ import { env } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { createDb } from "@/worker/db/d1/client";
+import { ensureD1Schema } from "@/worker/db/d1/bootstrap";
 import {
   claimNamespace,
   findNamespaceBySlug,
+  findNamespaceDirectoryMeta,
   findPatByPrefix,
+  findPatGlobalGrant,
   findRepositoryByDoName,
   findUserByTesseraSub,
+  getNamespaceProfileMeta,
+  getRepositoryMeta,
   insertMembershipIfMissing,
+  insertPatGlobalGrant,
   insertPatWithGrants,
   insertRepositoryIfNew,
   insertUserIfNew,
@@ -18,6 +24,9 @@ import {
   listRepositoriesForNamespace,
   listRepositoriesForUser,
   revokePatById,
+  upsertNamespaceDirectoryMeta,
+  upsertNamespaceProfileMeta,
+  upsertRepositoryMeta,
 } from "@/worker/db/d1/dal";
 
 import { readAppD1Migrations } from "./util/d1Migrations";
@@ -169,5 +178,131 @@ describe("D1 schema + DAL round-trips", () => {
       ok: false,
       reason: "already-revoked",
     });
+  });
+
+  it("provisions all 11 canonical tables cleanly via Drizzle migrations and bootstrap", async () => {
+    const tableRows = await env.DB.prepare(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`
+    ).all<{ name: string }>();
+    const tableNames = (tableRows.results ?? []).map((row) => row.name);
+
+    expect(tableNames).toEqual(
+      expect.arrayContaining([
+        "d1_migrations",
+        "namespace_directory_meta",
+        "namespace_memberships",
+        "namespace_profile_meta",
+        "namespaces",
+        "pat_global_grants",
+        "pat_namespace_grants",
+        "pat_repo_grants",
+        "personal_access_tokens",
+        "repositories",
+        "repository_meta",
+        "users",
+      ])
+    );
+
+    const db = createDb(env.DB);
+    const now = Date.now();
+    await insertUserIfNew(db, { id: "user-meta", tesseraSub: "sub-meta", createdAt: now });
+    await claimNamespace(db, {
+      id: "ns-meta",
+      slug: "metaowner",
+      createdBy: "user-meta",
+      createdAt: now,
+    });
+    await insertRepositoryIfNew(db, {
+      id: "repo-meta",
+      namespaceId: "ns-meta",
+      createdBy: "user-meta",
+      slug: "app",
+      doName: "metaowner/app",
+      visibility: "public",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await upsertNamespaceDirectoryMeta(env.DB, "ns-meta", {
+      displayName: "Meta Owner",
+      role: "member",
+      status: "active",
+      now,
+    });
+    expect((await findNamespaceDirectoryMeta(env.DB, "ns-meta"))?.display_name).toBe("Meta Owner");
+
+    await upsertNamespaceProfileMeta(env.DB, "ns-meta", {
+      bio: "Hello",
+      location: "Edge",
+      website: "https://example.com",
+      now,
+    });
+    expect(await getNamespaceProfileMeta(env.DB, "ns-meta")).toEqual({
+      bio: "Hello",
+      location: "Edge",
+      website: "https://example.com",
+    });
+
+    await upsertRepositoryMeta(env.DB, "repo-meta", {
+      description: "Flagship",
+      pinned: true,
+      homePinned: true,
+      now,
+    });
+    expect(await getRepositoryMeta(env.DB, "repo-meta")).toEqual({
+      description: "Flagship",
+      pinned: true,
+      homePinned: true,
+    });
+
+    await insertPatWithGrants(db, {
+      pat: {
+        id: "pat-global-schema",
+        userId: "user-meta",
+        name: "global-ci",
+        prefix: "goc_bbbbbbbb",
+        hash: "hash-bbbbbbbb",
+        createdAt: now,
+        expiresAt: null,
+        revokedAt: null,
+        lastUsedAt: null,
+      },
+      namespaceGrants: [],
+      repoGrants: [],
+    });
+    await insertPatGlobalGrant(env.DB, {
+      patId: "pat-global-schema",
+      level: "push",
+      createdAt: now,
+    });
+    expect((await findPatGlobalGrant(env.DB, "pat-global-schema"))?.level).toBe("push");
+
+    // Verify bootstrap.ts also creates all 11 tables and seeds both migrations on an empty D1 instance.
+    const capturedSql: string[] = [];
+    const fakeD1 = {
+      prepare(sql: string) {
+        return {
+          sql,
+          async first() {
+            return { presentCount: 0 };
+          },
+        };
+      },
+      async batch(statements: Array<{ sql: string }>) {
+        for (const stmt of statements) {
+          capturedSql.push(stmt.sql);
+        }
+        return [];
+      },
+    } as unknown as D1Database;
+
+    await ensureD1Schema(fakeD1);
+    const joined = capturedSql.join("\n");
+    expect(joined).toContain("namespace_profile_meta");
+    expect(joined).toContain("repository_meta");
+    expect(joined).toContain("namespace_directory_meta");
+    expect(joined).toContain("pat_global_grants");
+    expect(joined).toContain("0000_gray_supernaut.sql");
+    expect(joined).toContain("0001_outgoing_vin_gonzales.sql");
   });
 });

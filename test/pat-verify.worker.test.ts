@@ -9,6 +9,7 @@ import {
   insertPatWithGrants,
   insertRepositoryIfNew,
   insertUserIfNew,
+  upsertNamespaceDirectoryMeta,
 } from "@/worker/db/d1/dal";
 import { claimNamespace } from "@/worker/db/d1/dal/namespaces";
 
@@ -34,6 +35,12 @@ beforeEach(async () => {
     slug: NAMESPACE_SLUG,
     createdBy: USER_ID,
     createdAt: now,
+  });
+  await upsertNamespaceDirectoryMeta(env.DB, NAMESPACE_ID, {
+    displayName: NAMESPACE_SLUG,
+    role: "member",
+    status: "active",
+    now,
   });
   await insertMembershipIfMissing(db, {
     namespaceId: NAMESPACE_ID,
@@ -178,5 +185,77 @@ describe("verifyPat", () => {
         repositoryId: REPO_ID,
       })
     ).toEqual({ ok: false, reason: "grant-missing" });
+  });
+
+  it("rejects repo and namespace PATs with token-revoked when the owner directory account is disabled", async () => {
+    const repoPat = await seedPat({
+      patId: "pat-disabled-repo",
+      repoGrants: [{ repoId: REPO_ID, level: "push" }],
+    });
+    const nsPat = await seedPat({
+      patId: "pat-disabled-ns",
+      namespaceGrants: [{ namespaceId: NAMESPACE_ID, level: "push" }],
+    });
+
+    await upsertNamespaceDirectoryMeta(env.DB, NAMESPACE_ID, {
+      displayName: NAMESPACE_SLUG,
+      role: "member",
+      status: "disabled",
+      now: Date.now(),
+    });
+
+    expect(
+      await verifyPat(env, {
+        username: NAMESPACE_SLUG,
+        plaintext: repoPat,
+        namespaceId: NAMESPACE_ID,
+        repositoryId: REPO_ID,
+      })
+    ).toEqual({ ok: false, reason: "token-revoked" });
+
+    expect(
+      await verifyPat(env, {
+        username: NAMESPACE_SLUG,
+        plaintext: nsPat,
+        namespaceId: NAMESPACE_ID,
+        repositoryId: REPO_ID,
+      })
+    ).toEqual({ ok: false, reason: "token-revoked" });
+  });
+
+  it("downgrades push PAT grants to level=pull when owner is demoted to viewer", async () => {
+    const repoPat = await seedPat({
+      patId: "pat-viewer-repo",
+      repoGrants: [{ repoId: REPO_ID, level: "push" }],
+    });
+    const nsPat = await seedPat({
+      patId: "pat-viewer-ns",
+      namespaceGrants: [{ namespaceId: NAMESPACE_ID, level: "push" }],
+    });
+
+    await upsertNamespaceDirectoryMeta(env.DB, NAMESPACE_ID, {
+      displayName: NAMESPACE_SLUG,
+      role: "viewer",
+      status: "active",
+      now: Date.now(),
+    });
+
+    const repoResult = await verifyPat(env, {
+      username: NAMESPACE_SLUG,
+      plaintext: repoPat,
+      namespaceId: NAMESPACE_ID,
+      repositoryId: REPO_ID,
+    });
+    expect(repoResult.ok).toBe(true);
+    if (repoResult.ok) expect(repoResult.level).toBe("pull");
+
+    const nsResult = await verifyPat(env, {
+      username: NAMESPACE_SLUG,
+      plaintext: nsPat,
+      namespaceId: NAMESPACE_ID,
+      repositoryId: REPO_ID,
+    });
+    expect(nsResult.ok).toBe(true);
+    if (nsResult.ok) expect(nsResult.level).toBe("pull");
   });
 });

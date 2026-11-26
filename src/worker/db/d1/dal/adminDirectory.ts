@@ -1,15 +1,18 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 
 import {
   sanitizeDisplayName,
   type DirectoryRole,
   type DirectoryStatus,
 } from "@/shared/admin/panel";
+import type { Logger } from "@/worker/common/logger";
 import type { Db } from "@/worker/db/d1/client";
 import { namespaceMemberships } from "@/worker/db/d1/schema/namespaceMemberships";
-import { namespaces } from "@/worker/db/d1/schema/namespaces";
+import { namespaces, type NamespaceRow } from "@/worker/db/d1/schema/namespaces";
 import { repositories } from "@/worker/db/d1/schema/repositories";
 import { users } from "@/worker/db/d1/schema/users";
+import { listNamespacesForUser } from "./namespaces";
+import { findUserBySubject } from "./users";
 
 export type NamespaceDirectoryMetaRow = {
   namespace_id: string;
@@ -45,100 +48,11 @@ export type DirectoryAuthAccount = {
   hasPassword: boolean;
 };
 
-const CREATE_META_TABLE_SQL = `CREATE TABLE IF NOT EXISTS namespace_directory_meta (
-  namespace_id text PRIMARY KEY NOT NULL,
-  display_name text NOT NULL DEFAULT '',
-  role text NOT NULL DEFAULT 'member',
-  status text NOT NULL DEFAULT 'active',
-  password_hash text,
-  last_active_at integer,
-  updated_at integer NOT NULL,
-  FOREIGN KEY (namespace_id) REFERENCES namespaces(id) ON UPDATE no action ON DELETE cascade,
-  CONSTRAINT chk_namespace_directory_role CHECK(role IN ('admin','member','viewer')),
-  CONSTRAINT chk_namespace_directory_status CHECK(status IN ('active','disabled'))
-)`;
-
-const ensuredMetaDatabases = new WeakMap<D1Database, Promise<void>>();
-
-/**
- * Ensures the auxiliary `namespace_directory_meta` table exists and is upgraded
- * to include `display_name`, `viewer` role, `password_hash`, and `last_active_at`.
- * Handles both fresh databases and existing local dev D1 tables idempotently.
- */
-export async function ensureNamespaceDirectoryMetaTable(d1: D1Database): Promise<void> {
-  const existing = ensuredMetaDatabases.get(d1);
-  if (existing) return existing;
-
-  const promise = (async () => {
-    const tableInfo = await d1
-      .prepare(
-        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'namespace_directory_meta' LIMIT 1`
-      )
-      .first<{ sql: string | null }>();
-
-    if (!tableInfo?.sql) {
-      await d1.prepare(CREATE_META_TABLE_SQL).run();
-      return;
-    }
-
-    const ddl = tableInfo.sql;
-    const hasViewerRole = ddl.includes("'viewer'");
-    const hasDisplayName = ddl.includes("display_name");
-    const hasLastActive = ddl.includes("last_active_at");
-    const hasPasswordHash = ddl.includes("password_hash");
-
-    if (hasViewerRole && hasDisplayName && hasLastActive && hasPasswordHash) {
-      return;
-    }
-
-    // Fast-path when only password_hash is missing on an already upgraded table.
-    if (hasViewerRole && hasDisplayName && hasLastActive && !hasPasswordHash) {
-      await d1.prepare(`ALTER TABLE namespace_directory_meta ADD COLUMN password_hash text`).run();
-      return;
-    }
-
-    // Upgrade legacy table in a single atomic batch.
-    const displayNameSelect = hasDisplayName ? "display_name" : "''";
-    const lastActiveSelect = hasLastActive ? "last_active_at" : "updated_at";
-    const passwordHashSelect = hasPasswordHash ? "password_hash" : "NULL";
-    await d1.batch([
-      d1.prepare(`DROP TABLE IF EXISTS namespace_directory_meta_v2`),
-      d1.prepare(`CREATE TABLE namespace_directory_meta_v2 (
-        namespace_id text PRIMARY KEY NOT NULL,
-        display_name text NOT NULL DEFAULT '',
-        role text NOT NULL DEFAULT 'member',
-        status text NOT NULL DEFAULT 'active',
-        password_hash text,
-        last_active_at integer,
-        updated_at integer NOT NULL,
-        FOREIGN KEY (namespace_id) REFERENCES namespaces(id) ON UPDATE no action ON DELETE cascade,
-        CONSTRAINT chk_namespace_directory_role CHECK(role IN ('admin','member','viewer')),
-        CONSTRAINT chk_namespace_directory_status CHECK(status IN ('active','disabled'))
-      )`),
-      d1.prepare(
-        `INSERT INTO namespace_directory_meta_v2 (namespace_id, display_name, role, status, password_hash, last_active_at, updated_at)
-         SELECT namespace_id, ${displayNameSelect}, role, status, ${passwordHashSelect}, ${lastActiveSelect}, updated_at
-         FROM namespace_directory_meta`
-      ),
-      d1.prepare(`DROP TABLE namespace_directory_meta`),
-      d1.prepare(`ALTER TABLE namespace_directory_meta_v2 RENAME TO namespace_directory_meta`),
-    ]);
-  })().catch((error) => {
-    ensuredMetaDatabases.delete(d1);
-    throw error;
-  });
-
-  ensuredMetaDatabases.set(d1, promise);
-  return promise;
-}
-
 export async function listAllNamespaceDirectoryEntries(
   d1: D1Database,
   db: Db,
   primaryAdminNamespaceId: string | null
 ): Promise<NamespaceDirectoryListing[]> {
-  await ensureNamespaceDirectoryMetaTable(d1);
-
   const [allNamespaces, allRepos, metaResult] = await Promise.all([
     db.select().from(namespaces),
     db.select({ namespaceId: repositories.namespaceId }).from(repositories),
@@ -200,7 +114,6 @@ export async function upsertNamespaceDirectoryMeta(
     now: number;
   }
 ): Promise<void> {
-  await ensureNamespaceDirectoryMetaTable(d1);
   const lastActiveAt = meta.lastActiveAt ?? meta.now;
 
   if (meta.passwordHash !== undefined) {
@@ -248,7 +161,6 @@ export async function findNamespaceDirectoryMeta(
   d1: D1Database,
   namespaceId: string
 ): Promise<NamespaceDirectoryMetaRow | null> {
-  await ensureNamespaceDirectoryMetaTable(d1);
   const row = await d1
     .prepare(
       `SELECT namespace_id, display_name, role, status, password_hash, last_active_at, updated_at
@@ -269,7 +181,6 @@ export async function findDirectoryAccountBySlug(
   db: Db,
   slug: string
 ): Promise<DirectoryAuthAccount | null> {
-  await ensureNamespaceDirectoryMetaTable(d1);
   const nsRows = await db.select().from(namespaces).where(eq(namespaces.slug, slug)).limit(1);
   const ns = nsRows[0];
   if (!ns) return null;
@@ -296,11 +207,11 @@ export async function findDirectoryAccountByUserId(
   db: Db,
   userId: string
 ): Promise<DirectoryAuthAccount | null> {
-  await ensureNamespaceDirectoryMetaTable(d1);
   const nsRows = await db
     .select()
     .from(namespaces)
     .where(eq(namespaces.createdBy, userId))
+    .orderBy(asc(namespaces.createdAt), asc(namespaces.id))
     .limit(1);
   const ns = nsRows[0];
   if (!ns) return null;
@@ -327,7 +238,6 @@ export async function touchDirectoryLastActive(
   namespaceId: string,
   now: number
 ): Promise<void> {
-  await ensureNamespaceDirectoryMetaTable(d1);
   await d1
     .prepare(
       `UPDATE namespace_directory_meta
@@ -347,7 +257,6 @@ export async function updateDirectoryPasswordHash(
   passwordHash: string,
   now: number
 ): Promise<void> {
-  await ensureNamespaceDirectoryMetaTable(d1);
   await d1
     .prepare(
       `UPDATE namespace_directory_meta
@@ -359,9 +268,70 @@ export async function updateDirectoryPasswordHash(
 }
 
 /**
+ * Updates only `display_name` (creating a default directory metadata row if
+ * absent) so profile edits never clobber concurrent `role` or `status` changes
+ * issued from System Admin.
+ */
+export async function updateDirectoryDisplayName(
+  d1: D1Database,
+  namespaceId: string,
+  meta: {
+    displayName: string;
+    fallbackRole: DirectoryRole;
+    fallbackStatus: DirectoryStatus;
+    lastActiveAt: number;
+    now: number;
+  }
+): Promise<void> {
+  await d1
+    .prepare(
+      `INSERT INTO namespace_directory_meta (namespace_id, display_name, role, status, last_active_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(namespace_id) DO UPDATE SET
+         display_name = excluded.display_name,
+         last_active_at = COALESCE(namespace_directory_meta.last_active_at, excluded.last_active_at),
+         updated_at = excluded.updated_at`
+    )
+    .bind(
+      namespaceId,
+      meta.displayName,
+      meta.fallbackRole,
+      meta.fallbackStatus,
+      meta.lastActiveAt,
+      meta.now
+    )
+    .run();
+}
+
+/**
+ * Resolves the primary administrator's canonical public Git namespace by their
+ * immutable internal auth subject (`local:<ADMIN_USERNAME>`) rather than by
+ * slug, so renaming their public `@namespace` never breaks admin detection.
+ */
+export async function findPrimaryAdminNamespace(
+  db: Db,
+  adminSubject: string
+): Promise<NamespaceRow | undefined> {
+  const user = await findUserBySubject(db, adminSubject);
+  if (!user) return undefined;
+
+  const ownedRows = await db
+    .select()
+    .from(namespaces)
+    .where(eq(namespaces.createdBy, user.id))
+    .orderBy(asc(namespaces.createdAt), asc(namespaces.id))
+    .limit(1);
+  if (ownedRows[0]) return ownedRows[0];
+
+  const memberNamespaces = await listNamespacesForUser(db, user.id);
+  return memberNamespaces[0];
+}
+
+/**
  * Updates a namespace's handle (`slug`) in place while preserving its stable
  * `id`, repositories, memberships, and grants. Also updates the synthetic local
- * user subject when not shared with the signed-in admin.
+ * user subject for regular directory users, while never mutating the signed-in
+ * or primary admin's `local:` authentication subject.
  */
 export async function updateNamespaceHandle(
   db: Db,
@@ -369,7 +339,8 @@ export async function updateNamespaceHandle(
   newSlug: string,
   createdByUserId: string,
   protectedUserId: string,
-  newSubject: string
+  newSubject: string,
+  options?: { skipSubjectUpdate?: boolean; log?: Logger }
 ): Promise<boolean> {
   const updated = await db
     .update(namespaces)
@@ -379,11 +350,27 @@ export async function updateNamespaceHandle(
 
   if (updated.length === 0) return false;
 
-  if (createdByUserId !== protectedUserId) {
+  if (!options?.skipSubjectUpdate && createdByUserId !== protectedUserId) {
     try {
       await db.update(users).set({ tesseraSub: newSubject }).where(eq(users.id, createdByUserId));
-    } catch {
-      // Ignore subject collision if a user record with that subject already exists.
+    } catch (error) {
+      const message = String(error);
+      if (/unique|constraint/i.test(message)) {
+        options?.log?.warn("admin-directory:subject-collision-skipped", {
+          namespaceId,
+          createdByUserId,
+          newSubject,
+          error: message,
+        });
+      } else {
+        options?.log?.error("admin-directory:subject-update-failed", {
+          namespaceId,
+          createdByUserId,
+          newSubject,
+          error: message,
+        });
+        throw error;
+      }
     }
   }
   return true;
@@ -428,13 +415,23 @@ export async function deleteNamespaceEntry(
   createdByUserId: string,
   protectedUserId: string
 ): Promise<boolean> {
-  await ensureNamespaceDirectoryMetaTable(d1);
-  // Delete repos in this namespace first (cascades pat_repo_grants).
+  // Delete repos in this namespace first (cascades repository_meta and pat_repo_grants).
+  await d1
+    .prepare(
+      `DELETE FROM repository_meta
+       WHERE repository_id IN (SELECT id FROM repositories WHERE namespace_id = ?)`
+    )
+    .bind(namespaceId)
+    .run();
   await db.delete(repositories).where(eq(repositories.namespaceId, namespaceId));
-  // Delete memberships and namespace row (cascades pat_namespace_grants + directory meta).
+  // Delete memberships and namespace row (cascades pat_namespace_grants + directory/profile meta).
   await db.delete(namespaceMemberships).where(eq(namespaceMemberships.namespaceId, namespaceId));
   await d1
     .prepare(`DELETE FROM namespace_directory_meta WHERE namespace_id = ?`)
+    .bind(namespaceId)
+    .run();
+  await d1
+    .prepare(`DELETE FROM namespace_profile_meta WHERE namespace_id = ?`)
     .bind(namespaceId)
     .run();
   const deleted = await db

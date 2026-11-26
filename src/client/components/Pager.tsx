@@ -21,20 +21,20 @@ export function Pager({ pager }: PagerProps) {
   }
 
   return (
-    <div className="my-6 flex items-center justify-between rounded-xl bg-zinc-100 dark:bg-zinc-800/30 p-4">
-      <div className="flex items-center gap-3 text-sm">
-        <span className="py-1 text-zinc-600 dark:text-zinc-400">Per page:</span>
+    <div className="my-4 flex items-center justify-between rounded-md border border-border bg-surface px-3.5 py-2.5">
+      <div className="flex items-center gap-2 text-[12px]">
+        <span className="text-fgMuted">Per page:</span>
         {pager.perPageLinks.map((link) => (
           <a
             key={link.href}
             href={link.href}
-            className="rounded-sm px-2 py-1 transition-colors hover:bg-zinc-200 dark:hover:bg-zinc-700"
+            className="rounded px-2 py-0.5 text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
           >
             {link.text}
           </a>
         ))}
       </div>
-      <div className="flex gap-3">
+      <div className="flex gap-2">
         {pager.newerHref ? (
           <Button variant="secondary" size="sm" href={pager.newerHref}>
             ← Newer

@@ -43,7 +43,7 @@ export async function handleIdleAndMaintenance(
   ctx: DurableObjectState,
   env: Env,
   logger?: Logger
-): Promise<void> {
+): Promise<boolean> {
   try {
     const cfg = getConfig(env);
     const now = Date.now();
@@ -57,19 +57,20 @@ export async function handleIdleAndMaintenance(
         nextIdleAt: decision.nextIdleAt,
       });
       await ensureScheduled(ctx, env, now);
-      return;
+      return false;
     }
 
     if (decision.kind === "empty-idle") {
       logger?.info("cleanup:empty-idle", decision);
-      await performIdleCleanup(ctx, env, logger);
-      return;
+      return await performIdleCleanup(ctx, env, logger);
     }
 
     logger?.info("cleanup:nonempty-idle-skip", decision);
     await clearIdleAlarm(ctx, logger);
+    return false;
   } catch (e) {
     logger?.error("alarm:error", { error: String(e) });
+    return false;
   }
 }
 
@@ -136,13 +137,15 @@ async function performIdleCleanup(
   ctx: DurableObjectState,
   env: Env,
   logger?: Logger
-): Promise<void> {
+): Promise<boolean> {
   const storage = ctx.storage;
+  let deletedStorage = false;
 
   // Purge DO storage. The 2026-05-13 compatibility date includes
   // `delete_all_deletes_alarm`, so this also clears any pending alarm.
   try {
     await storage.deleteAll();
+    deletedStorage = true;
   } catch (e) {
     logger?.error("cleanup:delete-storage-failed", { error: String(e) });
   }
@@ -150,6 +153,7 @@ async function performIdleCleanup(
   // Purge R2 mirror
   const prefix = doPrefix(ctx.id.toString());
   await purgeR2Mirror(env, prefix, logger);
+  return deletedStorage;
 }
 
 /**

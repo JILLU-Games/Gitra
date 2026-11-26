@@ -673,4 +673,40 @@ describe("streaming receive-pack", () => {
     expect(lines.some((line) => line.startsWith("unpack error invalid-ref"))).toBe(true);
     expect(await listStagedReceivePacks(repoId)).toEqual([]);
   });
+
+  it("BUG-13: resets warm DO schema and lastAccess state cleanly after clearRepositoryStorage()", async () => {
+    const owner = "o";
+    const repo = uniqueRepoId("stream-receive-warm-clear");
+    await setupRepoForTests(env, owner, repo);
+    const repoId = `${owner}/${repo}`;
+    const seeded = await seedPackFirstRepo(repoId);
+    await promoteToStreaming(owner, repo);
+
+    // Wipe DO storage while the DO instance may remain warm in memory.
+    const cleared = await callStubWithRetry(seeded.getStub, (stub) =>
+      stub.clearRepositoryStorage()
+    );
+    expect(cleared.deletedDO).toBe(true);
+
+    // Subsequent RPCs on the same warm DO stub must lazily re-run Drizzle migrations
+    // and return empty state without "no such table: pack_catalog".
+    expect(await callStubWithRetry(seeded.getStub, (stub) => stub.listRefs())).toEqual([]);
+    expect(await callStubWithRetry(seeded.getStub, (stub) => stub.getActivePackCatalog())).toEqual(
+      []
+    );
+
+    const reseeded = await seedPackFirstRepo(repoId);
+    const afterRePush = await pushStreamingUpdate(
+      owner,
+      repo,
+      reseeded.nextCommit.oid,
+      "warm reuse\n"
+    );
+    expect(afterRePush.commitOid).not.toBe(reseeded.nextCommit.oid);
+
+    const catalog = await callStubWithRetry(reseeded.getStub, (stub) =>
+      stub.getActivePackCatalog()
+    );
+    expect(catalog.length).toBeGreaterThan(0);
+  });
 });

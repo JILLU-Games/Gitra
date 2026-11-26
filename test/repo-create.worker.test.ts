@@ -8,7 +8,12 @@ import { mintSessionCookie, seedRepo } from "./util/repoSeed";
 import { runQueueMessage } from "./util/queue";
 import { newPrefixedId } from "@/worker/common";
 import { createDb } from "@/worker/db/d1/client";
-import { insertUserIfNew, claimNamespace, insertMembershipIfMissing } from "@/worker/db/d1/dal";
+import {
+  insertUserIfNew,
+  claimNamespace,
+  insertMembershipIfMissing,
+  upsertNamespaceDirectoryMeta,
+} from "@/worker/db/d1/dal";
 
 beforeAll(async () => {
   await ensureD1Migrations(env);
@@ -20,6 +25,7 @@ type CreateOk = {
   namespaceSlug: string;
   slug: string;
   visibility: "public" | "private";
+  defaultBranch: string;
   updatedAt: number;
 };
 type CreateFail =
@@ -125,6 +131,39 @@ describe("POST /auth/api/repositories", () => {
     });
     expect(status).toBe(403);
     expect(payload).toEqual({ ok: false, reason: "not-member" });
+  });
+
+  it("allows active site admins to create repos in other namespaces", async () => {
+    const targetNs = uniqueNs("rc-target");
+    await createMember(targetNs);
+
+    const adminNs = uniqueNs("rc-admin");
+    const admin = await createMember(adminNs);
+    const db = createDb(env.DB);
+    await upsertNamespaceDirectoryMeta(env.DB, admin.namespaceId, {
+      displayName: "Site Admin",
+      role: "admin",
+      status: "active",
+      now: Date.now(),
+    });
+
+    const { status, payload } = await postCreate(admin.cookieHeader, {
+      namespaceSlug: targetNs,
+      slug: "admin-created",
+      visibility: "private",
+    });
+    expect(status).toBe(200);
+    expect(payload).toMatchObject({
+      ok: true,
+      namespaceSlug: targetNs,
+      slug: "admin-created",
+      visibility: "private",
+      defaultBranch: "main",
+    });
+    expect((await resolveRepositoryRoute(env, targetNs, "admin-created"))?.visibility).toBe(
+      "private"
+    );
+    expect(db).toBeDefined();
   });
 
   it("rejects unknown namespace with 404 namespace-not-found", async () => {

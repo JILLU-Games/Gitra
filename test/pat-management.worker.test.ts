@@ -13,6 +13,7 @@ import {
   insertRepositoryIfNew,
   insertUserIfNew,
   listPatsForUser,
+  upsertNamespaceDirectoryMeta,
 } from "@/worker/db/d1/dal";
 import { __test as sessionTest } from "@/worker/auth/session";
 
@@ -363,6 +364,66 @@ describe("PAT management endpoints", () => {
     expect(res.status).toBe(403);
   });
 
+  it("allows active site admins to mint namespace and repo PATs for other namespaces", async () => {
+    await signInAndGetCookie("sub-admin-pat-target", "pat-admin-target");
+    const db = createDb(env.DB);
+    const targetNs = await findNamespaceBySlug(db, "pat-admin-target");
+    expect(targetNs).toBeDefined();
+    await insertRepositoryIfNew(db, {
+      id: "repo-pat-admin-target",
+      namespaceId: targetNs!.id,
+      createdBy: targetNs!.createdBy,
+      slug: "target-repo",
+      doName: "pat-admin-target/target-repo",
+      visibility: "private",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const adminCookie = await signInAndGetCookie("sub-admin-pat-issuer", "pat-admin-issuer");
+    const adminNs = await findNamespaceBySlug(db, "pat-admin-issuer");
+    expect(adminNs).toBeDefined();
+    await upsertNamespaceDirectoryMeta(env.DB, adminNs!.id, {
+      displayName: "Admin Issuer",
+      role: "admin",
+      status: "active",
+      now: Date.now(),
+    });
+
+    const nsPatRes = await workerExports.default.fetch("https://example.com/auth/api/tokens", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://example.com",
+        Cookie: sessionCookieHeader(adminCookie),
+      },
+      body: JSON.stringify({
+        scope: "namespace",
+        name: "admin-ns-grant",
+        namespaceSlug: "pat-admin-target",
+        level: "push",
+      }),
+    });
+    expect(nsPatRes.status).toBe(200);
+
+    const repoPatRes = await workerExports.default.fetch("https://example.com/auth/api/tokens", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://example.com",
+        Cookie: sessionCookieHeader(adminCookie),
+      },
+      body: JSON.stringify({
+        scope: "repo",
+        name: "admin-repo-grant",
+        namespaceSlug: "pat-admin-target",
+        repoSlug: "target-repo",
+        level: "pull",
+      }),
+    });
+    expect(repoPatRes.status).toBe(200);
+  });
+
   it("rejects POST scope:'repo' with a malformed repoSlug", async () => {
     const cookie = await signInAndGetCookie("sub-repo-badslug", "pat-rbadslug");
     const res = await workerExports.default.fetch("https://example.com/auth/api/tokens", {
@@ -376,13 +437,31 @@ describe("PAT management endpoints", () => {
         scope: "repo",
         name: "ci",
         namespaceSlug: "pat-rbadslug",
-        // Uppercase + dot fails the strict slug policy.
-        repoSlug: "Bad.Slug",
+        // Path-traversal dots fail validateRepoSlugForRoute even after lowercasing.
+        repoSlug: "bad..slug",
         level: "pull",
       }),
     });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error?: string };
     expect(body.error).toMatch(/repo slug/i);
+  });
+
+  it("rejects POST scope:'global' for non-admin accounts with 403", async () => {
+    const cookie = await signInAndGetCookie("sub-member-global", "pat-member-global");
+    const res = await workerExports.default.fetch("https://example.com/auth/api/tokens", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://example.com",
+        Cookie: sessionCookieHeader(cookie),
+      },
+      body: JSON.stringify({
+        scope: "global",
+        name: "sneaky-global",
+        level: "push",
+      }),
+    });
+    expect(res.status).toBe(403);
   });
 });

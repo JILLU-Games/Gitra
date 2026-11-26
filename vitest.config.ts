@@ -2,7 +2,7 @@
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { readFileSync, existsSync } from "node:fs";
 import path from "path";
-import { BASE_TEST_BINDINGS } from "./test/vitest.bindings";
+import { BASE_TEST_BINDINGS } from "./test/vitest.bindings.ts";
 import { defineConfig } from "vitest/config";
 
 const AUTH_TEST_FILE = "test/auth.worker.test.ts";
@@ -43,7 +43,7 @@ export default defineConfig({
           async FIXTURE_READER(request: Request) {
             const url = new URL(request.url);
             const filePath = decodeURIComponent(url.pathname.slice(1));
-            const resolved = path.resolve(__dirname, filePath);
+            const resolved = path.resolve(import.meta.dirname, filePath);
             if (!existsSync(resolved)) {
               return new Response("not found", { status: 404 });
             }
@@ -58,7 +58,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
   // Inline deps at the vite-node server level to avoid SSR optimizer resolution issues

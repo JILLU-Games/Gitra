@@ -92,38 +92,35 @@ export function BlobPage(props: BlobPageProps) {
         currentTab="browse"
         canManageRepo={canManageRepo}
       />
-      <span className="mb-1 inline-block text-xs font-semibold uppercase tracking-wider text-accent-500 dark:text-accent-400">
-        File
-      </span>
-      <h2 className="font-display tracking-tight">Blob: {fileName}</h2>
       <Breadcrumbs items={breadcrumbs} parentHref={parentHref} />
-      <div className="blob-container mt-4 rounded-md border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/60">
-        <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-          <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+      <div className="blob-container mt-3 rounded-md border border-border bg-surface">
+        <div className="flex items-center justify-between border-b border-border px-3.5 py-2">
+          <div className="flex items-center gap-2 text-[12px] text-fgMuted">
+            <span className="font-mono font-medium text-fg">{fileName}</span>
             {codeLang ? (
-              <span className="inline-flex items-center rounded-md border border-zinc-300 bg-zinc-50 px-2 py-0.5 dark:border-zinc-700 dark:bg-zinc-800/60">
+              <span className="inline-flex items-center rounded border border-border bg-canvas px-1.5 py-0.5 text-[11px] text-fgMuted">
                 {codeLang}
               </span>
             ) : null}
             {isMarkdown ? (
-              <span className="inline-flex items-center rounded-md border border-zinc-300 bg-zinc-50 px-2 py-0.5 dark:border-zinc-700 dark:bg-zinc-800/60">
+              <span className="inline-flex items-center rounded border border-border bg-canvas px-1.5 py-0.5 text-[11px] text-fgMuted">
                 Markdown
               </span>
             ) : null}
             {isMarkdown || codeLang ? (
               lineCount ? (
-                <span className="text-zinc-500 dark:text-zinc-400">
+                <span className="text-fgMuted">
                   {lineCount} line{lineCount === 1 ? "" : "s"}
                 </span>
               ) : null
             ) : sizeStr ? (
-              <span className="text-zinc-500 dark:text-zinc-400">{sizeStr}</span>
+              <span className="text-fgMuted">{sizeStr}</span>
             ) : null}
           </div>
           <IslandHost
             name="blob-actions"
             props={{ viewRawHref, rawHref, showCopy, isImage, isPdf }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-1.5"
           >
             <BlobActionsIsland
               viewRawHref={viewRawHref}
@@ -164,10 +161,10 @@ export function BlobPage(props: BlobPageProps) {
         ) : null}
         <div
           id="blob-readonly-view"
-          className={`${isMarkdown ? "p-5" : isBinary || tooLarge ? "p-3" : "p-1"}`}
+          className={`${isMarkdown ? "p-4" : isBinary || tooLarge ? "p-3" : "p-1"}`}
         >
           {tooLarge ? (
-            <div className="text-zinc-500 dark:text-zinc-400">File too large to preview.</div>
+            <div className="text-[13px] text-fgMuted">File too large to preview.</div>
           ) : null}
           {!tooLarge && isImage && mediaSrc ? (
             <div className="flex items-center justify-center">
@@ -191,7 +188,7 @@ export function BlobPage(props: BlobPageProps) {
             />
           ) : null}
           {!tooLarge && isBinary && !isImage && !isPdf ? (
-            <div className="text-zinc-500 dark:text-zinc-400">Binary file.</div>
+            <div className="text-[13px] text-fgMuted">Binary file.</div>
           ) : null}
           {!tooLarge && !isBinary && !isMarkdown && codeText !== undefined ? (
             <CodeViewer code={codeText} language={codeLang || null} />

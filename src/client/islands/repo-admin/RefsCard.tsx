@@ -11,18 +11,18 @@ export type RefsCardProps = {
 export function RefsCard({ refs }: RefsCardProps) {
   return (
     <Card>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">References</h2>
+      <div className="mb-3.5 flex items-center justify-between">
+        <h2 className="text-[14px] font-semibold text-fg">References</h2>
         <Button size="sm" type="button" onClick={() => window.location.reload()}>
-          <RefreshCw className="mr-2 inline h-4 w-4 align-[-2px]" aria-hidden="true" />
+          <RefreshCw className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" aria-hidden="true" />
           <span className="label">Refresh All</span>
         </Button>
       </div>
       {refs.length ? (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-[12px]">
             <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-800">
+              <tr className="border-b border-border">
                 <th className="py-2 text-left">Reference Name</th>
                 <th className="py-2 text-left">Target OID</th>
                 <th className="py-2 text-left">Type</th>
@@ -33,19 +33,19 @@ export function RefsCard({ refs }: RefsCardProps) {
                 const kind = classifyRef(ref.name);
 
                 return (
-                  <tr key={ref.name} className="border-b border-zinc-100 dark:border-zinc-800">
-                    <td className="py-2 font-mono text-xs">{shortRefName(ref.name)}</td>
-                    <td className="py-2 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+                  <tr key={ref.name} className="border-b border-borderSubtle">
+                    <td className="py-2 font-mono text-[12px] text-fg">{shortRefName(ref.name)}</td>
+                    <td className="py-2 font-mono text-[12px] text-fgMuted">
                       <span title={ref.oid}>{shortValue(ref.oid, 12)}</span>
                     </td>
                     <td className="py-2">
                       <span
-                        className={`rounded px-2 py-1 text-xs ${
+                        className={`rounded border px-1.5 py-0.5 font-mono text-[11px] ${
                           kind === "branch"
-                            ? "bg-accent-100 dark:bg-accent-900"
+                            ? "border-accent/30 bg-accent/10 text-accent"
                             : kind === "tag"
-                              ? "bg-green-100 dark:bg-green-900"
-                              : "bg-zinc-100 dark:bg-zinc-800"
+                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                              : "border-border bg-canvas text-fgBody"
                         }`}
                       >
                         {kind === "branch"
@@ -62,7 +62,7 @@ export function RefsCard({ refs }: RefsCardProps) {
           </table>
         </div>
       ) : (
-        <p className="italic text-zinc-500">No references found</p>
+        <p className="text-[12px] italic text-fgMuted">No references found</p>
       )}
     </Card>
   );

@@ -3,7 +3,12 @@ import { env, exports as workerExports } from "cloudflare:workers";
 
 import { newPrefixedId } from "@/worker/common";
 import { createDb } from "@/worker/db/d1/client";
-import { claimNamespace, insertMembershipIfMissing, insertUserIfNew } from "@/worker/db/d1/dal";
+import {
+  claimNamespace,
+  insertMembershipIfMissing,
+  insertUserIfNew,
+  upsertNamespaceDirectoryMeta,
+} from "@/worker/db/d1/dal";
 import { asTypedStorage, type RepoStateSchema } from "@/worker/do/repo/repoState";
 
 import { ensureD1Migrations } from "./util/d1Setup";
@@ -172,6 +177,46 @@ describe("admin UI page disclosure", () => {
     });
     expect(res.status).toBe(200);
   });
+
+  it("viewer-role member + public or private repo -> 403 on admin UI", async () => {
+    const ownerPub = `dis-vw-pub-${Math.random().toString(36).slice(2, 8)}`;
+    const ownerPriv = `dis-vw-priv-${Math.random().toString(36).slice(2, 8)}`;
+    const seededPub = await setupRepoForTests(env, ownerPub, "site", { visibility: "public" });
+    const seededPriv = await setupRepoForTests(env, ownerPriv, "site", { visibility: "private" });
+    await upsertNamespaceDirectoryMeta(env.DB, seededPub.namespaceId, {
+      displayName: ownerPub,
+      role: "viewer",
+      status: "active",
+      now: Date.now(),
+    });
+    await upsertNamespaceDirectoryMeta(env.DB, seededPriv.namespaceId, {
+      displayName: ownerPriv,
+      role: "viewer",
+      status: "active",
+      now: Date.now(),
+    });
+
+    const pubAdminRes = await workerExports.default.fetch(
+      `https://example.com/${ownerPub}/site/admin`,
+      { headers: { Cookie: seededPub.cookieHeader }, redirect: "manual" }
+    );
+    expect(pubAdminRes.status).toBe(403);
+
+    const privAdminRes = await workerExports.default.fetch(
+      `https://example.com/${ownerPriv}/site/admin`,
+      { headers: { Cookie: seededPriv.cookieHeader }, redirect: "manual" }
+    );
+    expect(privAdminRes.status).toBe(403);
+
+    // Repo page remains readable for viewer member, without rendering the Admin tab.
+    const repoPageRes = await workerExports.default.fetch(`https://example.com/${ownerPriv}/site`, {
+      headers: { Cookie: seededPriv.cookieHeader },
+      redirect: "manual",
+    });
+    expect(repoPageRes.status).toBe(200);
+    const repoHtml = await repoPageRes.text();
+    expect(repoHtml).not.toContain(`/${ownerPriv}/site/admin`);
+  });
 });
 
 describe("admin JSON endpoints disclosure (GET admin/refs as a representative)", () => {
@@ -217,5 +262,37 @@ describe("admin JSON endpoints disclosure (GET admin/refs as a representative)",
       { headers: { Cookie: outsider } }
     );
     expect(res.status).toBe(403);
+  });
+
+  it("viewer-role member + private -> 403 on admin JSON read and mutating routes", async () => {
+    const owner = `disj-vw-${Math.random().toString(36).slice(2, 8)}`;
+    const repo = "site";
+    const seeded = await setupRepoForTests(env, owner, repo, { visibility: "private" });
+    await upsertNamespaceDirectoryMeta(env.DB, seeded.namespaceId, {
+      displayName: owner,
+      role: "viewer",
+      status: "active",
+      now: Date.now(),
+    });
+
+    const getRes = await workerExports.default.fetch(
+      `https://example.com/${owner}/${repo}/admin/refs`,
+      { headers: { Cookie: seeded.cookieHeader } }
+    );
+    expect(getRes.status).toBe(403);
+
+    const putRes = await workerExports.default.fetch(
+      `https://example.com/${owner}/${repo}/admin/head`,
+      {
+        method: "PUT",
+        headers: {
+          Cookie: seeded.cookieHeader,
+          Origin: "https://example.com",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ target: "refs/heads/main" }),
+      }
+    );
+    expect(putRes.status).toBe(403);
   });
 });

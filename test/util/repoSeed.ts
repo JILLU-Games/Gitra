@@ -57,7 +57,8 @@ export async function seedRepo(env: Env, args: SeedRepoArgs): Promise<SeededRepo
   const visibility = args.visibility ?? "public";
   const doName = args.doName ?? `${args.namespaceSlug}/${args.repoSlug}`;
 
-  const userId = args.userId ?? newPrefixedId("user");
+  const preExistingNs = args.userId ? undefined : await findNamespaceBySlug(db, args.namespaceSlug);
+  const userId = args.userId ?? preExistingNs?.createdBy ?? newPrefixedId("user");
   await insertUserIfNew(db, {
     id: userId,
     tesseraSub: args.tesseraSub ?? `seed-${userId}`,
@@ -68,12 +69,14 @@ export async function seedRepo(env: Env, args: SeedRepoArgs): Promise<SeededRepo
   if (!namespaceId) {
     namespaceId = newPrefixedId("ns");
   }
-  const claimed = await claimNamespace(db, {
-    id: namespaceId,
-    slug: args.namespaceSlug,
-    createdBy: userId,
-    createdAt: now,
-  });
+  const claimed = preExistingNs
+    ? null
+    : await claimNamespace(db, {
+        id: namespaceId,
+        slug: args.namespaceSlug,
+        createdBy: userId,
+        createdAt: now,
+      });
   let resolvedNamespaceId: string;
   if (claimed) {
     resolvedNamespaceId = claimed.id;

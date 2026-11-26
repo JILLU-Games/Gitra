@@ -67,9 +67,32 @@ export function SystemAdminIsland({
     );
   }
 
-  function handleRepoVisibilityChanged(repoId: string, visibility: "public" | "private") {
+  function handleRepoVisibilityChanged(
+    repoId: string,
+    visibility: "public" | "private",
+    homePinned?: boolean
+  ) {
     setRepositories((prev) =>
-      prev.map((repo) => (repo.id === repoId ? { ...repo, visibility } : repo))
+      prev.map((repo) =>
+        repo.id === repoId
+          ? {
+              ...repo,
+              visibility,
+              homePinned:
+                homePinned !== undefined
+                  ? homePinned
+                  : visibility === "private"
+                    ? false
+                    : repo.homePinned,
+            }
+          : repo
+      )
+    );
+  }
+
+  function handleRepoPinChanged(repoId: string, pinned: boolean, homePinned: boolean) {
+    setRepositories((prev) =>
+      prev.map((repo) => (repo.id === repoId ? { ...repo, pinned, homePinned } : repo))
     );
   }
 
@@ -82,25 +105,36 @@ export function SystemAdminIsland({
     );
   }
 
+  const pinnedCount = useMemo(
+    () => repositories.filter((repo) => repo.pinned).length,
+    [repositories]
+  );
+  const homePinnedCount = useMemo(
+    () => repositories.filter((repo) => repo.visibility === "public" && repo.homePinned).length,
+    [repositories]
+  );
+
   if (activeSection === "repositories") {
     return (
       <div className="space-y-4">
-        <header className="flex flex-col gap-2 border-b border-zinc-200 pb-3.5 sm:flex-row sm:items-end sm:justify-between dark:border-zinc-800">
+        <header className="flex flex-col gap-2 border-b border-border pb-3.5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="m-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-              Repositories
-            </h1>
-            <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-              Create repositories, toggle public or private visibility, copy clone URLs, or remove
-              repositories.
+            <h1 className="m-0 text-[18px] font-semibold tracking-tight text-fg">Repositories</h1>
+            <p className="m-0 mt-0.5 text-[12px] text-fgMuted">
+              Manage visibility, profile pins, public homepage featuring, clone URLs, or repository
+              removal.
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap font-mono text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 whitespace-nowrap font-mono text-[12px] text-fgMuted tabular-nums">
             <span>{metrics.totalRepositories} total</span>
             <span>·</span>
             <span>{metrics.publicRepositories} public</span>
             <span>·</span>
             <span>{metrics.privateRepositories} private</span>
+            <span>·</span>
+            <span>{pinnedCount} pinned</span>
+            <span>·</span>
+            <span>{homePinnedCount} homepage</span>
           </div>
         </header>
 
@@ -111,6 +145,7 @@ export function SystemAdminIsland({
           repositories={repositories}
           onCreated={handleRepoCreated}
           onVisibilityChanged={handleRepoVisibilityChanged}
+          onPinChanged={handleRepoPinChanged}
           onDeleted={handleRepoDeleted}
         />
       </div>
@@ -120,16 +155,14 @@ export function SystemAdminIsland({
   if (activeSection === "tokens") {
     return (
       <div className="space-y-4">
-        <header className="flex flex-col gap-2 border-b border-zinc-200 pb-3.5 sm:flex-row sm:items-end sm:justify-between dark:border-zinc-800">
+        <header className="flex flex-col gap-2 border-b border-border pb-3.5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="m-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-              Access Tokens
-            </h1>
-            <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <h1 className="m-0 text-[18px] font-semibold tracking-tight text-fg">Access Tokens</h1>
+            <p className="m-0 mt-0.5 text-[12px] text-fgMuted">
               Issue and revoke Personal Access Tokens for Git Smart HTTP clone, pull, and push.
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap font-mono text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+          <div className="flex shrink-0 items-center gap-2 whitespace-nowrap font-mono text-[12px] text-fgMuted tabular-nums">
             <span>{metrics.activeTokens} active</span>
             <span>·</span>
             <span>{metrics.totalTokens} total</span>
@@ -150,14 +183,12 @@ export function SystemAdminIsland({
   const recentRepos = repositories.slice(0, 6);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Compact Header */}
-      <header className="flex flex-col gap-2 border-b border-zinc-200 pb-3.5 sm:flex-row sm:items-end sm:justify-between dark:border-zinc-800">
+      <header className="flex flex-col gap-2 border-b border-border pb-3.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="m-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-            Control Panel
-          </h1>
-          <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+          <h1 className="m-0 text-[18px] font-semibold tracking-tight text-fg">Control Panel</h1>
+          <p className="m-0 mt-0.5 text-[12px] text-fgMuted">
             System overview across users, repositories, personal access tokens, and security
             configuration.
           </p>
@@ -165,14 +196,14 @@ export function SystemAdminIsland({
         <div className="flex flex-wrap items-center gap-1.5">
           <a
             href="/admin/users"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 no-underline transition-colors hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
           >
-            <Users className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" aria-hidden="true" />
+            <Users className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
             <span>Manage Users</span>
           </a>
           <a
             href="/admin/repositories"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-accent-600 bg-accent-600 px-2.5 text-xs font-medium text-white no-underline transition-colors hover:bg-accent-700"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas no-underline transition-colors hover:bg-fgHover"
           >
             <FolderGit2 className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Repositories</span>
@@ -187,20 +218,20 @@ export function SystemAdminIsland({
       >
         <a
           href="/admin/repositories"
-          className="group block rounded-lg border border-zinc-200 bg-white px-3.5 py-3 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+          className="group block rounded-md border border-border bg-surface px-3.5 py-3 no-underline transition-colors hover:bg-surfaceHover"
         >
-          <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+          <div className="flex items-center justify-between text-[11px] font-medium text-fgMuted">
             <span>Total Repositories</span>
             <FolderGit2
-              className="h-3.5 w-3.5 text-zinc-400 group-hover:text-accent-600 dark:group-hover:text-accent-400"
+              className="h-3.5 w-3.5 text-fgMuted group-hover:text-fg"
               aria-hidden="true"
             />
           </div>
           <div className="mt-1.5 flex items-baseline justify-between gap-2">
-            <span className="font-mono text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+            <span className="font-mono text-[20px] font-semibold tabular-nums text-fg">
               {metrics.totalRepositories}
             </span>
-            <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+            <span className="font-mono text-[11px] text-fgMuted">
               {metrics.publicRepositories} pub · {metrics.privateRepositories} priv
             </span>
           </div>
@@ -208,20 +239,17 @@ export function SystemAdminIsland({
 
         <a
           href="/admin/users"
-          className="group block rounded-lg border border-zinc-200 bg-white px-3.5 py-3 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+          className="group block rounded-md border border-border bg-surface px-3.5 py-3 no-underline transition-colors hover:bg-surfaceHover"
         >
-          <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+          <div className="flex items-center justify-between text-[11px] font-medium text-fgMuted">
             <span>Active Users / Namespaces</span>
-            <Users
-              className="h-3.5 w-3.5 text-zinc-400 group-hover:text-accent-600 dark:group-hover:text-accent-400"
-              aria-hidden="true"
-            />
+            <Users className="h-3.5 w-3.5 text-fgMuted group-hover:text-fg" aria-hidden="true" />
           </div>
           <div className="mt-1.5 flex items-baseline justify-between gap-2">
-            <span className="font-mono text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+            <span className="font-mono text-[20px] font-semibold tabular-nums text-fg">
               {metrics.activeNamespaces}
             </span>
-            <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+            <span className="font-mono text-[11px] text-fgMuted">
               {metrics.totalNamespaces} total
             </span>
           </div>
@@ -229,22 +257,17 @@ export function SystemAdminIsland({
 
         <a
           href="/admin/tokens"
-          className="group block rounded-lg border border-zinc-200 bg-white px-3.5 py-3 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+          className="group block rounded-md border border-border bg-surface px-3.5 py-3 no-underline transition-colors hover:bg-surfaceHover"
         >
-          <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+          <div className="flex items-center justify-between text-[11px] font-medium text-fgMuted">
             <span>Personal Access Tokens</span>
-            <KeyRound
-              className="h-3.5 w-3.5 text-zinc-400 group-hover:text-accent-600 dark:group-hover:text-accent-400"
-              aria-hidden="true"
-            />
+            <KeyRound className="h-3.5 w-3.5 text-fgMuted group-hover:text-fg" aria-hidden="true" />
           </div>
           <div className="mt-1.5 flex items-baseline justify-between gap-2">
-            <span className="font-mono text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+            <span className="font-mono text-[20px] font-semibold tabular-nums text-fg">
               {metrics.activeTokens}
             </span>
-            <span className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
-              {metrics.totalTokens} total
-            </span>
+            <span className="font-mono text-[11px] text-fgMuted">{metrics.totalTokens} total</span>
           </div>
         </a>
       </div>
@@ -252,14 +275,12 @@ export function SystemAdminIsland({
       {/* Dashboard Two-Column Summary */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
         {/* Repositories Snapshot */}
-        <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-2.5 dark:border-zinc-800">
-            <h2 className="m-0 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-              Repositories
-            </h2>
+        <section className="overflow-hidden rounded-md border border-border bg-surface">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <h2 className="m-0 text-[13px] font-semibold text-fg">Repositories</h2>
             <a
               href="/admin/repositories"
-              className="inline-flex items-center gap-1 text-xs font-medium text-accent-600 no-underline hover:underline dark:text-accent-400"
+              className="inline-flex items-center gap-1 text-[12px] font-medium text-accent no-underline hover:underline"
             >
               <span>Manage all</span>
               <ArrowRight className="h-3 w-3" aria-hidden="true" />
@@ -267,50 +288,43 @@ export function SystemAdminIsland({
           </div>
 
           {recentRepos.length === 0 ? (
-            <div className="px-4 py-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
+            <div className="px-4 py-8 text-center text-[12px] text-fgMuted">
               No repositories yet. Create one in{" "}
-              <a
-                href="/admin/repositories"
-                className="text-accent-600 underline dark:text-accent-400"
-              >
+              <a href="/admin/repositories" className="text-accent underline">
                 Repositories
               </a>
               .
             </div>
           ) : (
-            <ul className="m-0 list-none divide-y divide-zinc-200 p-0 dark:divide-zinc-800">
+            <ul className="m-0 list-none divide-y divide-borderSubtle p-0">
               {recentRepos.map((repo) => (
                 <li
                   key={repo.id}
-                  className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs transition-colors hover:bg-zinc-50/70 dark:hover:bg-zinc-800/30"
+                  className="flex items-center justify-between gap-3 px-4 py-2.5 text-[12px] transition-colors hover:bg-surfaceHover"
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     {repo.visibility === "private" ? (
-                      <Lock className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden="true" />
+                      <Lock className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden="true" />
                     ) : (
-                      <Globe className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden="true" />
+                      <Globe className="h-3.5 w-3.5 shrink-0 text-fgMuted" aria-hidden="true" />
                     )}
                     <a
                       href={`/${repo.namespaceSlug}/${repo.slug}`}
-                      className="truncate font-mono font-medium text-zinc-900 no-underline hover:text-accent-600 hover:underline dark:text-zinc-100 dark:hover:text-accent-400"
+                      className="truncate font-mono font-medium text-fg no-underline hover:text-accent hover:underline"
                     >
-                      <span className="text-zinc-500 dark:text-zinc-400">
-                        {repo.namespaceSlug}/
-                      </span>
+                      <span className="text-fgMuted">{repo.namespaceSlug}/</span>
                       {repo.slug}
                     </a>
                   </div>
-                  <div className="flex shrink-0 items-center gap-3 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                  <div className="flex shrink-0 items-center gap-3 font-mono text-[11px] text-fgMuted">
+                    {repo.homePinned ? <span className="text-fg">homepage</span> : null}
+                    {repo.pinned ? <span>pinned</span> : null}
                     <span className="hidden items-center gap-1 sm:inline-flex">
                       <GitBranch className="h-3 w-3" aria-hidden="true" />
                       {repo.defaultBranch}
                     </span>
                     <span
-                      className={
-                        repo.visibility === "private"
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-zinc-500 dark:text-zinc-400"
-                      }
+                      className={repo.visibility === "private" ? "text-amber-400" : "text-fgMuted"}
                     >
                       {repo.visibility}
                     </span>
@@ -323,80 +337,72 @@ export function SystemAdminIsland({
 
         {/* Directory & System Status Card */}
         <div className="space-y-4">
-          <section className="rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex items-center justify-between border-b border-zinc-200 px-3.5 py-2.5 dark:border-zinc-800">
-              <h2 className="m-0 text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                User Directory
-              </h2>
+          <section className="rounded-md border border-border bg-surface">
+            <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
+              <h2 className="m-0 text-[13px] font-semibold text-fg">User Directory</h2>
               <a
                 href="/admin/users"
-                className="text-xs font-medium text-accent-600 no-underline hover:underline dark:text-accent-400"
+                className="text-[12px] font-medium text-accent no-underline hover:underline"
               >
                 Open
               </a>
             </div>
-            <dl className="m-0 divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
+            <dl className="m-0 divide-y divide-borderSubtle text-[12px]">
               <div className="flex items-center justify-between px-3.5 py-2">
-                <dt className="text-zinc-500 dark:text-zinc-400">Admins</dt>
-                <dd className="m-0 font-mono tabular-nums text-zinc-900 dark:text-zinc-100">
-                  {roleCounts.admins}
-                </dd>
+                <dt className="text-fgMuted">Admins</dt>
+                <dd className="m-0 font-mono tabular-nums text-fg">{roleCounts.admins}</dd>
               </div>
               <div className="flex items-center justify-between px-3.5 py-2">
-                <dt className="text-zinc-500 dark:text-zinc-400">Members</dt>
-                <dd className="m-0 font-mono tabular-nums text-zinc-900 dark:text-zinc-100">
-                  {roleCounts.members}
-                </dd>
+                <dt className="text-fgMuted">Members</dt>
+                <dd className="m-0 font-mono tabular-nums text-fg">{roleCounts.members}</dd>
               </div>
               <div className="flex items-center justify-between px-3.5 py-2">
-                <dt className="text-zinc-500 dark:text-zinc-400">Viewers</dt>
-                <dd className="m-0 font-mono tabular-nums text-zinc-900 dark:text-zinc-100">
-                  {roleCounts.viewers}
-                </dd>
+                <dt className="text-fgMuted">Viewers</dt>
+                <dd className="m-0 font-mono tabular-nums text-fg">{roleCounts.viewers}</dd>
               </div>
               <div className="flex items-center justify-between px-3.5 py-2">
-                <dt className="text-zinc-500 dark:text-zinc-400">Auth Mode</dt>
-                <dd className="m-0 font-mono text-[11px] text-zinc-700 dark:text-zinc-300">
+                <dt className="text-fgMuted">Auth Mode</dt>
+                <dd className="m-0 font-mono text-[11px] text-fgBody">
                   {authMode === "configured" ? "Configured" : "Demo / Preview"}
                 </dd>
               </div>
             </dl>
           </section>
 
-          <section className="rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="px-2 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+          <section className="rounded-md border border-border bg-surface p-2">
+            <div className="px-2 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-fgMuted">
               Control Shortcuts
             </div>
-            <div className="space-y-0.5 text-xs">
+            <div className="space-y-0.5 text-[12px]">
               <a
                 href="/admin/tokens"
-                className="flex h-8 items-center justify-between rounded-md px-2 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
+                className="flex h-8 items-center justify-between rounded-md px-2 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
               >
                 <span className="flex items-center gap-2">
-                  <KeyRound className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
+                  <KeyRound className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                   <span>Issue Access Token</span>
                 </span>
-                <ArrowRight className="h-3 w-3 text-zinc-400" aria-hidden="true" />
+                <ArrowRight className="h-3 w-3 text-fgMuted" aria-hidden="true" />
               </a>
               <a
                 href="/admin/settings"
-                className="flex h-8 items-center justify-between rounded-md px-2 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
+                className="flex h-8 items-center justify-between rounded-md px-2 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
               >
                 <span className="flex items-center gap-2">
-                  <SlidersHorizontal className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                   <span>Instance Settings</span>
                 </span>
-                <ArrowRight className="h-3 w-3 text-zinc-400" aria-hidden="true" />
+                <ArrowRight className="h-3 w-3 text-fgMuted" aria-hidden="true" />
               </a>
               <a
                 href="/admin/security"
-                className="flex h-8 items-center justify-between rounded-md px-2 text-zinc-700 no-underline hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
+                className="flex h-8 items-center justify-between rounded-md px-2 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
               >
                 <span className="flex items-center gap-2">
-                  <ShieldCheck className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
+                  <ShieldCheck className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
                   <span>Security &amp; Policies</span>
                 </span>
-                <ArrowRight className="h-3 w-3 text-zinc-400" aria-hidden="true" />
+                <ArrowRight className="h-3 w-3 text-fgMuted" aria-hidden="true" />
               </a>
             </div>
           </section>

@@ -12,12 +12,11 @@ type CardProps = {
 const base = "rounded-md p-4";
 
 const variantStyles: Record<CardVariant, string> = {
-  default: "border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900",
-  accent: "border border-accent-500/35 bg-white dark:bg-zinc-900",
+  default: "border border-border bg-surface",
+  accent: "border border-border bg-surface",
 };
 
-const interactiveStyles =
-  "hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors cursor-pointer";
+const interactiveStyles = "hover:bg-surfaceHover/50 transition-colors cursor-pointer";
 
 export function Card({
   variant = "default",

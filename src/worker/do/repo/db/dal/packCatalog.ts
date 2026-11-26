@@ -25,22 +25,34 @@ export async function listPackCatalog(db: DrizzleSqliteDODatabase): Promise<Pack
     .orderBy(desc(packCatalog.seqHi), desc(packCatalog.tier));
 }
 
-export async function listActivePackCatalog(
-  db: DrizzleSqliteDODatabase
-): Promise<PackCatalogRow[]> {
-  return await db
+export function listActivePackCatalogSync(db: DrizzleSqliteDODatabase): PackCatalogRow[] {
+  return db
     .select()
     .from(packCatalog)
     .where(eq(packCatalog.state, "active"))
-    .orderBy(desc(packCatalog.seqHi), desc(packCatalog.tier));
+    .orderBy(desc(packCatalog.seqHi), desc(packCatalog.tier))
+    .all();
+}
+
+export async function listActivePackCatalog(
+  db: DrizzleSqliteDODatabase
+): Promise<PackCatalogRow[]> {
+  return listActivePackCatalogSync(db);
+}
+
+export function getPackCatalogRowSync(
+  db: DrizzleSqliteDODatabase,
+  packKey: string
+): PackCatalogRow | undefined {
+  const rows = db.select().from(packCatalog).where(eq(packCatalog.packKey, packKey)).limit(1).all();
+  return rows[0];
 }
 
 export async function getPackCatalogRow(
   db: DrizzleSqliteDODatabase,
   packKey: string
 ): Promise<PackCatalogRow | undefined> {
-  const rows = await db.select().from(packCatalog).where(eq(packCatalog.packKey, packKey)).limit(1);
-  return rows[0];
+  return getPackCatalogRowSync(db, packKey);
 }
 
 export async function getPackCatalogSeqMax(db: DrizzleSqliteDODatabase): Promise<number> {
@@ -52,12 +64,8 @@ export async function getPackCatalogSeqMax(db: DrizzleSqliteDODatabase): Promise
   return rows[0]?.maxSeqHi || 0;
 }
 
-export async function upsertPackCatalogRow(
-  db: DrizzleSqliteDODatabase,
-  row: PackCatalogRow
-): Promise<void> {
-  await db
-    .insert(packCatalog)
+export function upsertPackCatalogRowSync(db: DrizzleSqliteDODatabase, row: PackCatalogRow): void {
+  db.insert(packCatalog)
     .values(row)
     .onConflictDoUpdate({
       target: packCatalog.packKey,
@@ -73,7 +81,30 @@ export async function upsertPackCatalogRow(
         createdAt: row.createdAt,
         supersededBy: row.supersededBy,
       },
-    });
+    })
+    .run();
+}
+
+export async function upsertPackCatalogRow(
+  db: DrizzleSqliteDODatabase,
+  row: PackCatalogRow
+): Promise<void> {
+  upsertPackCatalogRowSync(db, row);
+}
+
+export function supersedePackCatalogRowsSync(
+  db: DrizzleSqliteDODatabase,
+  packKeys: string[],
+  supersededBy: string | null = null
+): void {
+  if (!packKeys.length) return;
+  for (let i = 0; i < packKeys.length; i += SAFE_ROWS_1COL) {
+    const batch = packKeys.slice(i, i + SAFE_ROWS_1COL);
+    db.update(packCatalog)
+      .set({ state: "superseded", supersededBy })
+      .where(inArray(packCatalog.packKey, batch))
+      .run();
+  }
 }
 
 export async function supersedePackCatalogRows(
@@ -81,14 +112,7 @@ export async function supersedePackCatalogRows(
   packKeys: string[],
   supersededBy: string | null = null
 ): Promise<void> {
-  if (!packKeys.length) return;
-  for (let i = 0; i < packKeys.length; i += SAFE_ROWS_1COL) {
-    const batch = packKeys.slice(i, i + SAFE_ROWS_1COL);
-    await db
-      .update(packCatalog)
-      .set({ state: "superseded", supersededBy })
-      .where(inArray(packCatalog.packKey, batch));
-  }
+  supersedePackCatalogRowsSync(db, packKeys, supersededBy);
 }
 
 export async function deletePackCatalogRows(

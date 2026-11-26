@@ -275,14 +275,20 @@ async function loadViewerUncached(c: AppContext): Promise<Viewer | null> {
         hasPassword: account.hasPassword,
       };
     }
-  } catch {
-    // Fall back safely when directory metadata is unavailable.
+  } catch (error) {
+    // Fail closed on directory metadata read failures so disabled or demoted
+    // sessions cannot silently fall back to an active writable role.
+    c.var.logFor({ service: "SessionAuth" }).warn("session:directory-lookup-failed", {
+      userId: active.user.id,
+      error: String(error),
+    });
+    return null;
   }
 
   return {
     userId: active.user.id,
     primaryNamespaceSlug,
-    role: "member",
+    role: "viewer",
     isPrimaryAdmin: false,
     hasPassword: false,
   };

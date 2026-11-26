@@ -23,10 +23,10 @@ type RepoNavProps = {
 };
 
 const tabBase =
-  "inline-flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-[13px] font-normal whitespace-nowrap text-zinc-600 no-underline transition-colors hover:border-zinc-300 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/50 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100";
+  "inline-flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-[13px] font-normal whitespace-nowrap text-fgMuted no-underline transition-colors hover:border-border hover:text-fg";
 
 const tabActive =
-  "inline-flex shrink-0 items-center gap-1.5 border-b-2 border-accent-500 px-3 py-2 text-[13px] font-medium whitespace-nowrap text-zinc-950 no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/50 dark:text-zinc-50";
+  "inline-flex shrink-0 items-center gap-1.5 border-b-2 border-fg px-3 py-2 text-[13px] font-medium whitespace-nowrap text-fg no-underline";
 
 export function RepoNav({
   owner,
@@ -44,35 +44,29 @@ export function RepoNav({
   return (
     <div className="mb-4">
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-base">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[14px]">
           {visibility === "private" ? (
-            <Lock
-              className="h-4 w-4 shrink-0 text-zinc-400 dark:text-zinc-500"
-              aria-hidden="true"
-            />
+            <Lock className="h-3.5 w-3.5 shrink-0 text-fgMuted" aria-hidden="true" />
           ) : (
-            <BookMarked
-              className="h-4 w-4 shrink-0 text-zinc-400 dark:text-zinc-500"
-              aria-hidden="true"
-            />
+            <BookMarked className="h-3.5 w-3.5 shrink-0 text-fgMuted" aria-hidden="true" />
           )}
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <a
               href={buildNamespaceProfileHref(owner)}
-              className="font-normal text-zinc-600 no-underline hover:text-accent-600 hover:underline dark:text-zinc-400 dark:hover:text-accent-400"
+              className="font-normal text-fgMuted no-underline hover:text-accent hover:underline"
             >
               {owner}
             </a>
-            <span className="text-zinc-400 dark:text-zinc-600">/</span>
+            <span className="text-fgMuted">/</span>
             <a
               href={`/${owner}/${repo}`}
-              className="font-semibold tracking-tight text-zinc-950 no-underline hover:text-accent-600 hover:underline dark:text-zinc-100 dark:hover:text-accent-400"
+              className="font-semibold tracking-tight text-fg no-underline hover:text-accent hover:underline"
             >
               {repo}
             </a>
           </div>
           {visibility ? (
-            <span className="inline-flex items-center rounded-md border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[11px] font-medium capitalize text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+            <span className="inline-flex items-center rounded border border-border bg-canvas px-1.5 py-0.5 text-[11px] font-medium capitalize text-fgMuted">
               {visibility}
             </span>
           ) : null}
@@ -91,7 +85,7 @@ export function RepoNav({
 
       {refEnc ? (
         <nav
-          className="-mb-px flex items-center gap-1 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800"
+          className="-mb-px flex items-center gap-1 overflow-x-auto border-b border-border"
           aria-label="Repository navigation"
         >
           <a
@@ -100,11 +94,7 @@ export function RepoNav({
             aria-current={isCodeActive ? "page" : undefined}
           >
             <Code2
-              className={`h-4 w-4 shrink-0 ${
-                isCodeActive
-                  ? "text-zinc-950 dark:text-zinc-100"
-                  : "text-zinc-400 dark:text-zinc-500"
-              }`}
+              className={`h-3.5 w-3.5 shrink-0 ${isCodeActive ? "text-fg" : "text-fgMuted"}`}
               aria-hidden="true"
             />
             <span>Code</span>
@@ -115,10 +105,8 @@ export function RepoNav({
             aria-current={currentTab === "commits" ? "page" : undefined}
           >
             <GitCommitHorizontal
-              className={`h-4 w-4 shrink-0 ${
-                currentTab === "commits"
-                  ? "text-zinc-950 dark:text-zinc-100"
-                  : "text-zinc-400 dark:text-zinc-500"
+              className={`h-3.5 w-3.5 shrink-0 ${
+                currentTab === "commits" ? "text-fg" : "text-fgMuted"
               }`}
               aria-hidden="true"
             />
@@ -131,10 +119,8 @@ export function RepoNav({
               aria-current={currentTab === "admin" ? "page" : undefined}
             >
               <Settings
-                className={`h-4 w-4 shrink-0 ${
-                  currentTab === "admin"
-                    ? "text-zinc-950 dark:text-zinc-100"
-                    : "text-zinc-400 dark:text-zinc-500"
+                className={`h-3.5 w-3.5 shrink-0 ${
+                  currentTab === "admin" ? "text-fg" : "text-fgMuted"
                 }`}
                 aria-hidden="true"
               />

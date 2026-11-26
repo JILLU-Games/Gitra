@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { FolderGit2, Globe, Lock, Plus } from "lucide-react";
 
 import { hydrateIsland } from "@/client/hydrate";
-import { Button, Card, EmptyState, ErrorBanner, Input } from "@/client/components/ui";
+import { Button, Card, ConfirmModal, EmptyState, ErrorBanner, Input } from "@/client/components/ui";
 
 // SSR-side repository summary mirrored to keep the island bundle decoupled
 // from the page-side `AccountRepository` shape. Browser islands intentionally
@@ -85,6 +85,8 @@ export function RepositoriesIsland({
   const [repositories, setRepositories] = useState(initialRepos);
   const [showForm, setShowForm] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [confirmMakePublicRepo, setConfirmMakePublicRepo] =
+    useState<RepositoriesIslandSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const broadcast = (next: RepositoriesIslandSummary[]) => {
@@ -135,15 +137,8 @@ export function RepositoriesIsland({
     }
   }
 
-  async function handleToggle(repo: RepositoriesIslandSummary) {
+  async function executeToggle(repo: RepositoriesIslandSummary, next: "public" | "private") {
     if (readOnly || pendingId) return;
-    const next = repo.visibility === "private" ? "public" : "private";
-    if (next === "public") {
-      const confirmed = confirm(
-        `Make ${repo.namespaceSlug}/${repo.slug} public? Anyone will be able to read it.`
-      );
-      if (!confirmed) return;
-    }
     setPendingId(repo.id);
     setError(null);
     try {
@@ -163,11 +158,22 @@ export function RepositoriesIsland({
         r.id === repo.id ? { ...r, visibility: body.visibility } : r
       );
       broadcast(updated);
+      setConfirmMakePublicRepo(null);
     } catch (err) {
       setError(String(err));
     } finally {
       setPendingId(null);
     }
+  }
+
+  function handleToggle(repo: RepositoriesIslandSummary) {
+    if (readOnly || pendingId) return;
+    const next = repo.visibility === "private" ? "public" : "private";
+    if (next === "public") {
+      setConfirmMakePublicRepo(repo);
+      return;
+    }
+    void executeToggle(repo, next);
   }
 
   return (
@@ -176,7 +182,7 @@ export function RepositoriesIsland({
       {repositories.length === 0 ? (
         <div className="flex flex-col items-center gap-3">
           <EmptyState
-            icon={<FolderGit2 className="h-5 w-5 text-zinc-400" aria-hidden="true" />}
+            icon={<FolderGit2 className="h-5 w-5 text-fgMuted" aria-hidden="true" />}
             title="Repositories you own will appear here."
             detail={
               readOnly
@@ -192,7 +198,7 @@ export function RepositoriesIsland({
           ) : null}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="overflow-hidden rounded-md border border-border bg-surface">
           <table>
             <thead>
               <tr>
@@ -207,7 +213,7 @@ export function RepositoriesIsland({
                   <td>
                     <a
                       href={`/${repo.namespaceSlug}/${repo.slug}`}
-                      className="text-sm font-medium text-accent-600 no-underline hover:underline dark:text-accent-400"
+                      className="text-[13px] font-semibold text-fg no-underline hover:text-accent hover:underline"
                     >
                       {repo.namespaceSlug}/{repo.slug}
                     </a>
@@ -215,10 +221,8 @@ export function RepositoriesIsland({
                   <td>
                     {readOnly ? (
                       <span
-                        className={`inline-flex items-center gap-1 text-xs font-medium capitalize ${
-                          repo.visibility === "private"
-                            ? "text-amber-700 dark:text-amber-400"
-                            : "text-emerald-700 dark:text-emerald-400"
+                        className={`inline-flex items-center gap-1 text-[12px] font-medium capitalize ${
+                          repo.visibility === "private" ? "text-amber-400" : "text-fgMuted"
                         }`}
                       >
                         {repo.visibility === "private" ? (
@@ -234,9 +238,7 @@ export function RepositoriesIsland({
                         onClick={() => void handleToggle(repo)}
                         disabled={pendingId === repo.id}
                         className={`inline-flex items-center transition-opacity hover:opacity-80 disabled:opacity-50 ${
-                          repo.visibility === "private"
-                            ? "text-amber-700 dark:text-amber-400"
-                            : "text-emerald-700 dark:text-emerald-400"
+                          repo.visibility === "private" ? "text-amber-400" : "text-fgMuted"
                         }`}
                         title={`${repo.visibility === "private" ? "Private" : "Public"} - click to toggle`}
                         aria-label={`${repo.visibility === "private" ? "Private" : "Public"} repository - click to toggle`}
@@ -249,7 +251,7 @@ export function RepositoriesIsland({
                       </button>
                     )}
                   </td>
-                  <td className="text-right text-xs text-zinc-500" suppressHydrationWarning>
+                  <td className="text-right text-[12px] text-fgMuted" suppressHydrationWarning>
                     {formatRelativeTime(repo.updatedAt)}
                   </td>
                 </tr>
@@ -277,6 +279,25 @@ export function RepositoriesIsland({
           </Button>
         </div>
       ) : null}
+
+      <ConfirmModal
+        open={confirmMakePublicRepo !== null}
+        title="Make repository public"
+        description={
+          confirmMakePublicRepo
+            ? `Make ${confirmMakePublicRepo.namespaceSlug}/${confirmMakePublicRepo.slug} public? Anyone will be able to browse and clone it over HTTPS.`
+            : ""
+        }
+        confirmLabel="Make public"
+        variant="danger"
+        busy={confirmMakePublicRepo !== null && pendingId === confirmMakePublicRepo.id}
+        onCancel={() => {
+          if (!pendingId) setConfirmMakePublicRepo(null);
+        }}
+        onConfirm={() => {
+          if (confirmMakePublicRepo) return executeToggle(confirmMakePublicRepo, "public");
+        }}
+      />
     </div>
   );
 }
@@ -322,7 +343,7 @@ function CreateForm({ primaryNamespaceSlug, onCancel, onSubmit }: CreateFormProp
   return (
     <Card>
       <form
-        className="grid gap-5"
+        className="grid gap-4"
         onSubmit={async (event) => {
           event.preventDefault();
           if (!canSubmit) return;
@@ -338,7 +359,7 @@ function CreateForm({ primaryNamespaceSlug, onCancel, onSubmit }: CreateFormProp
           }
         }}
       >
-        <h3 className="m-0 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <h3 className="m-0 text-[12px] font-semibold uppercase tracking-wider text-fgMuted">
           New repository
         </h3>
         <Input
@@ -383,7 +404,7 @@ type VisibilityTilesProps = {
 // page reads as one cohesive control language.
 function VisibilityTiles({ visibility, onChange }: VisibilityTilesProps) {
   const tile =
-    "group relative flex cursor-pointer flex-col gap-1 rounded-md border border-zinc-200 p-3.5 transition-colors hover:border-zinc-300 has-[:checked]:border-accent-500 has-[:checked]:bg-accent-500/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-500/40 dark:border-zinc-800 dark:hover:border-zinc-700";
+    "group relative flex cursor-pointer flex-col gap-1 rounded-md border border-border bg-canvas p-3 transition-colors hover:border-fgMuted has-[:checked]:border-fgMuted has-[:checked]:bg-surfaceHover";
   return (
     <fieldset className="m-0 grid gap-3 border-0 p-0 sm:grid-cols-2">
       <legend className="sr-only">Visibility</legend>
@@ -396,13 +417,11 @@ function VisibilityTiles({ visibility, onChange }: VisibilityTilesProps) {
           checked={visibility === "private"}
           onChange={() => onChange("private")}
         />
-        <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800 group-has-[:checked]:text-accent-600 dark:text-zinc-200 dark:group-has-[:checked]:text-accent-400">
+        <span className="flex items-center gap-2 text-[12px] font-semibold text-fgBody group-has-[:checked]:text-fg">
           <Lock className="h-3.5 w-3.5" aria-hidden="true" />
           Private
         </span>
-        <span className="text-xs text-zinc-600 dark:text-zinc-400">
-          Only namespace members can read.
-        </span>
+        <span className="text-[12px] text-fgMuted">Only namespace members can read.</span>
       </label>
       <label className={tile}>
         <input
@@ -413,11 +432,11 @@ function VisibilityTiles({ visibility, onChange }: VisibilityTilesProps) {
           checked={visibility === "public"}
           onChange={() => onChange("public")}
         />
-        <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800 group-has-[:checked]:text-accent-600 dark:text-zinc-200 dark:group-has-[:checked]:text-accent-400">
+        <span className="flex items-center gap-2 text-[12px] font-semibold text-fgBody group-has-[:checked]:text-fg">
           <Globe className="h-3.5 w-3.5" aria-hidden="true" />
           Public
         </span>
-        <span className="text-xs text-zinc-600 dark:text-zinc-400">Anyone can read.</span>
+        <span className="text-[12px] text-fgMuted">Anyone can read.</span>
       </label>
     </fieldset>
   );

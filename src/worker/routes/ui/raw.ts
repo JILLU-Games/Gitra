@@ -4,6 +4,26 @@ import { isValidRef, isValidPath, OID_RE, getContentTypeFromName, isHttpError } 
 import { isRequestPrivate, resolveUiRepoAccess } from "./helpers";
 import type { AppContext } from "../hono";
 
+const CONTROL_AND_HEADER_UNSAFE_RE = /[\x00-\x1F\x7F"\\;]/g;
+
+// Strip path segments, control characters, quotes, and header delimiters so
+// user-controlled query filenames cannot inject headers or MIME confusion.
+function sanitizeContentDispositionFilename(rawName: string, fallback: string): string {
+  const baseName = (rawName.split(/[\\/]/).pop() || "").trim();
+  const cleaned = baseName.replace(CONTROL_AND_HEADER_UNSAFE_RE, "_").trim();
+  return cleaned.length > 0 ? cleaned.slice(0, 180) : fallback;
+}
+
+function isScriptableContentType(contentType: string): boolean {
+  const lower = contentType.toLowerCase();
+  return (
+    lower.includes("svg") ||
+    lower.includes("html") ||
+    lower.includes("xml") ||
+    lower.includes("javascript")
+  );
+}
+
 export async function handleRaw(c: AppContext<"/:owner/:repo/raw">) {
   const env = c.env;
   const owner = c.req.param("owner");
@@ -15,7 +35,7 @@ export async function handleRaw(c: AppContext<"/:owner/:repo/raw">) {
   const url = new URL(c.req.url);
   const oid = url.searchParams.get("oid") || "";
   if (!OID_RE.test(oid)) return new Response("Bad Request\n", { status: 400 });
-  const fileName = url.searchParams.get("name") || oid;
+  const safeFileName = sanitizeContentDispositionFilename(url.searchParams.get("name") || oid, oid);
   const download = url.searchParams.get("download") === "1";
 
   if (!oid) return new Response("Missing oid\n", { status: 400 });
@@ -25,16 +45,18 @@ export async function handleRaw(c: AppContext<"/:owner/:repo/raw">) {
   const streamResponse = await readBlobStream(env, route.doName, oid, cacheCtx);
   if (!streamResponse) return new Response("Not found\n", { status: 404 });
 
-  // Use text/plain for all files (like GitHub's raw view) to prevent
-  // browsers from executing HTML/JS and ensure consistent display.
+  // Use text/plain + sandbox CSP + nosniff for all files (like GitHub's raw view)
+  // to prevent browsers from executing HTML/JS/SVG and ensure consistent display.
   const headers = new Headers(streamResponse.headers);
   headers.set("Content-Type", "text/plain; charset=utf-8");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Content-Security-Policy", "sandbox");
   if (isPrivate) headers.set("Cache-Control", "no-store");
 
   if (download) {
-    headers.set("Content-Disposition", `attachment; filename="${fileName}"`);
+    headers.set("Content-Disposition", `attachment; filename="${safeFileName}"`);
   } else {
-    headers.set("Content-Disposition", `inline; filename="${fileName}"`);
+    headers.set("Content-Disposition", `inline; filename="${safeFileName}"`);
   }
 
   return new Response(streamResponse.body, {
@@ -54,7 +76,8 @@ export async function handleRawPath(c: AppContext<"/:owner/:repo/rawpath">) {
   const url = new URL(c.req.url);
   const ref = url.searchParams.get("ref") || "main";
   const path = url.searchParams.get("path") || "";
-  const name = url.searchParams.get("name") || path.split("/").pop() || "file";
+  const rawName = url.searchParams.get("name") || path.split("/").pop() || "file";
+  const safeName = sanitizeContentDispositionFilename(rawName, "file");
   const download = url.searchParams.get("download") === "1";
   if (!isValidRef(ref) || !isValidPath(path)) {
     return new Response("Bad Request\n", { status: 400 });
@@ -82,11 +105,19 @@ export async function handleRawPath(c: AppContext<"/:owner/:repo/rawpath">) {
     const streamResponse = await readBlobStream(env, repoId, result.oid, cacheCtx);
     if (!streamResponse) return new Response("Not found\n", { status: 404 });
 
+    const detectedType = getContentTypeFromName(safeName);
+    const pathType = getContentTypeFromName(path);
+    const scriptable = isScriptableContentType(detectedType) || isScriptableContentType(pathType);
     const headers = new Headers(streamResponse.headers);
-    headers.set("Content-Type", getContentTypeFromName(name));
+    headers.set("Content-Type", scriptable ? "text/plain; charset=utf-8" : detectedType);
+    headers.set("X-Content-Type-Options", "nosniff");
+    headers.set("Content-Security-Policy", "sandbox");
     if (isPrivate) headers.set("Cache-Control", "no-store");
-    if (download) headers.set("Content-Disposition", `attachment; filename="${name}"`);
-    else headers.set("Content-Disposition", `inline; filename="${name}"`);
+    if (download || scriptable) {
+      headers.set("Content-Disposition", `attachment; filename="${safeName}"`);
+    } else {
+      headers.set("Content-Disposition", `inline; filename="${safeName}"`);
+    }
     return new Response(streamResponse.body, { status: streamResponse.status, headers });
   } catch (error) {
     const errorMessage = getErrorMessage(error);

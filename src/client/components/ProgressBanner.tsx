@@ -17,9 +17,9 @@ export function ProgressBanner({ progress }: ProgressBannerProps) {
 
   if (progress.state === "receiving") {
     return (
-      <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
+      <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-[13px] text-amber-300">
         <Download
-          className="mr-2 inline h-4 w-4 align-[-2px] text-amber-600 dark:text-amber-400"
+          className="mr-2 inline h-3.5 w-3.5 align-[-2px] text-amber-400"
           aria-hidden="true"
         />
         Receiving push...
@@ -28,11 +28,8 @@ export function ProgressBanner({ progress }: ProgressBannerProps) {
   }
 
   return (
-    <div className="mb-6 rounded-xl border border-accent-500/20 bg-accent-500/10 p-4 text-sm text-accent-700 dark:text-accent-400">
-      <Layers3
-        className="mr-2 inline h-4 w-4 align-[-2px] text-zinc-600 dark:text-zinc-300"
-        aria-hidden="true"
-      />
+    <div className="mb-4 rounded-md border border-border bg-surface px-3.5 py-2.5 text-[13px] text-fgBody">
+      <Layers3 className="mr-2 inline h-3.5 w-3.5 align-[-2px] text-fgMuted" aria-hidden="true" />
       Compacting packs...
     </div>
   );

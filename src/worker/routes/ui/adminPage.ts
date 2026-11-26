@@ -1,5 +1,7 @@
+import { canWriteRepositories } from "@/shared/admin/panel";
 import type { HeadInfo, Ref } from "@/worker/git";
 import { getRepoActivity, getRepoStub } from "@/worker/common";
+import { findRepositoryById } from "@/worker/db/d1/dal/repositories";
 import {
   computeStorageMetrics,
   computeCompactionStatus,
@@ -27,7 +29,9 @@ export async function handleAdminPage(c: AppContext<"/:owner/:repo/admin">) {
     limiter
       .run("do:admin-page-debug-state", () => stub.debugState())
       .catch(() => ({}) as Partial<DebugState>),
-    loadHeadAndRefsCached(env, cacheCtx, repoId),
+    findRepositoryById(c.var.db, route.repositoryId).then((repoRow) =>
+      loadHeadAndRefsCached(env, cacheCtx, repoId, repoRow ? String(repoRow.updatedAt) : undefined)
+    ),
     getRepoActivity(env, repoId, cacheCtx),
   ]);
   const state = await loadAdminPackRefIndexState({
@@ -53,7 +57,7 @@ export async function handleAdminPage(c: AppContext<"/:owner/:repo/admin">) {
       owner,
       repo,
       visibility: route.visibility,
-      canManageRepo: true,
+      canManageRepo: canWriteRepositories(viewer.role),
       refEnc,
       head,
       refs,

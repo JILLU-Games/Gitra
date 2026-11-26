@@ -2,6 +2,7 @@ import { ArrowUpRight, FolderGit2, KeyRound, Lock, ShieldCheck } from "lucide-re
 
 import {
   buildNamespaceProfileHref,
+  canIssueGlobalPat,
   canWriteRepositories,
   type DirectoryRole,
 } from "@/shared/admin/panel";
@@ -94,6 +95,7 @@ export function AccountPage({
 }: AccountPageProps) {
   const handle = primaryNamespaceSlug ? `@${primaryNamespaceSlug}` : "Identity not yet claimed";
   const readOnly = !canWriteRepositories(viewerRole);
+  const allowGlobalScope = canIssueGlobalPat(viewerRole);
   const meta = SECTION_META[activeSection];
 
   const showProfileCard =
@@ -111,21 +113,19 @@ export function AccountPage({
       active={activeSection}
       handle={primaryNamespaceSlug ? `@${primaryNamespaceSlug}` : undefined}
     >
-      <div className="space-y-5">
+      <div className="space-y-4">
         {/* Section Header */}
-        <header className="flex flex-col gap-2 border-b border-zinc-200 pb-3.5 sm:flex-row sm:items-end sm:justify-between dark:border-zinc-800">
+        <header className="flex flex-col gap-2 border-b border-border pb-3.5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="m-0 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-              {meta.title}
-            </h1>
-            <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{meta.subtitle}</p>
+            <h1 className="m-0 text-[18px] font-semibold tracking-tight text-fg">{meta.title}</h1>
+            <p className="m-0 mt-0.5 text-[12px] text-fgMuted">{meta.subtitle}</p>
           </div>
 
           {primaryNamespaceSlug ? (
             <div className="flex shrink-0 flex-wrap items-center gap-1.5">
               <a
                 href={buildNamespaceProfileHref(primaryNamespaceSlug)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 text-xs font-medium whitespace-nowrap text-zinc-700 no-underline hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-canvas px-3 text-[12px] font-medium whitespace-nowrap text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
               >
                 <span>Public profile</span>
                 <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -136,35 +136,30 @@ export function AccountPage({
 
         {/* Identity / Profile Summary Card */}
         {showProfileCard ? (
-          <section className="rounded-md border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="border-b border-zinc-200 px-4 py-2.5 text-xs font-semibold text-zinc-800 dark:border-zinc-800 dark:text-zinc-200">
+          <section className="rounded-md border border-border bg-surface">
+            <div className="border-b border-border px-4 py-2.5 text-[13px] font-semibold text-fg">
               Identity
             </div>
-            <dl className="m-0 grid grid-cols-1 divide-y divide-zinc-200 text-xs sm:grid-cols-2 sm:divide-y-0 dark:divide-zinc-800">
-              <div className="px-4 py-3 sm:border-r sm:border-b sm:border-zinc-200 dark:sm:border-zinc-800">
-                <dt className="text-zinc-500 dark:text-zinc-400">Username / Handle</dt>
-                <dd className="m-0 mt-1 font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  {handle}
-                </dd>
+            <dl className="m-0 grid grid-cols-1 divide-y divide-borderSubtle text-[12px] sm:grid-cols-2 sm:divide-y-0">
+              <div className="px-4 py-3 sm:border-r sm:border-b sm:border-borderSubtle">
+                <dt className="text-fgMuted">Username / Handle</dt>
+                <dd className="m-0 mt-1 font-mono text-[13px] font-semibold text-fg">{handle}</dd>
               </div>
-              <div className="px-4 py-3 sm:border-b sm:border-zinc-200 dark:sm:border-zinc-800">
-                <dt className="text-zinc-500 dark:text-zinc-400">Display Name</dt>
-                <dd className="m-0 mt-1 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+              <div className="px-4 py-3 sm:border-b sm:border-borderSubtle">
+                <dt className="text-fgMuted">Display Name</dt>
+                <dd className="m-0 mt-1 text-[13px] font-medium text-fg">
                   {displayName || handle}
                 </dd>
               </div>
-              <div className="px-4 py-3 sm:border-r sm:border-zinc-200 dark:sm:border-zinc-800">
-                <dt className="text-zinc-500 dark:text-zinc-400">Role</dt>
-                <dd className="m-0 mt-1 text-xs font-medium capitalize text-zinc-800 dark:text-zinc-200">
+              <div className="px-4 py-3 sm:border-r sm:border-borderSubtle">
+                <dt className="text-fgMuted">Role</dt>
+                <dd className="m-0 mt-1 text-[12px] font-medium capitalize text-fgBody">
                   {viewerRole}
                 </dd>
               </div>
               <div className="px-4 py-3">
-                <dt className="text-zinc-500 dark:text-zinc-400">Account ID</dt>
-                <dd
-                  className="m-0 mt-1 font-mono text-xs text-zinc-600 dark:text-zinc-400"
-                  title={userId}
-                >
+                <dt className="text-fgMuted">Account ID</dt>
+                <dd className="m-0 mt-1 font-mono text-[12px] text-fgBody" title={userId}>
                   {truncateUserId(userId)}
                 </dd>
               </div>
@@ -200,37 +195,37 @@ export function AccountPage({
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <a
               href="/user/account"
-              className="block rounded-md border border-zinc-200 bg-white p-3.5 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+              className="block rounded-md border border-border bg-surface p-3.5 no-underline transition-colors hover:bg-surfaceHover/50"
             >
-              <div className="flex items-center justify-between text-xs font-medium text-zinc-900 dark:text-zinc-100">
+              <div className="flex items-center justify-between text-[13px] font-medium text-fg">
                 <span>Repositories</span>
-                <FolderGit2 className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
+                <FolderGit2 className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
               </div>
-              <p className="m-0 mt-1 text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+              <p className="m-0 mt-1 text-[12px] text-fgMuted tabular-nums">
                 {repositories.length} owned
               </p>
             </a>
             <a
               href="/user/settings/tokens"
-              className="block rounded-md border border-zinc-200 bg-white p-3.5 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+              className="block rounded-md border border-border bg-surface p-3.5 no-underline transition-colors hover:bg-surfaceHover/50"
             >
-              <div className="flex items-center justify-between text-xs font-medium text-zinc-900 dark:text-zinc-100">
+              <div className="flex items-center justify-between text-[13px] font-medium text-fg">
                 <span>Access Tokens</span>
-                <KeyRound className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
+                <KeyRound className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
               </div>
-              <p className="m-0 mt-1 text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+              <p className="m-0 mt-1 text-[12px] text-fgMuted tabular-nums">
                 {tokens.filter((t) => !t.revokedAt).length} active
               </p>
             </a>
             <a
               href="/user/settings/security"
-              className="block rounded-md border border-zinc-200 bg-white p-3.5 no-underline transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+              className="block rounded-md border border-border bg-surface p-3.5 no-underline transition-colors hover:bg-surfaceHover/50"
             >
-              <div className="flex items-center justify-between text-xs font-medium text-zinc-900 dark:text-zinc-100">
+              <div className="flex items-center justify-between text-[13px] font-medium text-fg">
                 <span>Security</span>
-                <Lock className="h-3.5 w-3.5 text-zinc-400" aria-hidden="true" />
+                <Lock className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
               </div>
-              <p className="m-0 mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="m-0 mt-1 text-[12px] text-fgMuted">
                 {isPrimaryAdmin
                   ? "Env / Demo config"
                   : hasPassword
@@ -244,12 +239,10 @@ export function AccountPage({
         {/* Namespaces */}
         {showNamespaces ? (
           <section>
-            <h2 className="m-0 mb-2.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              Namespaces
-            </h2>
+            <h2 className="m-0 mb-2 text-[13px] font-semibold text-fg">Namespaces</h2>
             {namespaces.length === 0 ? (
               <EmptyState
-                icon={<ShieldCheck className="h-5 w-5 text-zinc-400" aria-hidden="true" />}
+                icon={<ShieldCheck className="h-4 w-4 text-fgMuted" aria-hidden="true" />}
                 title="No namespace yet"
                 detail="Sign in as an administrator to claim your default namespace."
               />
@@ -259,7 +252,7 @@ export function AccountPage({
                   <a
                     key={ns.id}
                     href={buildNamespaceProfileHref(ns.slug)}
-                    className="inline-flex items-center rounded-md border border-zinc-200 bg-white px-2.5 py-1 font-mono text-xs text-zinc-700 no-underline transition-colors hover:border-accent-500/40 hover:text-accent-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:text-accent-400"
+                    className="inline-flex items-center rounded border border-border bg-canvas px-2.5 py-1 font-mono text-[12px] text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
                   >
                     @{ns.slug}
                   </a>
@@ -273,7 +266,7 @@ export function AccountPage({
         {showSecurity ? (
           <section id="security" className="scroll-mt-16">
             {activeSection !== "security" ? (
-              <h2 className="m-0 mb-2.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+              <h2 className="m-0 mb-2 text-[13px] font-semibold text-fg">
                 Password &amp; Security
               </h2>
             ) : null}
@@ -286,9 +279,7 @@ export function AccountPage({
         {/* Repositories */}
         {showRepositories ? (
           <section id="repositories" className="scroll-mt-16">
-            <h2 className="m-0 mb-2.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              Repositories
-            </h2>
+            <h2 className="m-0 mb-2 text-[13px] font-semibold text-fg">Repositories</h2>
             <IslandHost
               name="repositories"
               props={{ primaryNamespaceSlug, repositories, readOnly }}
@@ -307,10 +298,8 @@ export function AccountPage({
           <section id="tokens" className="scroll-mt-16">
             {activeSection === "all" ? (
               <>
-                <h2 className="m-0 mb-1 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  Tokens
-                </h2>
-                <p className="m-0 mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+                <h2 className="m-0 mb-1 text-[13px] font-semibold text-fg">Tokens</h2>
+                <p className="m-0 mb-3 text-[12px] text-fgMuted">
                   Personal access tokens scope to a namespace or a single repo. The plaintext is
                   shown only once at creation.
                 </p>
@@ -318,13 +307,14 @@ export function AccountPage({
             ) : null}
             <IslandHost
               name="tokens"
-              props={{ primaryNamespaceSlug, repositories, tokens, readOnly }}
+              props={{ primaryNamespaceSlug, repositories, tokens, readOnly, allowGlobalScope }}
             >
               <TokensIsland
                 primaryNamespaceSlug={primaryNamespaceSlug}
                 repositories={repositories}
                 tokens={tokens}
                 readOnly={readOnly}
+                allowGlobalScope={allowGlobalScope}
               />
             </IslandHost>
           </section>

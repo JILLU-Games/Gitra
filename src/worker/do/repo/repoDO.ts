@@ -40,11 +40,7 @@ import {
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import { getDb } from "./db";
 import migrations from "../../../../drizzle/repo-do/migrations.js";
-import {
-  ensureAccessAndAlarm,
-  touchAndMaybeSchedule,
-  type RepoDOAccessContext,
-} from "./repoDO/access";
+import { ensureAccessAndAlarm, type RepoDOAccessContext } from "./repoDO/access";
 import { seedMinimalRepoState } from "./repoDO/seeding";
 
 /**
@@ -71,22 +67,42 @@ import { seedMinimalRepoState } from "./repoDO/seeding";
 export class RepoDurableObject extends DurableObject {
   declare env: Env;
   private lastAccessMemMs: number | undefined;
+  private schemaReady = false;
+  private schemaInitPromise: Promise<void> | undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
       this.lastAccessMemMs = await ctx.storage.get("lastAccessMs");
-      const db = getDb(ctx.storage);
-      await migrate(db, migrations);
+      await this.ensureSchema();
       // The constructor also runs before `alarm()`. Do not touch
       // `lastAccessMs` here, or an alarm wakeup would make an idle object look
       // freshly accessed and would keep cleanup from ever seeing it as idle.
     });
   }
 
+  /**
+   * Re-runs Drizzle SQLite migrations lazily if storage was wiped on a warm
+   * DO instance (for example after `clearRepositoryStorage()` or idle cleanup).
+   * Deduplicates concurrent callers without using `blockConcurrencyWhile` in RPCs.
+   */
+  private async ensureSchema(): Promise<void> {
+    if (this.schemaReady) return;
+    if (!this.schemaInitPromise) {
+      this.schemaInitPromise = (async () => {
+        const db = getDb(this.ctx.storage);
+        await migrate(db, migrations);
+        this.schemaReady = true;
+      })().finally(() => {
+        this.schemaInitPromise = undefined;
+      });
+    }
+    await this.schemaInitPromise;
+  }
+
   async fetch(request: Request): Promise<Response> {
     try {
-      await this.touchAndMaybeSchedule();
+      await this.ensureAccessAndAlarm();
     } catch {}
     this.logger.debug("fetch", { path: new URL(request.url).pathname, method: request.method });
     return text("Not found\n", 404);
@@ -94,6 +110,7 @@ export class RepoDurableObject extends DurableObject {
 
   async alarm(): Promise<void> {
     this.logger.debug("alarm:start", {});
+    await this.ensureSchema();
 
     await clearExpiredLeases(this.ctx, this.logger);
 
@@ -103,15 +120,16 @@ export class RepoDurableObject extends DurableObject {
       return;
     }
 
-    await handleIdleAndMaintenance(this.ctx, this.env, this.logger);
+    const deletedStorage = await handleIdleAndMaintenance(this.ctx, this.env, this.logger);
+    if (deletedStorage) {
+      this.lastAccessMemMs = undefined;
+      this.schemaReady = false;
+    }
     this.logger.debug("alarm:end", {});
   }
 
-  private async touchAndMaybeSchedule(): Promise<void> {
-    await touchAndMaybeSchedule(this.accessContext());
-  }
-
   private async ensureAccessAndAlarm(): Promise<void> {
+    await this.ensureSchema();
     await ensureAccessAndAlarm(this.accessContext());
   }
 
@@ -311,7 +329,11 @@ export class RepoDurableObject extends DurableObject {
   // after R2 cleanup. Callers must NOT chain this from a Worker handler that
   // also enumerates R2 - that would be the forbidden Worker -> DO -> R2 hop.
   public async clearRepositoryStorage(): Promise<{ deletedDO: boolean }> {
-    return await clearRepositoryStorage(this.ctx, this.env);
+    const result = await clearRepositoryStorage(this.ctx, this.env);
+    // deleteAll() removes both SQLite tables and KV entries; reset in-memory flags so warm reuse re-migrates cleanly.
+    this.lastAccessMemMs = undefined;
+    this.schemaReady = false;
+    return result;
   }
 
   public async removePack(packKey: string): Promise<RemovePackResult> {

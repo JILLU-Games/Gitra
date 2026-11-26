@@ -1,7 +1,9 @@
 import {
   buildDefaultProfileReadmeTemplate,
   buildDefaultRepoReadmeTemplate,
+  canAccessAdminPanel,
   canWriteRepositories,
+  evaluateRepositoryPatchPolicy,
   sanitizeRepoDescription,
 } from "@/shared/admin/panel";
 import { isValidPath, isValidRef, safeParseJsonRequest } from "@/shared/web";
@@ -26,7 +28,7 @@ import {
 import { sameOriginViolation } from "@/worker/auth/origin";
 import { loadViewer } from "@/worker/auth/session";
 import { viewerIsNamespaceMember } from "@/worker/auth/pat";
-import type { AppRouter } from "./hono";
+import type { AppContext, AppRouter } from "./hono";
 import { enqueueRouteCacheSync } from "./authShared";
 import {
   ProfileReadmeUpdateRequestSchema,
@@ -36,6 +38,136 @@ import {
 } from "./requestSchemas";
 
 const MAX_WEB_COMMIT_BYTES = 256 * 1024;
+
+export async function handleRepositoryPatch(
+  c: AppContext,
+  repositoryId: string,
+  options?: { requireAdmin?: boolean }
+): Promise<Response> {
+  const log = c.var.logFor({ service: "RepoVisibility" });
+  const violation = sameOriginViolation(c);
+  if (violation) {
+    log.warn("repo-visibility:same-origin-violation");
+    return violation;
+  }
+  const viewer = await loadViewer(c);
+  if (!viewer) return json({ error: "Unauthorized" }, 401);
+  if (options?.requireAdmin && !canAccessAdminPanel(viewer.role)) {
+    log.warn("repo-visibility:admin-required", { userId: viewer.userId, role: viewer.role });
+    return json({ ok: false, reason: "admin-required" } as const, 403);
+  }
+  if (!canWriteRepositories(viewer.role)) {
+    log.warn("repo-visibility:viewer-read-only", { userId: viewer.userId, role: viewer.role });
+    return json({ ok: false, reason: "viewer-read-only" } as const, 403);
+  }
+
+  const rawBody = await safeParseJsonRequest(c.req.raw);
+  const parsedBody = RepositoryPatchRequestSchema.safeParse(rawBody);
+  const data = parsedBody.success ? parsedBody.data : undefined;
+  const hasVisibility = data?.visibility !== undefined;
+  const hasDescription = data?.description !== undefined;
+  const hasPinned = data?.pinned !== undefined;
+  const hasHomePinned = data?.homePinned !== undefined;
+  if (
+    !data ||
+    data.visibility === null ||
+    (!hasVisibility && !hasDescription && !hasPinned && !hasHomePinned)
+  ) {
+    log.warn("repo-visibility:invalid-payload", { repositoryId });
+    return json({ ok: false, reason: "invalid-payload" } as const, 400);
+  }
+
+  const db = c.var.db;
+  const repo = await findRepositoryById(db, repositoryId);
+  if (!repo) {
+    log.warn("repo-visibility:not-found", { repositoryId });
+    return json({ ok: false, reason: "not-found" } as const, 404);
+  }
+
+  const isMember = await viewerIsNamespaceMember(db, viewer.userId, repo.namespaceId);
+  const policy = evaluateRepositoryPatchPolicy({
+    viewerRole: viewer.role,
+    isNamespaceMember: isMember,
+    hasHomePinned,
+    requestedHomePinned: data.homePinned,
+    currentVisibility: repo.visibility,
+    requestedVisibility: data.visibility ?? undefined,
+  });
+  if (!policy.ok) {
+    log.warn("repo-visibility:policy-denied", {
+      userId: viewer.userId,
+      repositoryId,
+      namespaceId: repo.namespaceId,
+      reason: policy.reason,
+    });
+    return json({ ok: false, reason: policy.reason } as const, policy.status);
+  }
+
+  const now = Date.now();
+  let previousVisibility = repo.visibility;
+  let currentVisibility = repo.visibility;
+  if (data.visibility) {
+    const result = await updateRepositoryVisibility(db, repositoryId, data.visibility, now);
+    if (!result.ok) {
+      log.warn("repo-visibility:not-found", { repositoryId });
+      return json({ ok: false, reason: "not-found" } as const, 404);
+    }
+    previousVisibility = result.previous;
+    currentVisibility = result.current;
+    if (result.previous !== result.current) {
+      // Reconcile ROUTES KV via the queue.
+      const namespace = await findNamespaceById(db, repo.namespaceId);
+      if (namespace) {
+        enqueueRouteCacheSync(c, log, {
+          repositoryId,
+          namespaceSlug: namespace.slug,
+          repoSlug: repo.slug,
+        });
+      } else {
+        log.warn("repo-visibility:namespace-missing-for-sync", {
+          repositoryId,
+          namespaceId: repo.namespaceId,
+        });
+      }
+    }
+  }
+
+  // Private repositories must never retain a stale homepage feature flag.
+  const nextHomePinnedPatch =
+    data.homePinned !== undefined
+      ? data.homePinned
+      : currentVisibility === "private"
+        ? false
+        : undefined;
+
+  const updatedMeta =
+    hasDescription || hasPinned || nextHomePinnedPatch !== undefined
+      ? await upsertRepositoryMeta(c.env.DB, repositoryId, {
+          description: data.description,
+          pinned: data.pinned,
+          homePinned: nextHomePinnedPatch,
+          now,
+        })
+      : await getRepositoryMeta(c.env.DB, repositoryId);
+
+  log.info("repo-visibility:ok", {
+    userId: viewer.userId,
+    repositoryId,
+    previous: previousVisibility,
+    current: currentVisibility,
+    pinned: updatedMeta.pinned,
+    homePinned: updatedMeta.homePinned,
+  });
+  return json({
+    ok: true,
+    id: repositoryId,
+    visibility: currentVisibility,
+    previous: previousVisibility,
+    description: updatedMeta.description,
+    pinned: updatedMeta.pinned,
+    homePinned: updatedMeta.homePinned,
+  } as const);
+}
 
 export function registerAuthRepositoryRoutes(router: AppRouter) {
   router.get(`/auth/api/repositories`, async (c) => {
@@ -102,7 +234,8 @@ export function registerAuthRepositoryRoutes(router: AppRouter) {
       log.warn("repo-create:namespace-not-found", { namespaceSlug: namespaceValidation.slug });
       return json({ ok: false, reason: "namespace-not-found" } as const, 404);
     }
-    if (!(await viewerIsNamespaceMember(db, viewer.userId, namespace.id))) {
+    const isMember = await viewerIsNamespaceMember(db, viewer.userId, namespace.id);
+    if (!canAccessAdminPanel(viewer.role) && !isMember) {
       log.warn("repo-create:not-member", {
         userId: viewer.userId,
         namespaceId: namespace.id,
@@ -210,107 +343,19 @@ export function registerAuthRepositoryRoutes(router: AppRouter) {
       namespaceSlug: namespaceValidation.slug,
       slug: slugValidation.slug,
       visibility,
+      defaultBranch: "main",
       description: cleanDescription,
       pinned: false,
+      homePinned: false,
       updatedAt: now,
       profileReadmeInitialized,
       readmeInitialized,
     } as const);
   });
 
-  router.patch(`/auth/api/repositories/:repositoryId`, async (c) => {
-    const log = c.var.logFor({ service: "RepoVisibility" });
-    const violation = sameOriginViolation(c);
-    if (violation) {
-      log.warn("repo-visibility:same-origin-violation");
-      return violation;
-    }
-    const viewer = await loadViewer(c);
-    if (!viewer) return json({ error: "Unauthorized" }, 401);
-    if (!canWriteRepositories(viewer.role)) {
-      log.warn("repo-visibility:viewer-read-only", { userId: viewer.userId, role: viewer.role });
-      return json({ ok: false, reason: "viewer-read-only" } as const, 403);
-    }
-    const repositoryId = c.req.param("repositoryId");
-    const rawBody = await safeParseJsonRequest(c.req.raw);
-    const parsedBody = RepositoryPatchRequestSchema.safeParse(rawBody);
-    const data = parsedBody.success ? parsedBody.data : undefined;
-    const hasVisibility = data?.visibility !== undefined;
-    const hasDescription = data?.description !== undefined;
-    const hasPinned = data?.pinned !== undefined;
-    if (!data || data.visibility === null || (!hasVisibility && !hasDescription && !hasPinned)) {
-      log.warn("repo-visibility:invalid-payload", { repositoryId });
-      return json({ ok: false, reason: "invalid-payload" } as const, 400);
-    }
-    const db = c.var.db;
-    const repo = await findRepositoryById(db, repositoryId);
-    if (!repo) {
-      log.warn("repo-visibility:not-found", { repositoryId });
-      return json({ ok: false, reason: "not-found" } as const, 404);
-    }
-    if (!(await viewerIsNamespaceMember(db, viewer.userId, repo.namespaceId))) {
-      log.warn("repo-visibility:not-member", {
-        userId: viewer.userId,
-        repositoryId,
-        namespaceId: repo.namespaceId,
-      });
-      return json({ ok: false, reason: "not-member" } as const, 403);
-    }
-
-    const now = Date.now();
-    let previousVisibility = repo.visibility;
-    let currentVisibility = repo.visibility;
-    if (data.visibility) {
-      const result = await updateRepositoryVisibility(db, repositoryId, data.visibility, now);
-      if (!result.ok) {
-        log.warn("repo-visibility:not-found", { repositoryId });
-        return json({ ok: false, reason: "not-found" } as const, 404);
-      }
-      previousVisibility = result.previous;
-      currentVisibility = result.current;
-      if (result.previous !== result.current) {
-        // Reconcile ROUTES KV via the queue.
-        const namespace = await findNamespaceById(db, repo.namespaceId);
-        if (namespace) {
-          enqueueRouteCacheSync(c, log, {
-            repositoryId,
-            namespaceSlug: namespace.slug,
-            repoSlug: repo.slug,
-          });
-        } else {
-          log.warn("repo-visibility:namespace-missing-for-sync", {
-            repositoryId,
-            namespaceId: repo.namespaceId,
-          });
-        }
-      }
-    }
-
-    const updatedMeta =
-      hasDescription || hasPinned
-        ? await upsertRepositoryMeta(c.env.DB, repositoryId, {
-            description: data.description,
-            pinned: data.pinned,
-            now,
-          })
-        : await getRepositoryMeta(c.env.DB, repositoryId);
-
-    log.info("repo-visibility:ok", {
-      userId: viewer.userId,
-      repositoryId,
-      previous: previousVisibility,
-      current: currentVisibility,
-      pinned: updatedMeta.pinned,
-    });
-    return json({
-      ok: true,
-      id: repositoryId,
-      visibility: currentVisibility,
-      previous: previousVisibility,
-      description: updatedMeta.description,
-      pinned: updatedMeta.pinned,
-    } as const);
-  });
+  router.patch(`/auth/api/repositories/:repositoryId`, (c) =>
+    handleRepositoryPatch(c, c.req.param("repositoryId"))
+  );
 
   // Web editor endpoint to save & commit `profile/README.md` inside `.vibtools`.
   router.put(`/auth/api/repositories/:repositoryId/profile-readme`, async (c) => {
@@ -455,7 +500,11 @@ export function registerAuthRepositoryRoutes(router: AppRouter) {
 
     if (!result.ok) {
       const status =
-        result.reason === "repo-busy" ? 409 : result.reason === "invalid-path" ? 400 : 500;
+        result.reason === "repo-busy"
+          ? 409
+          : result.reason === "invalid-path" || result.reason === "invalid-ref"
+            ? 400
+            : 500;
       return json({ ok: false, reason: result.reason, detail: result.detail } as const, status);
     }
 

@@ -6,16 +6,20 @@ import { registerUiRoutes } from "./routes/ui";
 import { registerAuthRoutes } from "./routes/auth";
 import { requestServicesMiddleware, type AppBindings, type AppContext } from "./routes/hono";
 import { renderUiDocumentResponse } from "./routes/uiResponse";
+import { loadSiteBranding } from "./branding";
 import { loadViewer } from "./auth/session";
 import {
+  buildLocalAccountSubject,
   DEFAULT_DEMO_USER_USERNAME,
   isDemoModeEnabled,
   resolveAdminAuthConfig,
+  resolveInitialAdminNamespaceSlug,
 } from "./auth/adminAuth";
 import { ensureDemoTestUserSeeded } from "./auth/demoSeed";
 import { createDb } from "./db/d1/client";
 import {
   findNamespaceBySlug,
+  findPrimaryAdminNamespace,
   listNamespacesForUser,
   listPublicNamespaceSummaries,
   listPublicRepositoriesWithNamespaces,
@@ -65,10 +69,16 @@ async function ensureDemoWorkspaceOnPublicEntry(c: AppContext): Promise<void> {
 
 app.get("/", async (c) => {
   await ensureDemoWorkspaceOnPublicEntry(c);
-  const viewer = await loadViewer(c);
+  const [viewer, branding] = await Promise.all([loadViewer(c), loadSiteBranding(c.env)]);
   const origin = resolveRequestOrigin(c);
-  const publicRows = await listPublicRepositoriesWithNamespaces(c.var.db);
-  const primaryAdminSlug = resolveAdminAuthConfig(c.env).username;
+  const [publicRows, primaryAdminNs] = await Promise.all([
+    listPublicRepositoriesWithNamespaces(c.var.db),
+    findPrimaryAdminNamespace(
+      c.var.db,
+      buildLocalAccountSubject(resolveAdminAuthConfig(c.env).username)
+    ),
+  ]);
+  const primaryAdminSlug = primaryAdminNs?.slug ?? resolveInitialAdminNamespaceSlug(c.env);
 
   if (!viewer) {
     const [publicMeta, publicNamespaces] = await Promise.all([
@@ -85,6 +95,7 @@ app.get("/", async (c) => {
       visibility: row.repository.visibility,
       description: publicMeta.get(row.repository.id)?.description ?? "",
       pinned: publicMeta.get(row.repository.id)?.pinned ?? false,
+      homePinned: publicMeta.get(row.repository.id)?.homePinned ?? false,
       updatedAt: row.repository.updatedAt,
     }));
     return renderUiDocumentResponse(
@@ -93,10 +104,11 @@ app.get("/", async (c) => {
       {
         signedIn: false,
         origin,
+        branding,
         publicNamespaces,
         publicRepositories,
       },
-      { failureBody: "Failed to render page\n", viewer: null }
+      { failureBody: "Failed to render page\n", viewer: null, branding, origin }
     );
   }
 
@@ -119,6 +131,7 @@ app.get("/", async (c) => {
     visibility: row.repository.visibility,
     description: repoMeta.get(row.repository.id)?.description ?? "",
     pinned: repoMeta.get(row.repository.id)?.pinned ?? false,
+    homePinned: repoMeta.get(row.repository.id)?.homePinned ?? false,
     updatedAt: row.repository.updatedAt,
   }));
 
@@ -128,6 +141,7 @@ app.get("/", async (c) => {
     {
       signedIn: true,
       origin,
+      branding,
       primaryNamespaceSlug: viewer.primaryNamespaceSlug,
       displayName: viewer.displayName,
       viewerRole: viewer.role,
@@ -140,20 +154,27 @@ app.get("/", async (c) => {
         visibility: row.repository.visibility,
         description: repoMeta.get(row.repository.id)?.description ?? "",
         pinned: repoMeta.get(row.repository.id)?.pinned ?? false,
+        homePinned: repoMeta.get(row.repository.id)?.homePinned ?? false,
         updatedAt: row.repository.updatedAt,
       })),
       publicRepositories,
     },
-    { failureBody: "Failed to render page\n", viewer }
+    { failureBody: "Failed to render page\n", viewer, branding, origin }
   );
 });
 
 app.get("/explore", async (c) => {
   await ensureDemoWorkspaceOnPublicEntry(c);
-  const viewer = await loadViewer(c);
+  const [viewer, branding] = await Promise.all([loadViewer(c), loadSiteBranding(c.env)]);
   const origin = resolveRequestOrigin(c);
-  const publicRows = await listPublicRepositoriesWithNamespaces(c.var.db);
-  const primaryAdminSlug = resolveAdminAuthConfig(c.env).username;
+  const [publicRows, primaryAdminNs] = await Promise.all([
+    listPublicRepositoriesWithNamespaces(c.var.db),
+    findPrimaryAdminNamespace(
+      c.var.db,
+      buildLocalAccountSubject(resolveAdminAuthConfig(c.env).username)
+    ),
+  ]);
+  const primaryAdminSlug = primaryAdminNs?.slug ?? resolveInitialAdminNamespaceSlug(c.env);
   const [publicMeta, publicNamespaces] = await Promise.all([
     listRepositoryMetaMap(
       c.env.DB,
@@ -168,6 +189,7 @@ app.get("/explore", async (c) => {
     visibility: row.repository.visibility,
     description: publicMeta.get(row.repository.id)?.description ?? "",
     pinned: publicMeta.get(row.repository.id)?.pinned ?? false,
+    homePinned: publicMeta.get(row.repository.id)?.homePinned ?? false,
     updatedAt: row.repository.updatedAt,
   }));
 
@@ -178,6 +200,7 @@ app.get("/explore", async (c) => {
       signedIn: Boolean(viewer),
       exploreOnly: true,
       origin,
+      branding,
       primaryNamespaceSlug: viewer?.primaryNamespaceSlug,
       displayName: viewer?.displayName,
       viewerRole: viewer?.role,
@@ -185,7 +208,7 @@ app.get("/explore", async (c) => {
       repositories: [],
       publicRepositories,
     },
-    { failureBody: "Failed to render page\n", viewer }
+    { failureBody: "Failed to render page\n", viewer, branding, origin }
   );
 });
 

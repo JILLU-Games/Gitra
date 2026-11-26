@@ -99,12 +99,14 @@ export function registerAdminRoutes(router: AppRouter) {
     const gate = await requireRepoAdmin(c);
     if (gate.kind === "response") return gate.response;
     const { route, limiter } = gate;
+    const log = c.var.logFor({ service: "AdminRoutes", repoId: route.doName });
     const stub = getRepoStub(c.env, route.doName);
     try {
       const refs = await limiter.run("do:admin-list-refs", () => stub.listRefs());
       return json(refs);
-    } catch {
-      return json([]);
+    } catch (e) {
+      log.warn("admin:list-refs-failed", { error: String(e) });
+      return json({ error: "Failed to load repository refs" }, 500);
     }
   });
 
@@ -112,25 +114,33 @@ export function registerAdminRoutes(router: AppRouter) {
     const gate = await requireRepoAdmin(c);
     if (gate.kind === "response") return gate.response;
     const { route, limiter } = gate;
+    const log = c.var.logFor({ service: "AdminRoutes", repoId: route.doName });
     const stub = getRepoStub(c.env, route.doName);
     const body = await safeParseJsonRequest(c.req.raw);
     const refs = AdminRefsPayloadSchema.safeParse(body);
     if (!refs.success) {
       return new Response("Invalid refs payload\n", { status: 400 });
     }
-    await limiter.run("do:admin-set-refs", () => stub.setRefs(refs.data));
-    return new Response("OK\n");
+    try {
+      await limiter.run("do:admin-set-refs", () => stub.setRefs(refs.data));
+      return new Response("OK\n");
+    } catch (e) {
+      log.error("admin:set-refs-failed", { error: String(e) });
+      return json({ error: "Failed to update repository refs" }, 500);
+    }
   });
 
   router.get(`/:owner/:repo/admin/head`, async (c) => {
     const gate = await requireRepoAdmin(c);
     if (gate.kind === "response") return gate.response;
     const { route, limiter } = gate;
+    const log = c.var.logFor({ service: "AdminRoutes", repoId: route.doName });
     const stub = getRepoStub(c.env, route.doName);
     try {
       const head = await limiter.run("do:admin-get-head", () => stub.getHead());
       return json(head);
-    } catch {
+    } catch (e) {
+      log.warn("admin:get-head-failed", { error: String(e) });
       return new Response("Not found\n", { status: 404 });
     }
   });
@@ -139,26 +149,34 @@ export function registerAdminRoutes(router: AppRouter) {
     const gate = await requireRepoAdmin(c);
     if (gate.kind === "response") return gate.response;
     const { route, limiter } = gate;
+    const log = c.var.logFor({ service: "AdminRoutes", repoId: route.doName });
     const stub = getRepoStub(c.env, route.doName);
     const body = await safeParseJsonRequest(c.req.raw);
     const head = AdminHeadPayloadSchema.safeParse(body);
     if (!head.success) {
       return new Response("Invalid head payload\n", { status: 400 });
     }
-    await limiter.run("do:admin-set-head", () => stub.setHead(head.data));
-    return new Response("OK\n");
+    try {
+      await limiter.run("do:admin-set-head", () => stub.setHead(head.data));
+      return new Response("OK\n");
+    } catch (e) {
+      log.error("admin:set-head-failed", { error: String(e) });
+      return json({ error: "Failed to update repository HEAD" }, 500);
+    }
   });
 
   router.get(`/:owner/:repo/admin/debug-state`, async (c) => {
     const gate = await requireRepoAdmin(c);
     if (gate.kind === "response") return gate.response;
     const { route, limiter } = gate;
+    const log = c.var.logFor({ service: "AdminRoutes", repoId: route.doName });
     const stub = getRepoStub(c.env, route.doName);
     try {
       const state = await limiter.run("do:admin-debug-state", () => stub.debugState());
       return json(state);
-    } catch {
-      return json({});
+    } catch (e) {
+      log.warn("admin:debug-state-failed", { error: String(e) });
+      return json({ error: "Failed to inspect repository state" }, 500);
     }
   });
 

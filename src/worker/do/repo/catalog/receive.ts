@@ -1,7 +1,7 @@
 import type { Logger } from "@/worker/common/logger";
 import type { RepoStateSchema } from "../repoState";
 
-import { asTypedStorage } from "../repoState";
+import { asTypedSyncStorage } from "../repoState";
 import {
   applyReceiveCommands,
   isValidRefName,
@@ -9,8 +9,8 @@ import {
   type ReceiveStatus,
   validateReceiveCommands,
 } from "@/worker/git/operations/validation";
-import { getDb, listActivePackCatalog, upsertPackCatalogRow } from "../db";
-import { DEFAULT_HEAD, bumpPacksetVersion, ensureRepoMetadataDefaults } from "./shared";
+import { getDb, listActivePackCatalogSync, upsertPackCatalogRowSync } from "../db";
+import { DEFAULT_HEAD, bumpPacksetVersionSync, ensureRepoMetadataDefaultsSync } from "./shared";
 import { catalogNeedsCompaction, scheduleCompactionWake } from "./compaction/plan";
 
 export type FinalizeReceiveResult =
@@ -64,96 +64,134 @@ export async function finalizeReceiveState(args: {
     | undefined;
   logger?: Logger;
 }): Promise<FinalizeReceiveResult> {
-  const store = asTypedStorage<RepoStateSchema>(args.ctx.storage);
-  await ensureRepoMetadataDefaults(store);
+  // Perform all DO KV and SQLite mutations atomically inside a single SQLite
+  // transaction so a mid-commit failure never leaves refs ahead of pack_catalog or vice versa.
+  const txOutcome = args.ctx.storage.transactionSync(() => {
+    const kv = asTypedSyncStorage<RepoStateSchema>(args.ctx.storage);
+    ensureRepoMetadataDefaultsSync(kv);
 
-  const lease = await store.get("receiveLease");
-  if (!lease || lease.token !== args.token) {
-    return {
-      status: "lease_mismatch",
-      message: "Receive lease is no longer active for this request.",
-    };
-  }
-
-  const currentRefs = (await store.get("refs")) || [];
-  const invalidStatuses = args.commands
-    .filter((command) => !isValidRefName(command.ref))
-    .map((command) => ({ ref: command.ref, ok: false, msg: "invalid" satisfies string }));
-  if (invalidStatuses.length > 0) {
-    await store.delete("receiveLease");
-    args.logger?.warn("receive:finalize-invalid-ref", {
-      invalidCount: invalidStatuses.length,
-    });
-    return {
-      status: "ref_conflict",
-      statuses: invalidStatuses,
-      message: "Receive finalization rejected invalid refs.",
-    };
-  }
-
-  const statuses = validateReceiveCommands(currentRefs, args.commands);
-  if (!statuses.every((status) => status.ok)) {
-    await store.delete("receiveLease");
-    args.logger?.warn("receive:finalize-ref-conflict", {
-      conflictCount: statuses.filter((status) => !status.ok).length,
-    });
-    return {
-      status: "ref_conflict",
-      statuses,
-      message: "Ref expectations changed before the receive could be committed.",
-    };
-  }
-
-  const nextRefs = applyReceiveCommands(currentRefs, args.commands);
-  const storedHead = await store.get("head");
-  const nextHead = resolveHeadAfterReceive({ storedHead, refs: nextRefs });
-  const nextRefsVersion = ((await store.get("refsVersion")) || 0) + 1;
-
-  let shouldQueueCompaction = false;
-  if (args.stagedPack) {
-    const nextPackSeq = (await store.get("nextPackSeq")) || 1;
-    const db = getDb(args.ctx.storage);
-    await upsertPackCatalogRow(db, {
-      packKey: args.stagedPack.packKey,
-      kind: "receive",
-      state: "active",
-      tier: 0,
-      seqLo: nextPackSeq,
-      seqHi: nextPackSeq,
-      objectCount: args.stagedPack.objectCount,
-      packBytes: args.stagedPack.packBytes,
-      idxBytes: args.stagedPack.idxBytes,
-      createdAt: Date.now(),
-      supersededBy: null,
-    });
-    await store.put("nextPackSeq", nextPackSeq + 1);
-    const activeCatalog = await listActivePackCatalog(db);
-    await bumpPacksetVersion(store);
-    shouldQueueCompaction = catalogNeedsCompaction(activeCatalog);
-    if (shouldQueueCompaction) {
-      await store.put("compactionWantedAt", Date.now());
-      await scheduleCompactionWake(args.ctx, args.env);
+    const lease = kv.get("receiveLease");
+    if (!lease || lease.token !== args.token) {
+      return {
+        kind: "lease_mismatch" as const,
+        result: {
+          status: "lease_mismatch" as const,
+          message: "Receive lease is no longer active for this request.",
+        },
+      };
     }
+
+    const currentRefs = kv.get("refs") || [];
+    const invalidStatuses = args.commands
+      .filter((command) => !isValidRefName(command.ref))
+      .map((command) => ({ ref: command.ref, ok: false, msg: "invalid" satisfies string }));
+    if (invalidStatuses.length > 0) {
+      kv.delete("receiveLease");
+      return {
+        kind: "invalid_ref" as const,
+        invalidCount: invalidStatuses.length,
+        result: {
+          status: "ref_conflict" as const,
+          statuses: invalidStatuses,
+          message: "Receive finalization rejected invalid refs.",
+        },
+      };
+    }
+
+    const statuses = validateReceiveCommands(currentRefs, args.commands);
+    if (!statuses.every((status) => status.ok)) {
+      kv.delete("receiveLease");
+      return {
+        kind: "ref_conflict" as const,
+        conflictCount: statuses.filter((status) => !status.ok).length,
+        result: {
+          status: "ref_conflict" as const,
+          statuses,
+          message: "Ref expectations changed before the receive could be committed.",
+        },
+      };
+    }
+
+    const nextRefs = applyReceiveCommands(currentRefs, args.commands);
+    const storedHead = kv.get("head");
+    const nextHead = resolveHeadAfterReceive({ storedHead, refs: nextRefs });
+    const nextRefsVersion = (kv.get("refsVersion") || 0) + 1;
+    const now = Date.now();
+
+    let shouldQueueCompaction = false;
+    if (args.stagedPack) {
+      const nextPackSeq = kv.get("nextPackSeq") || 1;
+      const db = getDb(args.ctx.storage);
+      upsertPackCatalogRowSync(db, {
+        packKey: args.stagedPack.packKey,
+        kind: "receive",
+        state: "active",
+        tier: 0,
+        seqLo: nextPackSeq,
+        seqHi: nextPackSeq,
+        objectCount: args.stagedPack.objectCount,
+        packBytes: args.stagedPack.packBytes,
+        idxBytes: args.stagedPack.idxBytes,
+        createdAt: now,
+        supersededBy: null,
+      });
+      kv.put("nextPackSeq", nextPackSeq + 1);
+      const activeCatalog = listActivePackCatalogSync(db);
+      bumpPacksetVersionSync(kv);
+      shouldQueueCompaction = catalogNeedsCompaction(activeCatalog);
+      if (shouldQueueCompaction) {
+        kv.put("compactionWantedAt", now);
+      }
+    }
+
+    kv.put("refs", nextRefs);
+    kv.put("head", nextHead);
+    kv.put("refsVersion", nextRefsVersion);
+    kv.delete("receiveLease");
+
+    return {
+      kind: "committed" as const,
+      refCount: nextRefs.length,
+      shouldQueueCompaction,
+      result: {
+        status: "committed" as const,
+        statuses,
+        changed: args.commands.length > 0,
+        empty: nextRefs.length === 0,
+        shouldQueueCompaction,
+      },
+    };
+  });
+
+  if (txOutcome.kind === "invalid_ref") {
+    args.logger?.warn("receive:finalize-invalid-ref", {
+      invalidCount: txOutcome.invalidCount,
+    });
+    return txOutcome.result;
   }
 
-  await store.put("refs", nextRefs);
-  await store.put("head", nextHead);
-  await store.put("refsVersion", nextRefsVersion);
-  await store.delete("receiveLease");
+  if (txOutcome.kind === "ref_conflict") {
+    args.logger?.warn("receive:finalize-ref-conflict", {
+      conflictCount: txOutcome.conflictCount,
+    });
+    return txOutcome.result;
+  }
+
+  if (txOutcome.kind === "lease_mismatch") {
+    return txOutcome.result;
+  }
+
+  if (txOutcome.shouldQueueCompaction) {
+    await scheduleCompactionWake(args.ctx, args.env);
+  }
 
   args.logger?.info("receive:finalize-committed", {
     commandCount: args.commands.length,
-    refCount: nextRefs.length,
-    empty: nextRefs.length === 0,
+    refCount: txOutcome.refCount,
+    empty: txOutcome.result.empty,
     stagedPackKey: args.stagedPack?.packKey,
-    shouldQueueCompaction,
+    shouldQueueCompaction: txOutcome.shouldQueueCompaction,
   });
 
-  return {
-    status: "committed",
-    statuses,
-    changed: args.commands.length > 0,
-    empty: nextRefs.length === 0,
-    shouldQueueCompaction,
-  };
+  return txOutcome.result;
 }

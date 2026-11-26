@@ -459,47 +459,54 @@ describe("streaming compaction", () => {
     const getStub = () => env.REPO_DO.get(env.REPO_DO.idFromName(repoId));
     await promoteToStreaming(owner, repo);
 
-    await pushOverflowingStreamingHistory({
-      owner,
-      repo,
-      repoId,
-      startingCommitOid: seeded.nextCommit.oid,
-      updates: 4,
-    });
+    const sendSpy = vi
+      .spyOn(env.REPO_TASKS_QUEUE, "send")
+      .mockImplementation(async () => createQueueSendResponse());
+    try {
+      await pushOverflowingStreamingHistory({
+        owner,
+        repo,
+        repoId,
+        startingCommitOid: seeded.nextCommit.oid,
+        updates: 4,
+      });
 
-    const stub = getStub();
-    const begin = await stub.beginCompaction();
-    expect(begin.ok).toBe(true);
-    if (!begin.ok) {
-      throw new Error("expected compaction to begin");
+      const stub = getStub();
+      const begin = await stub.beginCompaction();
+      expect(begin.ok).toBe(true);
+      if (!begin.ok) {
+        throw new Error("expected compaction to begin");
+      }
+
+      // Bump the packset version behind the compaction lease's back.
+      await runDOWithRetry(getStub, async (_instance, state) => {
+        const store = asTypedStorage<RepoStateSchema>(state.storage);
+        const current = (await store.get("packsetVersion")) || 0;
+        await store.put("packsetVersion", current + 1);
+      });
+
+      const result = await stub.commitCompaction({
+        token: begin.lease.token,
+        sourcePacks: begin.sourcePacks,
+        targetTier: begin.targetTier,
+        packsetVersion: begin.packsetVersion,
+        stagedPack: {
+          packKey: `${begin.sourcePacks[0]!.packKey}.fake-compaction`,
+          packBytes: begin.sourcePacks[0]!.packBytes,
+          idxBytes: begin.sourcePacks[0]!.idxBytes,
+          objectCount: begin.sourcePacks[0]!.objectCount,
+        },
+      });
+      expect(result.status).toBe("retry");
+      if (result.status === "retry") {
+        expect(result.reason).toBe("packset-changed");
+      }
+
+      const state = await getDebugState(owner, repo, seededRepo.cookieHeader);
+      expect(state.activePacks?.every((pack) => pack.kind !== "compact")).toBe(true);
+    } finally {
+      sendSpy.mockRestore();
     }
-
-    // Bump the packset version behind the compaction lease's back.
-    await runDOWithRetry(getStub, async (_instance, state) => {
-      const store = asTypedStorage<RepoStateSchema>(state.storage);
-      const current = (await store.get("packsetVersion")) || 0;
-      await store.put("packsetVersion", current + 1);
-    });
-
-    const result = await stub.commitCompaction({
-      token: begin.lease.token,
-      sourcePacks: begin.sourcePacks,
-      targetTier: begin.targetTier,
-      packsetVersion: begin.packsetVersion,
-      stagedPack: {
-        packKey: `${begin.sourcePacks[0]!.packKey}.fake-compaction`,
-        packBytes: begin.sourcePacks[0]!.packBytes,
-        idxBytes: begin.sourcePacks[0]!.idxBytes,
-        objectCount: begin.sourcePacks[0]!.objectCount,
-      },
-    });
-    expect(result.status).toBe("retry");
-    if (result.status === "retry") {
-      expect(result.reason).toBe("packset-changed");
-    }
-
-    const state = await getDebugState(owner, repo, seededRepo.cookieHeader);
-    expect(state.activePacks?.every((pack) => pack.kind !== "compact")).toBe(true);
   });
 
   it("compacts successfully when a non-source pack contains a duplicate identity REF_DELTA", async () => {
@@ -869,6 +876,107 @@ describe("streaming compaction", () => {
     }
     for (const count of counts.values()) {
       expect(count).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("BUG-13: rolls back pack_catalog and KV state atomically when commitCompaction fails mid-transaction", async () => {
+    const { commitCompactionState } = await import("@/worker/do/repo/catalog/compaction/lease");
+
+    const owner = "o";
+    const repo = uniqueRepoId("stream-compaction-atomic-rollback");
+    await setupRepoForTests(env, owner, repo);
+    const repoId = `${owner}/${repo}`;
+    const seeded = await seedPackFirstRepo(repoId);
+    const getStub = () => env.REPO_DO.get(env.REPO_DO.idFromName(repoId));
+    await promoteToStreaming(owner, repo);
+
+    const sendSpy = vi
+      .spyOn(env.REPO_TASKS_QUEUE, "send")
+      .mockImplementation(async () => createQueueSendResponse());
+    try {
+      await pushOverflowingStreamingHistory({
+        owner,
+        repo,
+        repoId,
+        startingCommitOid: seeded.nextCommit.oid,
+        updates: 4,
+      });
+
+      const stub = getStub();
+      const begin = await stub.beginCompaction();
+      expect(begin.ok).toBe(true);
+      if (!begin.ok) throw new Error("expected compaction begin to succeed");
+
+      const fakePackKey = `${begin.sourcePacks[0]!.packKey}.atomic-test`;
+
+      // Simulate a SQLite failure after the new compacted row has been inserted, during supersede update.
+      // Invoke commitCompactionState directly inside the DO callback so the intentionally aborted
+      // transaction stays inside our caught promise instead of triggering workerd's RPC uncaught reporter.
+      const rollbackCheck = await runDOWithRetry(getStub, async (_instance, state) => {
+        state.storage.sql.exec(`
+          CREATE TRIGGER IF NOT EXISTS fail_on_supersede
+          AFTER UPDATE ON pack_catalog
+          WHEN NEW.state = 'superseded'
+          BEGIN
+            SELECT RAISE(ABORT, 'simulated supersede failure');
+          END;
+        `);
+        let caughtMessage = "";
+        try {
+          await commitCompactionState({
+            ctx: state,
+            env,
+            token: begin.lease.token,
+            sourcePacks: begin.sourcePacks,
+            targetTier: begin.targetTier,
+            packsetVersion: begin.packsetVersion,
+            stagedPack: {
+              packKey: fakePackKey,
+              packBytes: 123,
+              idxBytes: 45,
+              objectCount: 1,
+            },
+          });
+        } catch (error) {
+          caughtMessage = error instanceof Error ? error.message : String(error);
+        } finally {
+          state.storage.sql.exec("DROP TRIGGER IF EXISTS fail_on_supersede;");
+        }
+
+        const store = asTypedStorage<RepoStateSchema>(state.storage);
+        return {
+          caughtMessage,
+          packsetVersion: await store.get("packsetVersion"),
+          compactLease: await store.get("compactLease"),
+          wantedAtType: typeof (await store.get("compactionWantedAt")),
+        };
+      });
+
+      expect(rollbackCheck.caughtMessage).toMatch(/simulated supersede failure/);
+      expect(rollbackCheck.packsetVersion).toBe(begin.packsetVersion);
+      expect(rollbackCheck.compactLease).toEqual(begin.lease);
+      expect(rollbackCheck.wantedAtType).toBe("number");
+
+      const activeCatalogAfterRollback = await stub.getActivePackCatalog();
+      expect(activeCatalogAfterRollback.some((row) => row.packKey === fakePackKey)).toBe(false);
+      expect(activeCatalogAfterRollback.every((row) => row.state === "active")).toBe(true);
+
+      // Retry commit after removing trigger now succeeds cleanly using the preserved lease.
+      const commitAfterRetry = await stub.commitCompaction({
+        token: begin.lease.token,
+        sourcePacks: begin.sourcePacks,
+        targetTier: begin.targetTier,
+        packsetVersion: begin.packsetVersion,
+        stagedPack: {
+          packKey: fakePackKey,
+          packBytes: 123,
+          idxBytes: 45,
+          objectCount: 1,
+        },
+      });
+      expect(commitAfterRetry.status).toBe("committed");
+    } finally {
+      sendSpy.mockRestore();
     }
   });
 });

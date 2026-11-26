@@ -1,83 +1,111 @@
-import { GitBranch, LogIn } from "lucide-react";
-
 import { HeaderMenusIsland } from "@/client/islands/header-menus";
 import { ThemeToggleIsland } from "@/client/islands/theme-toggle";
 import { IslandHost } from "@/client/server/IslandHost";
 import type { Viewer } from "@/client/server/viewer";
+import {
+  DEFAULT_SITE_BRANDING,
+  extractHostLabel,
+  type SiteBrandingConfig,
+} from "@/shared/branding";
 
 type HeaderProps = {
   currentView?: string;
   viewer?: Viewer | null;
+  branding?: SiteBrandingConfig;
+  origin?: string;
 };
 
-export function Header({ currentView, viewer }: HeaderProps) {
+export function Header({ currentView, viewer, branding, origin }: HeaderProps) {
+  const resolvedBranding = branding ?? DEFAULT_SITE_BRANDING;
+  const hostLabel = extractHostLabel(origin, resolvedBranding.websiteUrl);
   const handle = viewer?.primaryNamespaceSlug ? `@${viewer.primaryNamespaceSlug}` : "Account";
   const isHomeActive = currentView === "home";
   const isExploreActive = currentView === "explore";
+  const isRepoView =
+    currentView === "overview" ||
+    currentView === "tree" ||
+    currentView === "blob" ||
+    currentView === "commit" ||
+    currentView === "commits" ||
+    currentView === "admin";
+  const isRepositoriesUnderline = (Boolean(viewer) && isHomeActive) || isRepoView;
+  const isTeamsUnderline = currentView === "owner";
+  const isExploreUnderline = isExploreActive || (!viewer && isHomeActive);
+  const isSignInActive = currentView === "auth-signin";
 
   return (
-    <header className="sticky top-0 z-50 h-12 w-full shrink-0 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between gap-4 px-3 sm:gap-6 sm:px-5 lg:px-6">
-        {/* Left Zone: Brand + concise single-line links */}
-        <div className="flex min-w-0 items-center gap-6">
-          <a
-            href="/"
-            className="flex shrink-0 items-center gap-2 text-sm font-semibold whitespace-nowrap text-zinc-950 no-underline transition-colors hover:text-zinc-700 dark:text-zinc-100 dark:hover:text-white"
-          >
-            <span className="inline-grid h-7 w-7 shrink-0 place-items-center rounded-md border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
-              <GitBranch
-                className="h-4 w-4 text-accent-600 dark:text-accent-400"
-                strokeWidth={2}
-                aria-hidden="true"
-              />
+    <header className="sticky top-0 z-30 h-12 bg-canvas/95 backdrop-blur border-b border-border shrink-0">
+      <div className="max-w-[1160px] h-full mx-auto px-5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-6">
+          <a href="/" className="flex items-center gap-2 text-fg no-underline hover:text-fg">
+            <svg
+              className="w-4 h-4 text-fg shrink-0"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm6.25 7.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM8.5 7.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm-4.25 4.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+              <path d="M4.25 4.75v6a.75.75 0 0 1-1.5 0v-6a.75.75 0 0 1 1.5 0Zm7 1.75v2.75a.75.75 0 0 1-1.5 0V6.5a1 1 0 0 0-1-1H6.5a.75.75 0 0 1 0-1.5h2.25a2.5 2.5 0 0 1 2.5 2.5Z" />
+            </svg>
+            <span className="font-semibold text-[14px] tracking-tight">
+              {resolvedBranding.shortName}
             </span>
-            <span className="tracking-tight">git-on-cloudflare</span>
+            <span className="hidden sm:inline text-border">/</span>
+            <span className="hidden sm:inline text-[12px] text-fgMuted">{hostLabel}</span>
+            <span className="sr-only">{resolvedBranding.siteName}</span>
           </a>
 
-          <nav className="hidden items-center gap-5 sm:flex" aria-label="Primary navigation">
-            {viewer ? (
-              <>
-                <a
-                  href="/"
-                  aria-current={isHomeActive ? "page" : undefined}
-                  className={`text-[13px] font-medium whitespace-nowrap no-underline transition-colors ${
-                    isHomeActive
-                      ? "text-zinc-950 dark:text-white"
-                      : "text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100"
-                  }`}
-                >
-                  Repositories
-                </a>
-                <a
-                  href="/explore"
-                  aria-current={isExploreActive ? "page" : undefined}
-                  className={`text-[13px] font-medium whitespace-nowrap no-underline transition-colors ${
-                    isExploreActive
-                      ? "text-zinc-950 dark:text-white"
-                      : "text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100"
-                  }`}
-                >
-                  Explore
-                </a>
-              </>
-            ) : (
+          <nav
+            className="hidden md:flex items-center gap-5 h-12 text-[13px]"
+            aria-label="Primary navigation"
+          >
+            <a
+              href="/explore"
+              aria-current={isExploreUnderline ? "page" : undefined}
+              className={
+                isExploreUnderline
+                  ? "h-full inline-flex items-center text-fg font-medium border-b-2 border-fg no-underline"
+                  : "h-full inline-flex items-center text-fgMuted hover:text-fg transition-colors no-underline"
+              }
+            >
+              Explore
+            </a>
+            <a
+              href={viewer ? "/" : "/#repositories"}
+              aria-current={isRepositoriesUnderline ? "page" : undefined}
+              className={
+                isRepositoriesUnderline
+                  ? "h-full inline-flex items-center text-fg font-medium border-b-2 border-fg no-underline"
+                  : "h-full inline-flex items-center text-fgMuted hover:text-fg transition-colors no-underline"
+              }
+            >
+              Repositories
+            </a>
+            <a
+              href={viewer ? "/explore#teams" : "/#teams"}
+              aria-current={isTeamsUnderline ? "page" : undefined}
+              className={
+                isTeamsUnderline
+                  ? "h-full inline-flex items-center text-fg font-medium border-b-2 border-fg no-underline"
+                  : "h-full inline-flex items-center text-fgMuted hover:text-fg transition-colors no-underline"
+              }
+            >
+              Teams
+            </a>
+            {resolvedBranding.docsUrl ? (
               <a
-                href="/explore"
-                aria-current={isExploreActive || isHomeActive ? "page" : undefined}
-                className={`text-[13px] font-medium whitespace-nowrap no-underline transition-colors ${
-                  isExploreActive || isHomeActive
-                    ? "text-zinc-950 dark:text-white"
-                    : "text-zinc-600 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-zinc-100"
-                }`}
+                href={resolvedBranding.docsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="h-full inline-flex items-center text-fgMuted hover:text-fg transition-colors no-underline"
               >
-                Explore
+                Docs
               </a>
-            )}
+            ) : null}
           </nav>
         </div>
 
-        {/* Right Zone: Theme toggle + Sign in (logged out) OR + Create & User menu (logged in) */}
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-3">
           {viewer ? (
             <>
               <IslandHost
@@ -107,14 +135,14 @@ export function Header({ currentView, viewer }: HeaderProps) {
               </IslandHost>
               <a
                 href="/auth"
-                className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium whitespace-nowrap no-underline transition-colors ${
-                  currentView === "auth-signin"
-                    ? "border-accent-500/35 bg-accent-500/10 text-accent-700 dark:text-accent-300"
-                    : "border-accent-600 bg-accent-600 text-white hover:bg-accent-700"
-                }`}
+                aria-current={isSignInActive ? "page" : undefined}
+                className={
+                  isSignInActive
+                    ? "text-[12px] font-medium text-fg no-underline"
+                    : "text-[12px] text-fgMuted hover:text-fg transition-colors no-underline"
+                }
               >
-                <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Sign in</span>
+                Sign in
               </a>
             </>
           )}

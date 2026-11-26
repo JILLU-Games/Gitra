@@ -130,6 +130,17 @@ export async function listRepositoriesForNamespace(
     .orderBy(repositories.slug);
 }
 
+export async function listRepositoriesInNamespace(
+  db: Db,
+  namespaceId: string
+): Promise<RepositoryRow[]> {
+  return await db
+    .select()
+    .from(repositories)
+    .where(eq(repositories.namespaceId, namespaceId))
+    .orderBy(repositories.slug);
+}
+
 export async function touchRepositoryUpdatedAt(
   db: Db,
   repositoryId: string,

@@ -300,7 +300,7 @@ export function CommitDiffExpanderIsland({
 
       {/* Truncation warning */}
       {diffTruncated ? (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-300 mx-4 mt-3 mb-0">
+        <div className="mx-3.5 mt-3 mb-0 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-300">
           Showing a partial diff list due to runtime limits
           {diffTruncateReason ? ` (${diffTruncateReason})` : ""}.
         </div>
@@ -349,7 +349,7 @@ export function CommitDiffExpanderIsland({
                       </div>
                     ) : null}
                     {!isLoading && error ? (
-                      <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400 mb-0">
+                      <div className="mb-0 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400">
                         Failed to load patch: {error}
                       </div>
                     ) : null}

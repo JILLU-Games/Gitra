@@ -7,8 +7,10 @@ import {
   readCommitFilePatch,
 } from "@/worker/git";
 import { isValidPath, formatWhen, OID_RE } from "@/shared/web";
-import { handleError } from "@/client/server/error";
+import { getErrorMessage, handleError, resolveErrorStatus } from "@/client/server/error";
+import { json } from "@/worker/common";
 import { buildCacheKeyFrom, cacheOrLoadJSONForRequestWithTTL } from "@/worker/cache";
+import { findRepositoryById } from "@/worker/db/d1/dal/repositories";
 import {
   badRequest,
   canViewerManageRepo,
@@ -69,12 +71,18 @@ export async function handleCommits(c: AppContext<"/:owner/:repo/commits">) {
         isMerge: Array.isArray(c.parents) && c.parents.length > 1,
       }));
     };
+    const isImmutableOid = OID_RE.test(ref);
+    const repoRow = isImmutableOid
+      ? undefined
+      : await findRepositoryById(c.var.db, route.repositoryId);
+    const cacheVersion = repoRow ? String(repoRow.updatedAt) : undefined;
     const cacheKey = buildCacheKeyFrom(c.req.raw, "/_cache/commits", {
       repo: repoId,
       ref,
       per_page: String(perPage),
       page: String(page),
       offset: String(offset),
+      v: cacheVersion,
     });
     const commitsView = await cacheOrLoadJSONForRequestWithTTL<
       Array<{
@@ -146,11 +154,10 @@ export async function handleCommitFragments(c: AppContext<"/:owner/:repo/commits
   const access = await resolveUiRepoAccess(c, owner, repo, { responseShape: "json" });
   if (access.kind === "response") return access.response;
   const { route, cacheCtx } = access;
+  const log = c.var.logFor({ service: "CommitFragments", repoId: route.doName });
   if (!OID_RE.test(oid)) {
-    return badRequest(env, "Invalid OID", "OID must be 40 hex", {
-      owner,
-      repo,
-      refEnc: encodeURIComponent(oid),
+    return json({ error: "OID must be 40 hex" }, 400, {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
     });
   }
   const u = new URL(c.req.url);
@@ -185,11 +192,18 @@ export async function handleCommitFragments(c: AppContext<"/:owner/:repo/commits
       },
     });
   } catch (e) {
-    return handleError(env, e, `Error · ${owner}/${repo}`, {
-      owner,
-      repo,
-      refEnc: encodeURIComponent(oid),
-    });
+    const status = resolveErrorStatus(e);
+    const debug = String(env.LOG_LEVEL || "").toLowerCase() === "debug";
+    const message = getErrorMessage(e);
+    log.warn("commit-fragments:load-failed", { oid, status, error: message });
+    return json(
+      {
+        error:
+          status >= 500 && !debug ? "Failed to load merge commit fragments" : message || "Error",
+      },
+      status,
+      { "Cache-Control": "no-store, no-cache, must-revalidate" }
+    );
   }
 }
 
@@ -201,21 +215,17 @@ export async function handleCommitDiff(c: AppContext<"/:owner/:repo/commit/:oid/
   const access = await resolveUiRepoAccess(c, owner, repo, { responseShape: "json" });
   if (access.kind === "response") return access.response;
   const { route, cacheCtx } = access;
+  const log = c.var.logFor({ service: "CommitDiff", repoId: route.doName });
   if (!OID_RE.test(oid)) {
-    return badRequest(env, "Invalid commit OID", "Commit id must be 40-hex", {
-      owner,
-      repo,
-      refEnc: encodeURIComponent(oid),
+    return json({ error: "Commit id must be 40-hex" }, 400, {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
     });
   }
   const url = new URL(c.req.url);
   const path = url.searchParams.get("path") || "";
   if (!path || !isValidPath(path)) {
-    return badRequest(env, "Invalid path", "Path contains invalid characters or is too long", {
-      owner,
-      repo,
-      refEnc: encodeURIComponent(oid),
-      path,
+    return json({ error: "Path contains invalid characters or is too long" }, 400, {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
     });
   }
   const repoId = route.doName;
@@ -241,12 +251,17 @@ export async function handleCommitDiff(c: AppContext<"/:owner/:repo/commit/:oid/
       },
     });
   } catch (e) {
-    return handleError(env, e, `Error · ${owner}/${repo}`, {
-      owner,
-      repo,
-      refEnc: encodeURIComponent(oid),
-      path,
-    });
+    const status = resolveErrorStatus(e);
+    const debug = String(env.LOG_LEVEL || "").toLowerCase() === "debug";
+    const message = getErrorMessage(e);
+    log.warn("commit-diff:load-failed", { oid, path, status, error: message });
+    return json(
+      {
+        error: status >= 500 && !debug ? "Failed to load commit file diff" : message || "Error",
+      },
+      status,
+      { "Cache-Control": "no-store, no-cache, must-revalidate" }
+    );
   }
 }
 

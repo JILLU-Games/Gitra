@@ -1,6 +1,7 @@
 import { renderToReadableStream } from "react-dom/server";
 
 import { AppLayout } from "@/client/components/AppLayout";
+import type { SiteBrandingConfig } from "@/shared/branding";
 import { resolveDocumentAssets } from "./assets";
 import { Document } from "./document";
 import { getViewDefinition } from "./registry";
@@ -19,6 +20,8 @@ export type RenderUiViewOptions = {
   // and threaded through the SSR shell. The renderer stays presentational
   // and never touches cookies or D1 itself.
   viewer?: Viewer | null;
+  branding?: SiteBrandingConfig;
+  origin?: string;
 };
 
 export async function renderUiView(
@@ -45,7 +48,12 @@ export async function renderUiView(
       assets={assets}
       needsHighlight={needsHighlightTheme(name, data)}
     >
-      <AppLayout currentView={name} viewer={options.viewer ?? null}>
+      <AppLayout
+        currentView={name}
+        viewer={options.viewer ?? null}
+        branding={options.branding}
+        origin={options.origin}
+      >
         {page}
       </AppLayout>
     </Document>

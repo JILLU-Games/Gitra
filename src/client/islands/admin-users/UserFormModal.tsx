@@ -44,7 +44,7 @@ function errorMessageForReason(reason?: string): string {
     case "password-too-long":
       return `Password must be at most ${PASSWORD_MAX_LENGTH} characters.`;
     case "protected-admin":
-      return "The signed-in primary admin's handle, role, status, and env password are locked.";
+      return "The signed-in primary admin's role, status, and env password are locked.";
     case "not-found":
       return "User record could not be found.";
     default:
@@ -92,7 +92,7 @@ export function UserFormModal({
     setError(null);
 
     const cleanedHandle = handle.trim().replace(/^@+/, "");
-    if (!isPrimaryAdmin && !cleanedHandle) {
+    if (!cleanedHandle) {
       setError("Username / @namespace handle is required.");
       return;
     }
@@ -149,16 +149,16 @@ export function UserFormModal({
 
       if (!initialUser) return;
       const payload: {
-        handle?: string;
+        handle: string;
         displayName: string;
         role?: DirectoryRole;
         status?: DirectoryStatus;
         password?: string;
       } = {
+        handle: cleanedHandle,
         displayName: displayName.trim(),
       };
       if (!isPrimaryAdmin) {
-        payload.handle = cleanedHandle;
         payload.role = role;
         payload.status = status;
         if (password.length > 0) {
@@ -208,7 +208,7 @@ export function UserFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-zinc-950/60 p-4"
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="user-form-modal-title"
@@ -218,16 +218,13 @@ export function UserFormModal({
         }
       }}
     >
-      <div className="w-full max-w-md rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+      <div className="w-full max-w-md rounded-md border border-border bg-surface">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div>
-            <h2
-              id="user-form-modal-title"
-              className="m-0 text-sm font-semibold text-zinc-900 dark:text-zinc-100"
-            >
+            <h2 id="user-form-modal-title" className="m-0 text-[14px] font-semibold text-fg">
               {isEdit ? `Edit @${initialUser?.slug}` : "Add user"}
             </h2>
-            <p className="m-0 mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="m-0 mt-0.5 text-[12px] text-fgMuted">
               {isEdit
                 ? "Update account details or assign a new password."
                 : "Create a user account, namespace, and initial sign-in password."}
@@ -238,7 +235,7 @@ export function UserFormModal({
             onClick={onClose}
             disabled={busy}
             aria-label="Close modal"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -248,18 +245,19 @@ export function UserFormModal({
           {error ? (
             <div
               role="alert"
-              className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300"
+              className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
             >
               {error}
             </div>
           ) : null}
 
           {isPrimaryAdmin ? (
-            <div className="flex items-start gap-2 rounded-md border border-accent-500/30 bg-accent-500/10 px-3 py-2 text-xs text-accent-800 dark:text-accent-300">
+            <div className="flex items-start gap-2 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-[12px] text-accent">
               <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span>
-                You are editing the signed-in primary admin. Display name can be updated; handle,
-                role, active status, and env password remain locked.
+                You are editing the signed-in primary admin. Public @namespace handle and Display
+                name can be updated without changing your private sign-in username; role, active
+                status, and env password remain locked.
               </span>
             </div>
           ) : null}
@@ -267,14 +265,14 @@ export function UserFormModal({
           <div>
             <label
               htmlFor="user-form-handle"
-              className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+              className="mb-1 block text-[12px] font-medium text-fgBody"
             >
-              Username / @namespace
+              {isPrimaryAdmin ? "Public Git @namespace" : "Username / @namespace"}
             </label>
             <div className="relative">
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 font-mono text-xs text-zinc-400"
+                className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 font-mono text-[12px] text-fgMuted"
               >
                 @
               </span>
@@ -283,22 +281,24 @@ export function UserFormModal({
                 type="text"
                 value={handle}
                 onChange={(e) => setHandle(e.target.value)}
-                disabled={busy || isPrimaryAdmin}
-                placeholder="jane-ops"
+                disabled={busy}
+                placeholder={isPrimaryAdmin ? "vibtools" : "jane-ops"}
                 autoComplete="off"
-                autoFocus={!isPrimaryAdmin}
-                className="h-9 w-full rounded-md border border-zinc-200 bg-white pr-3 pl-6 font-mono text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:disabled:bg-zinc-900 dark:disabled:text-zinc-500"
+                autoFocus
+                className="h-8 w-full rounded-md border border-border bg-canvas pr-3 pl-6 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
-            <p className="m-0 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-              Lowercase letters, numbers, and hyphens (1–40 characters).
+            <p className="m-0 mt-1 text-[11px] text-fgMuted">
+              {isPrimaryAdmin
+                ? "Lowercase letters, numbers, and hyphens (1–40 characters). Changes public repo & clone URLs only."
+                : "Lowercase letters, numbers, and hyphens (1–40 characters)."}
             </p>
           </div>
 
           <div>
             <label
               htmlFor="user-form-display-name"
-              className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+              className="mb-1 block text-[12px] font-medium text-fgBody"
             >
               Display name
             </label>
@@ -311,7 +311,7 @@ export function UserFormModal({
               placeholder="Jane Morales"
               maxLength={80}
               autoFocus={isPrimaryAdmin}
-              className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              className="h-8 w-full rounded-md border border-border bg-canvas px-3 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-50"
             />
           </div>
 
@@ -319,7 +319,7 @@ export function UserFormModal({
             <div>
               <label
                 htmlFor="user-form-role"
-                className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                className="mb-1 block text-[12px] font-medium text-fgBody"
               >
                 Role
               </label>
@@ -328,7 +328,7 @@ export function UserFormModal({
                 value={role}
                 onChange={(e) => setRole(e.target.value as DirectoryRole)}
                 disabled={busy || isPrimaryAdmin}
-                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-2.5 text-xs text-zinc-900 focus:border-accent-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:disabled:bg-zinc-900"
+                className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fg focus:border-fgMuted focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="admin">admin</option>
                 <option value="member">member</option>
@@ -339,7 +339,7 @@ export function UserFormModal({
             <div>
               <label
                 htmlFor="user-form-status"
-                className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                className="mb-1 block text-[12px] font-medium text-fgBody"
               >
                 Status
               </label>
@@ -348,7 +348,7 @@ export function UserFormModal({
                 value={status}
                 onChange={(e) => setStatus(e.target.value as DirectoryStatus)}
                 disabled={busy || isPrimaryAdmin}
-                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-2.5 text-xs text-zinc-900 focus:border-accent-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:disabled:bg-zinc-900"
+                className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fg focus:border-fgMuted focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="active">active</option>
                 <option value="disabled">disabled</option>
@@ -361,7 +361,7 @@ export function UserFormModal({
               <div className="mb-1 flex items-center justify-between gap-2">
                 <label
                   htmlFor="user-form-password"
-                  className="block text-xs font-medium text-zinc-700 dark:text-zinc-300"
+                  className="block text-[12px] font-medium text-fgBody"
                 >
                   {isEdit ? "Reset password (optional)" : "Initial password"}
                 </label>
@@ -369,7 +369,7 @@ export function UserFormModal({
                   type="button"
                   onClick={handleGeneratePassword}
                   disabled={busy}
-                  className="inline-flex h-6 items-center gap-1 rounded border border-zinc-200 bg-zinc-50 px-2 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                  className="inline-flex h-6 items-center gap-1 rounded border border-border bg-canvas px-2 text-[11px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
                 >
                   <RefreshCw className="h-3 w-3" aria-hidden="true" />
                   <span>Generate</span>
@@ -391,14 +391,14 @@ export function UserFormModal({
                       ? "Leave blank to keep current password"
                       : `Min ${PASSWORD_MIN_LENGTH} characters`
                   }
-                  className="h-9 w-full rounded-md border border-zinc-200 bg-white pr-9 pl-3 font-mono text-xs text-zinc-900 placeholder:text-zinc-400 focus:border-accent-500 focus:outline-none disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                  className="h-8 w-full rounded-md border border-border bg-canvas pr-9 pl-3 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-50"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   disabled={busy}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute top-1/2 right-1.5 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  className="absolute top-1/2 right-1.5 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-fgMuted hover:bg-surfaceHover hover:text-fg"
                 >
                   {showPassword ? (
                     <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
@@ -407,7 +407,7 @@ export function UserFormModal({
                   )}
                 </button>
               </div>
-              <p className="m-0 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+              <p className="m-0 mt-1 text-[11px] text-fgMuted">
                 {isEdit
                   ? "Enter 8–128 characters to replace this user's password immediately."
                   : "Stored securely hashed (PBKDF2-SHA256) and shown once after creation."}
@@ -415,19 +415,19 @@ export function UserFormModal({
             </div>
           ) : null}
 
-          <div className="flex items-center justify-end gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+          <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
             <button
               type="button"
               onClick={onClose}
               disabled={busy}
-              className="inline-flex h-8 items-center rounded-md border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              className="inline-flex h-8 items-center rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={busy}
-              className="inline-flex h-8 items-center rounded-md border border-accent-600 bg-accent-600 px-3 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+              className="inline-flex h-8 items-center rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
             >
               {busy ? "Saving..." : isEdit ? "Save changes" : "Create user"}
             </button>
