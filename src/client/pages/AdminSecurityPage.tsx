@@ -5,6 +5,7 @@ import { buildNamespaceProfileHref } from "@/shared/admin/panel";
 
 export type AdminSecurityPageProps = {
   authMode: "demo" | "configured";
+  authSource?: "demo" | "env" | "d1";
   primaryAdminHandle: string;
   primaryAdminNamespaceSlug?: string;
   totalUsers: number;
@@ -60,6 +61,7 @@ const RBAC_MATRIX: ReadonlyArray<{
 
 export function AdminSecurityPage({
   authMode,
+  authSource,
   primaryAdminHandle,
   primaryAdminNamespaceSlug,
   totalUsers,
@@ -67,6 +69,7 @@ export function AdminSecurityPage({
   usersWithPasswords,
   counts,
 }: AdminSecurityPageProps) {
+  const resolvedAuthSource = authSource ?? (authMode === "configured" ? "env" : "demo");
   const publicNamespace = primaryAdminNamespaceSlug ?? primaryAdminHandle;
   return (
     <AdminSettingsLayout active="security" counts={counts}>
@@ -135,7 +138,7 @@ export function AdminSecurityPage({
                 className="truncate font-mono text-[11px] text-fgMuted"
                 title="Sign-in username"
               >
-                login: {primaryAdminHandle} ({authMode === "configured" ? "env" : "demo"})
+                {`login: ${primaryAdminHandle} (${resolvedAuthSource})`}
               </span>
             </div>
           </div>

@@ -238,12 +238,17 @@ export function resolveDeployConfig(env, cliFlags = {}) {
   const r2Bucket = normalizeAppName(env.CF_R2_BUCKET || `${appName}-repos`);
   const queueName = normalizeAppName(env.CF_QUEUE_NAME || `${appName}-repo-maint`);
 
+  /** @type {Record<string, string>} */
   const envSecrets = {};
   for (const key of [...REQUIRED_WORKER_SECRETS, ...OPTIONAL_AUTH_SECRETS]) {
     const val = String(env[key] || "").trim();
-    if (val) {
-      envSecrets[key] = val;
+    if (!val) continue;
+    // Production Cloudflare deployments must never sync AUTH_MODE=development/demo.
+    if (key === "AUTH_MODE") {
+      envSecrets[key] = "production";
+      continue;
     }
+    envSecrets[key] = val;
   }
 
   return {
@@ -352,6 +357,7 @@ export function buildGeneratedWranglerConfig({
       html_handling: templateConfig.assets?.html_handling || "none",
     },
     vars: {
+      AUTH_MODE: "production",
       CLOUDFLARE_TIER: deployConfig.tier,
       REPO_DO_IDLE_MINUTES: deployConfig.repoDoIdleMinutes,
       LOG_LEVEL: deployConfig.logLevel,

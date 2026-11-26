@@ -91,6 +91,7 @@ const BOOTSTRAP_STATEMENTS: readonly string[] = [
     role text NOT NULL DEFAULT 'member',
     status text NOT NULL DEFAULT 'active',
     password_hash text,
+    session_epoch integer NOT NULL DEFAULT 1,
     last_active_at integer,
     updated_at integer NOT NULL,
     FOREIGN KEY (namespace_id) REFERENCES namespaces(id) ON UPDATE no action ON DELETE cascade,
@@ -131,6 +132,7 @@ const BOOTSTRAP_STATEMENTS: readonly string[] = [
   )`,
   `INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0000_gray_supernaut.sql')`,
   `INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0001_outgoing_vin_gonzales.sql')`,
+  `INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0002_curvy_skreet.sql')`,
 ];
 
 const ensuredDatabases = new WeakMap<D1Database, Promise<void>>();
@@ -150,7 +152,25 @@ async function runSchemaCheck(db: D1Database): Promise<void> {
          )`
     )
     .first<{ presentCount: number }>();
-  if (existing && existing.presentCount >= 5) return;
+  if (existing && existing.presentCount >= 5) {
+    // Upgrade pre-existing bootstrapped DBs that were created before session_epoch existed.
+    const col = await db
+      .prepare(
+        `SELECT COUNT(*) AS hasCol
+         FROM pragma_table_info('namespace_directory_meta')
+         WHERE name = 'session_epoch'`
+      )
+      .first<{ hasCol: number }>();
+    if (col && col.hasCol === 0) {
+      await db.batch([
+        db.prepare(
+          `ALTER TABLE namespace_directory_meta ADD COLUMN session_epoch integer NOT NULL DEFAULT 1`
+        ),
+        db.prepare(`INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0002_curvy_skreet.sql')`),
+      ]);
+    }
+    return;
+  }
   await db.batch(BOOTSTRAP_STATEMENTS.map((sql) => db.prepare(sql)));
 }
 

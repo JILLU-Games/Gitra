@@ -2,17 +2,13 @@ import { canAccessAdminPanel, canWriteRepositories } from "@/shared/admin/panel"
 import { classifyRef, formatRefOption, shortRefName } from "@/shared/git/ref-display";
 import { PROFILE_README_CANDIDATES, PROFILE_REPO_SLUG } from "@/shared/slugs";
 import { bytesToText, isValidOwnerRepo, isValidRef } from "@/shared/web";
-import {
-  buildLocalAccountSubject,
-  resolveAdminAuthConfig,
-  resolveInitialAdminNamespaceSlug,
-} from "@/worker/auth/adminAuth";
+import { resolveInitialAdminNamespaceSlug } from "@/worker/auth/adminAuth";
 import { viewerIsNamespaceMember } from "@/worker/auth/pat";
 import { loadViewer } from "@/worker/auth/session";
 import { buildCacheKeyFrom, cacheOrLoadJSONForRequest } from "@/worker/cache";
 import {
   findDirectoryAccountBySlug,
-  findPrimaryAdminNamespace,
+  resolvePrimaryAdminNamespace,
 } from "@/worker/db/d1/dal/adminDirectory";
 import { findNamespaceBySlug } from "@/worker/db/d1/dal/namespaces";
 import {
@@ -109,7 +105,6 @@ export async function handleOwnerOverview(c: AppContext<"/:owner" | "/profile/:o
   }
   const viewer = await loadViewer(c);
   const isSiteAdmin = Boolean(viewer && canAccessAdminPanel(viewer.role));
-  const adminSubject = buildLocalAccountSubject(resolveAdminAuthConfig(env).username);
   const [repos, directoryAccount, isMember, profileMeta, primaryAdminNs] = await Promise.all([
     isSiteAdmin
       ? listRepositoriesInNamespace(db, namespace.id)
@@ -117,7 +112,7 @@ export async function handleOwnerOverview(c: AppContext<"/:owner" | "/profile/:o
     findDirectoryAccountBySlug(env.DB, db, owner),
     viewer ? viewerIsNamespaceMember(db, viewer.userId, namespace.id) : Promise.resolve(false),
     getNamespaceProfileMeta(env.DB, namespace.id),
-    findPrimaryAdminNamespace(db, adminSubject),
+    resolvePrimaryAdminNamespace(env.DB, db, env),
   ]);
   const repoMeta = await listRepositoryMetaMap(
     env.DB,

@@ -1,67 +1,59 @@
-# 00 — BASELINE FREEZE & DOCUMENTATION INDEX
+# 00 · Baseline Freeze & Forensic Documentation Index
 
-- **Freeze Timestamp**: `2026-11-26`
-- **Baseline Reference**: Post-Initial-Remediation Live Tree + Fresh Forensic Audit (`/notes/FORENSIC-PRODUCTION-AUDIT-REPORT.md`)
-- **Total Verified Findings in Baseline**: `12` (`BUG-NEW-01` through `BUG-NEW-12`)
-- **Planned Remediation Phases**: `4` Sequential Scope-Locked Phases (`Phase 01` through `Phase 04`)
-- **Current Implementation State**: `Baseline Frozen — 0 / 4 Phases Executed (Ready for Phase 01)`
+**Project:** `git-on-cloudflare` (Gitra) — v`0.1.0` (`package.json`)  
+**Freeze Timestamp:** 2026-11-26  
+**Freeze Method:** Direct inspection of live source code, configs, schemas, and executed verification commands (`.git` metadata is absent in this workspace; freeze is anchored by exact file state and test/build outputs).
 
 ---
 
-## 1. Baseline Freeze Verification Snapshot
+## 1. Frozen Stack & Runtime Configuration
 
-The current project source tree (`src/**`, `drizzle/**`, `test/**`, `wrangler.jsonc`, `package.json`) is frozen as the **Pre-Phase-01 Baseline**.
-
-| Verification Gate                              | Command                                                                    | Baseline Status                          |
-| ---------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------- |
-| Full Bundle Build (Client + SSR + Worker)      | `npm run build`                                                            | **PASS**                                 |
-| Strict Global Typecheck (`test/**` + `src/**`) | `npx tsc --noEmit`                                                         | **PASS (`0` errors)**                    |
-| Cloudflare Worker & Client Typecheck           | `npm run typecheck`                                                        | **PASS (`0` errors)**                    |
-| Prettier Code Formatting Check                 | `npm run format:check`                                                     | **PASS**                                 |
-| Node Unit Test Suite (`vitest.unit.config.ts`) | `npm run test`                                                             | **PASS (`14/14` suites, `74/74` tests)** |
-| Standalone Pure Logic Audit Suite              | `npx --yes tsx --test test/phase04-logic.node-test.ts`                     | **PASS (`5/5` tests)**                   |
-| Worker Integration Smoke Test (`github-feel`)  | `npx vitest run --config vitest.config.ts test/github-feel.worker.test.ts` | **PASS (`1/1` test)**                    |
-
----
-
-## 2. Complete Index of `/notes/` Forensic & Planning Documents
-
-| Document Path                                | Purpose & Scope                                                                                                                                                                                                                        |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/notes/FORENSIC-PRODUCTION-AUDIT-REPORT.md` | Ground-up forensic source-code audit report with exact file paths, line numbers, and verbatim code block proofs for all 12 findings (`BUG-NEW-01` .. `BUG-NEW-12`).                                                                    |
-| `/notes/00-BASELINE-FREEZE-AND-INDEX.md`     | **(This File)** Baseline freeze declaration, verification snapshot, bug-to-phase mapping table, and strict Scope-Lock rules.                                                                                                           |
-| `/notes/01-PRODUCTION-FIX-PATCH-SPEC.md`     | **(Requirement 001)** Exact file paths, line numbers, verbatim BEFORE code blocks, exact AFTER code patch specifications, and strict Scope Lock for all 12 bugs (`BUG-NEW-01` .. `BUG-NEW-12`).                                        |
-| `/notes/02-PHASED-UPDATE-ROADMAP.md`         | **(Requirement 002)** A–Z step-by-step phased implementation roadmap (`Phase 01` through `Phase 04`) with per-phase scope locks, allowed/forbidden files, and verification commands.                                                   |
-| `/notes/03-PHASE-EXECUTION-LOG.md`           | **(Requirement 003)** Live phase execution tracker recording completed phases (`0 / 4`), remaining phases (`4 / 4`), exact features/fixes per phase, and post-phase audit sign-offs.                                                   |
-| `/notes/04-ERROR-HANDLING-INVENTORY.md`      | **(Requirement 004)** Complete inventory of existing error handling across all subsystems (`HTTP`, `Git v2`, `DO`, `D1`, `R2`, `KV`, `SSR`) plus exact new error handling to be added in `BUG-NEW-08`, `BUG-NEW-09`, and `BUG-NEW-10`. |
-| `/notes/05-ACTUAL-IMPLEMENTATION-STATUS.md`  | **(Actual Implementation Matrix)** Subsystem-by-subsystem ledger of features currently working in Production & Demo Mode, what each phase upgrades, and what remains pending.                                                          |
+| Layer | Frozen Specification (Verified from Source) | Source Reference |
+| :--- | :--- | :--- |
+| **Runtime** | Cloudflare Workers (`compatibility_date: 2026-05-13`, `compatibility_flags: ["nodejs_als"]`) | `wrangler.jsonc:10-13`, `wrangler.paid.jsonc:9-12` |
+| **Build & Bundling** | Vite `^8.0.12`, `@cloudflare/vite-plugin ^1.36.4`, `@tailwindcss/vite ^4.3.0`, React `19.2.6` SSR + Client Islands | `package.json:33-62`, `vite.config.ts:1-34` |
+| **Web Router** | Hono `^4.12.18` (`new Hono<AppBindings>({ strict: false })`) | `src/worker/index.ts:43` |
+| **Stateful Repo Authority** | `RepoDurableObject` (SQLite DO via `drizzle-orm/durable-sqlite`, `migrations/drizzle/repo-do/`) | `wrangler.jsonc:22-48`, `src/worker/do/repo/repoDO.ts:40-101` |
+| **Control-Plane DB** | Cloudflare D1 (`DB`, `migrations_dir: drizzle/d1`, Drizzle ORM `^0.45.1`) | `wrangler.jsonc:59-65`, `package.json:26-30` |
+| **Object & Pack Storage** | Cloudflare R2 (`REPO_BUCKET`) | `wrangler.jsonc:67-72` |
+| **Route & Branch Cache / RL** | Cloudflare KV (`ROUTES`) + Cache API (`/_cache/refs`, `/_cache/tree`, etc.) | `wrangler.jsonc:53-58`, `src/worker/routes/git.ts:131-140`, `src/worker/auth/rateLimit.ts:124` |
+| **Background Queue** | Cloudflare Queues (`REPO_TASKS_QUEUE` producer + `local-repo-maint` consumer, `max_batch_size: 1`) | `wrangler.jsonc:76-90`, `src/worker/index.ts:363-365` |
+| **Tiers** | Free (`wrangler.jsonc`, `CLOUDFLARE_TIER="free"`) & Paid (`wrangler.paid.jsonc`, `limits.cpu_ms: 300000`, `CLOUDFLARE_TIER="paid"`) | `wrangler.jsonc:100-107`, `wrangler.paid.jsonc:21-23,98-105`, `src/worker/common/tier.ts:13-46` |
+| **Static Assets** | Workers Assets (`binding: "ASSETS"`, `directory: "dist/client"`, `html_handling: "none"`) | `wrangler.jsonc:94-98` |
 
 ---
 
-## 3. Master Bug-to-Phase Alignment Matrix (`BUG-NEW-01` .. `BUG-NEW-12`)
+## 2. Frozen Verification Baseline (Live Command Snapshot)
 
-Every single finding in `/notes/FORENSIC-PRODUCTION-AUDIT-REPORT.md` is mapped 1-to-1 to an exact remediation phase:
-
-| Bug ID       | Severity       | Target Phase | Exact Target Source File(s)                                                                                                                                                                            | Core Fix Summary                                                                                                                                                                                                                                                  |
-| ------------ | -------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BUG-NEW-01` | **CRITICAL**   | **Phase 01** | `src/worker/db/d1/dal/namespaces.ts`                                                                                                                                                                   | Prioritize user-owned namespaces (`ns.createdBy === userId`) before alphabetical sorting in `listNamespacesForUser` so admin-created users never hijack `viewer.primaryNamespaceSlug` or `/user/profile` updates.                                                 |
-| `BUG-NEW-02` | **HIGH**       | **Phase 01** | `src/worker/routes/ui/helpers.ts`, `src/worker/routes/ui/overview.ts`, `src/worker/db/d1/dal/repositories.ts`                                                                                          | Honor `canAccessAdminPanel(viewer.role)` in `resolveAdminPageRepoAccess`, `resolveAdminApiRepoAccess`, `resolveUiRepoAccess`, and `handleOwnerOverview` so Site Admins can open `"Storage"` (`/:owner/:repo/admin`) and view private repos across all namespaces. |
-| `BUG-NEW-03` | **HIGH**       | **Phase 01** | `src/worker/routes/authRepositories.ts`                                                                                                                                                                | Allow Site Admins (`canAccessAdminPanel(viewer.role)`) in `handleCommitProfileReadme` (`PUT /auth/api/repositories/:id/profile-readme`) and `handleCommitRepositoryFile` (`PUT /auth/api/repositories/:id/file`).                                                 |
-| `BUG-NEW-04` | **HIGH**       | **Phase 02** | `src/worker/git/commitFile.ts`                                                                                                                                                                         | Enqueue `{ kind: "compaction", doId, repoId }` on `env.REPO_TASKS_QUEUE` inside `commitRepositoryFile` when `finalized.shouldQueueCompaction` is true.                                                                                                            |
-| `BUG-NEW-10` | **MEDIUM**     | **Phase 02** | `src/worker/git/commitFile.ts`, `src/worker/routes/authRepositories.ts`                                                                                                                                | Preserve existing executable file mode (`100755` vs `100644`) in `upsertTreePath`, and reject path conflicts when an intermediate segment is a non-directory or the target leaf is an existing directory/submodule/symlink.                                       |
-| `BUG-NEW-05` | **HIGH**       | **Phase 03** | `src/worker/routes/admin.ts`                                                                                                                                                                           | In `PUT /:owner/:repo/admin/head` and `PUT /:owner/:repo/admin/refs`, update `repositories.updatedAt` in D1, delete `repo-branch:<repositoryId>` from `ROUTES` KV, and purge `/_cache/refs`.                                                                      |
-| `BUG-NEW-06` | **MEDIUM**     | **Phase 03** | `src/worker/tasks/repositoryDelete.ts`, `src/worker/repositories/routeCache.ts`                                                                                                                        | Delete `repo-branch:<repositoryId>` from `env.ROUTES` KV during `handleRepositoryDeleteMessage`.                                                                                                                                                                  |
-| `BUG-NEW-07` | **MEDIUM**     | **Phase 03** | `src/worker/auth/demoSeed.ts`                                                                                                                                                                          | Only write public demo repositories (`args.spec.visibility === "public"`) into `ROUTES` KV in `seedSingleDemoRepository`, and check `listRepositoriesInNamespace(args.db, args.namespaceId)` in `ensureDemoRepositoriesSeeded`.                                   |
-| `BUG-NEW-12` | **LOW-MEDIUM** | **Phase 03** | `src/worker/git/commitFile.ts`, `src/worker/routes/git.ts`                                                                                                                                             | Delete `repo-branch:<repositoryId>` from `ROUTES` KV on web commit and CLI `git push`, and align `commitFile.ts` README cache invalidation with `commitOid` + cache version.                                                                                      |
-| `BUG-NEW-08` | **MEDIUM**     | **Phase 04** | `src/client/server/error.ts`, `src/worker/routes/ui/helpers.ts`, `src/worker/routes/ui/tree.ts`, `src/worker/routes/ui/blob.ts`, `src/worker/routes/ui/commits.ts`, `src/worker/routes/ui/overview.ts` | Load custom `branding` and preserve signed-in `viewer` across `handleError`, `badRequest`, and `tree.ts` 404 responses; sanitize 500 error messages when `LOG_LEVEL !== "debug"`.                                                                                 |
-| `BUG-NEW-09` | **MEDIUM**     | **Phase 04** | `src/worker/routes/ui/refsApi.ts`, `src/worker/routes/admin.ts`                                                                                                                                        | Sanitize 500 JSON responses to `"Internal Server Error"`, add `Cache-Control: no-store`, and emit structured warning logs in `handleRefsApi` and the 5 remaining unhardened endpoints in `routes/admin.ts`.                                                       |
-| `BUG-NEW-11` | **LOW-MEDIUM** | **Phase 04** | `src/worker/routes/ui/blob.ts`                                                                                                                                                                         | Load `const progress = await loadUiRepoActivity(env, access)` in `handleBlob` and pass `progress` to `renderBlobDocumentResponse`.                                                                                                                                |
+| Command | Baseline Status | Exact Verified Output |
+| :--- | :--- | :--- |
+| `npm run typecheck` | **PASS** | `wrangler types --env-file .dev.vars.example && tsc -p test/tsconfig.json --noEmit` exited `0` |
+| `npm run build` | **PASS** | `vite build` exited `0` |
+| `npm run test` | **PASS** | `14` test files passed, `75` tests passed (`vitest.unit.config.ts`) |
+| `node --test test/cf-auto-deploy.node-test.ts` | **PASS** | `8` subtests passed, `0` failed |
+| `npm run format:check` | **FAIL** | Exited `1` — unformatted: `public/assets/aistudio/VIB_TOOLS_COMPANY_AUTHOR_MASTER_CONTEXT_528b6a24.md`, `wrangler.paid.jsonc` |
+| `npm run test:workers` | **FAIL** | `57 passed \| 1 failed (58)` files, `349 passed \| 1 failed (350)` tests — `test/demo-user-mock-repo.worker.test.ts:155:31` |
 
 ---
 
-## 4. Strict Scope-Lock Governance Rules
+## 3. Baseline Freeze Alignment With Forensic Audit Report
 
-1. **One Phase at a Time**: Each phase is executed only after explicit user approval of its command prompt.
-2. **Exact File Boundary Enforcement**: Only the files listed in that phase's Scope Lock table may be modified during that phase. All other application features, UI components, styles, and routes remain 100% untouched.
-3. **Post-Patch Forensic Self-Audit**: Immediately after applying a phase's patches, the modified files and tests are re-audited and verified with `npm run typecheck`, `npx tsc --noEmit`, `npm run test`, and `npm run format:check`.
-4. **Live Markdown Ledger Updates**: At the end of every phase, `/notes/03-PHASE-EXECUTION-LOG.md`, `/notes/04-ERROR-HANDLING-INVENTORY.md`, and `/notes/05-ACTUAL-IMPLEMENTATION-STATUS.md` are updated with exact completion proof.
+All **21 findings (`F-01` through `F-21`)** recorded in `notes/PRODUCTION-FORENSIC-AUDIT-REPORT.md` are verified against this exact frozen baseline:
+- **Critical (`2`):** `F-01` (footer `Profile` link `/admin` collision & failing worker test), `F-02` (`/auth/setup` handle vs `ADMIN_USERNAME` primary-admin subject mismatch).
+- **High (`7`):** `F-03` (D1 primary admin blocked from changing/resetting password in UI), `F-04` (non-transactional `/auth/setup` lockout), `F-05` (sessions survive password change/reset), `F-09` (incremental `git fetch` `503` without `REPO_TASKS_QUEUE`), `F-10` (compaction stuck `"queued"` without queue & Free-tier alarm stall / `1102` risk), `F-17` (Git v0/v1 rejected with `400`), `F-20` (`cf-auto-deploy` unused secrets + `SESSION_SECRET` synced after `wrangler deploy`).
+- **Medium (`11`):** `F-06` (misleading `ADMIN_PASSWORD set` / `(env)` labels), `F-07` (non-atomic/fail-open KV auth rate limiting), `F-08` (`__Host-` + `Secure` breaks plain HTTP non-localhost), `F-11` (fake client regex languages, hardcoded dropdown, `"Vib Tools"` fallbacks), `F-12` (missing web upload/rename/delete/folder/branch/tag UI & `@local.dev` email), `F-13` (no global Toast system & silent clipboard catches), `F-14` (no PWA manifest / SW / icons), `F-15` (design-system `--radius: 0rem`, font fallback, shadow & bypassed `ui/*` rules), `F-18` (60-repo cold-branch cap & standalone `getLimiter()`), `F-19` (`waitUntil` stale `updatedAt`/KV sync), `F-21` (clean `format:check` fail & 22 unused files in `public/assets/aistudio/`).
+- **Low (`1`):** `F-16` (`rawpath` exact `referer` host guard blocks direct opens & proxies).
+
+---
+
+## 4. `notes/` Master Index
+
+| Document | Purpose |
+| :--- | :--- |
+| `notes/PRODUCTION-FORENSIC-AUDIT-REPORT.md` | **001 Source Forensic Report** — complete root causes, line-level code evidence, Demo vs. Production parity matrix, live test/build baseline |
+| `notes/00-BASELINE-FREEZE-AND-INDEX.md` | **Baseline Freeze & Index** — frozen runtime bindings, verification metrics, alignment with `F-01`–`F-21` |
+| `notes/01-PRODUCTION-FIX-PATCH-SPEC.md` | **Exact Patch Spec & Scope Locks** — exact target file paths, verbatim failing code proofs, exact fix design & strict Scope Lock per phase |
+| `notes/02-PHASED-UPDATE-ROADMAP.md` | **A–Z Phased Update Roadmap** — `Phase 01` to `Phase 05` execution sequence, forbidden touches, and verification gates |
+| `notes/03-PHASE-EXECUTION-LOG.md` | **Phase Execution Log** — live completion ledger tracking finished phases, changed files, added features, and remaining phases |
+| `notes/04-ERROR-HANDLING-INVENTORY.md` | **Error Handling Inventory** — all current error boundaries/codes + exact error handling additions required across Worker/DO/UI/Deploy |
+| `notes/05-ACTUAL-IMPLEMENTATION-STATUS.md` | **Actual Implementation Tracker** — feature-by-feature truth table (Working Now vs. Demo-Only vs. Broken/Pending + post-phase status) |

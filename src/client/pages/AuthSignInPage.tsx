@@ -5,6 +5,8 @@ import { Button, Card, ErrorBanner, Input } from "@/client/components/ui";
 export type AuthSignInPageProps = {
   errorCode?: string;
   demoMode?: boolean;
+  needsSetup?: boolean;
+  sessionMissing?: boolean;
   demoUsername?: string;
   demoPassword?: string;
   demoUserUsername?: string;
@@ -19,6 +21,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   rate_limited: "Too many failed sign-in attempts. Wait a few minutes and try again.",
   session_create_failed:
     "Could not start a session after sign-in. Try again, then check the worker logs if it persists.",
+  setup_locked: "Initial administrator setup is already completed. Sign in with your account.",
+  setup_failed: "Initial administrator setup could not be saved. Please try again.",
+  invalid_username:
+    "Username must be a valid lowercase handle (letters, numbers, hyphens, 2–39 chars).",
+  password_mismatch: "Password and confirmation password do not match.",
+  weak_password: "Password must be between 8 and 128 characters.",
 };
 
 function describeError(code: string | undefined): string | null {
@@ -29,27 +37,32 @@ function describeError(code: string | undefined): string | null {
 export function AuthSignInPage({
   errorCode,
   demoMode = false,
-  demoUsername = "admin",
-  demoPassword = "admin123",
-  demoUserUsername = "alex-dev",
-  demoUserPassword = "devuser123",
+  needsSetup = false,
+  sessionMissing = false,
+  demoUsername = "",
+  demoPassword = "",
+  demoUserUsername = "",
+  demoUserPassword = "",
   nextPath,
 }: AuthSignInPageProps) {
   const errorText = describeError(errorCode);
+  const showDemoUi = !import.meta.env.PROD && demoMode;
 
   return (
     <div className="mx-auto max-w-md py-6 sm:py-10">
       <div className="mb-4">
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <h1 className="m-0 text-[18px] font-semibold tracking-tight text-fg">Sign in</h1>
+          <h1 className="m-0 text-[18px] font-semibold tracking-tight text-fg">
+            {needsSetup ? "Initialize Admin" : "Sign in"}
+          </h1>
           <span
             className={
-              demoMode
+              showDemoUi
                 ? "inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-amber-300"
                 : "inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-emerald-400"
             }
           >
-            {demoMode ? (
+            {showDemoUi ? (
               <>
                 <KeyRound className="h-3 w-3" aria-hidden="true" />
                 Dev / Demo Mode
@@ -63,11 +76,26 @@ export function AuthSignInPage({
           </span>
         </div>
         <p className="m-0 text-[13px] leading-relaxed text-fgBody">
-          Team member &amp; Admin login — sign in with your username or{" "}
-          <span className="font-mono text-fg">@handle</span> and password to access repositories and
-          workspace settings.
+          {needsSetup ? (
+            "Create the initial production administrator account stored in Cloudflare D1."
+          ) : (
+            <>
+              Team member &amp; Admin login — sign in with your username or{" "}
+              <span className="font-mono text-fg">@handle</span> and password to access repositories
+              and workspace settings.
+            </>
+          )}
         </p>
       </div>
+
+      {sessionMissing ? (
+        <div className="mb-4">
+          <ErrorBanner>
+            Production mode requires a real non-empty SESSION_SECRET Worker secret before sessions
+            can be issued.
+          </ErrorBanner>
+        </div>
+      ) : null}
 
       {errorText ? (
         <div className="mb-4">
@@ -76,34 +104,79 @@ export function AuthSignInPage({
       ) : null}
 
       <Card className="p-4">
-        <form method="post" action="/auth/login" className="grid gap-3.5">
-          {nextPath ? <input type="hidden" name="next" value={nextPath} /> : null}
-          <Input
-            label="Username or @handle"
-            id="admin-username"
-            name="username"
-            type="text"
-            autoComplete="username"
-            autoFocus
-            placeholder={demoMode ? demoUsername : "username or @handle"}
-            required
-          />
-          <Input
-            label="Password"
-            id="admin-password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            placeholder="Enter password"
-            required
-          />
-          <Button type="submit" variant="primary" size="md" className="w-full">
-            <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
-            Sign in
-          </Button>
-        </form>
+        {needsSetup ? (
+          <form method="post" action="/auth/setup" className="grid gap-3.5">
+            {nextPath ? <input type="hidden" name="next" value={nextPath} /> : null}
+            <Input
+              label="Admin handle"
+              id="setup-username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              autoFocus
+              placeholder="admin"
+              required
+            />
+            <Input
+              label="Display name (optional)"
+              id="setup-display-name"
+              name="displayName"
+              type="text"
+              placeholder="Site Administrator"
+            />
+            <Input
+              label="Password (min 8 characters)"
+              id="setup-password"
+              name="password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="Create strong password"
+              required
+            />
+            <Input
+              label="Confirm password"
+              id="setup-confirm-password"
+              name="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              placeholder="Repeat password"
+              required
+            />
+            <Button type="submit" variant="primary" size="md" className="w-full">
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              Create Admin Account
+            </Button>
+          </form>
+        ) : (
+          <form method="post" action="/auth/login" className="grid gap-3.5">
+            {nextPath ? <input type="hidden" name="next" value={nextPath} /> : null}
+            <Input
+              label="Username or @handle"
+              id="admin-username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              autoFocus
+              placeholder={showDemoUi && demoUsername ? demoUsername : "username or @handle"}
+              required
+            />
+            <Input
+              label="Password"
+              id="admin-password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="Enter password"
+              required
+            />
+            <Button type="submit" variant="primary" size="md" className="w-full">
+              <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
+              Sign in
+            </Button>
+          </form>
+        )}
 
-        {demoMode ? (
+        {showDemoUi ? (
           <div className="mt-4 border-t border-border pt-3.5">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-[11px] font-semibold tracking-wider text-fgMuted uppercase">

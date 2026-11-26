@@ -15,6 +15,13 @@
       "when": 1795686091169,
       "tag": "0001_outgoing_vin_gonzales",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795729453794,
+      "tag": "0002_curvy_skreet",
+      "breakpoints": true
     }
   ]
 }

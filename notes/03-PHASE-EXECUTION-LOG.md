@@ -1,80 +1,87 @@
-# 03 — PHASE EXECUTION LOG & PROGRESS LEDGER
+# 03 · Phase Execution & Scope-Lock Log
 
-- **Document ID**: `003-PHASE-EXECUTION-LOG`
-- **Baseline Reference**: `/notes/00-BASELINE-FREEZE-AND-INDEX.md` & `/notes/FORENSIC-PRODUCTION-AUDIT-REPORT.md`
-- **Completed Phases**: `4 / 4` (`100%` — **All 4 Phases Completed & Verified**)
-- **Remaining Phases**: `0 / 4` (`None — All 12 Forensic Bugs Resolved`)
-- **Current Next Action**: All 4 production remediation phases are complete and verified.
+**Current Progress:** `0 / 5` update phases implemented (`Baseline Frozen` on **2026-11-26**)  
+**Next Active Phase:** **Phase 01 — Regression Fix, Production Auth & Session Security** (`F-01`–`F-08`)  
+**Total Remaining Phases:** **5** (`Phase 01`, `Phase 02`, `Phase 03`, `Phase 04`, `Phase 05`)
 
 ---
 
-## 1. Master Phase Progress Summary
+## Global Anti-Drift & Scope-Lock Rules
 
-| Phase        | Target Bugs                                            | Scope-Locked Files                                                                                                                                                                                                                                                                                         | Status                   | Unrelated Features/UI Modified? |
-| ------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------- |
-| **Phase 01** | `BUG-NEW-01`, `BUG-NEW-02`, `BUG-NEW-03`               | `src/worker/db/d1/dal/namespaces.ts`, `src/worker/routes/ui/helpers.ts`, `src/worker/routes/ui/overview.ts`, `src/worker/routes/authRepositories.ts`, `test/phase04-logic.node-test.ts`                                                                                                                    | **COMPLETED & VERIFIED** | `No (Strict Scope Lock)`        |
-| **Phase 02** | `BUG-NEW-04`, `BUG-NEW-10`                             | `src/worker/git/commitFile.ts`, `test/phase04-logic.node-test.ts`                                                                                                                                                                                                                                          | **COMPLETED & VERIFIED** | `No (Strict Scope Lock)`        |
-| **Phase 03** | `BUG-NEW-05`, `BUG-NEW-06`, `BUG-NEW-07`, `BUG-NEW-12` | `src/worker/repositories/routeCache.ts`, `src/worker/routes/admin.ts`, `src/worker/tasks/repositoryDelete.ts`, `src/worker/auth/demoSeed.ts`, `src/worker/git/commitFile.ts`, `src/worker/routes/git.ts`, `test/phase04-logic.node-test.ts`                                                                | **COMPLETED & VERIFIED** | `No (Strict Scope Lock)`        |
-| **Phase 04** | `BUG-NEW-08`, `BUG-NEW-09`, `BUG-NEW-11`               | `src/client/server/error.ts`, `src/worker/routes/ui/helpers.ts`, `src/worker/routes/ui/tree.ts`, `src/worker/routes/ui/blob.ts`, `src/worker/routes/ui/commits.ts`, `src/worker/routes/ui/overview.ts`, `src/worker/routes/ui/refsApi.ts`, `src/worker/routes/admin.ts`, `test/phase04-logic.node-test.ts` | **COMPLETED & VERIFIED** | `No (Strict Scope Lock)`        |
+1. Execute **one phase at a time** in strict order (`01 → 02 → 03 → 04 → 05`).
+2. Before modifying any file, verify the file path is explicitly inside that phase's **Allowed Paths** in `notes/01-PRODUCTION-FIX-PATCH-SPEC.md`.
+3. Never alter, rename, refactor, or restyle unrelated features/UI outside the active phase's Scope Lock.
+4. After each phase passes its verification gate, update this log immediately (`Status`, `Changed Files`, `Added/Fixed Features`, `Next Phase`).
 
 ---
 
-## 2. Completed Phases Log (`4 / 4` Completed)
+## Phase Ledger
 
-### Completed -> Phase 01: Identity Ownership & Site Admin Cross-Namespace RBAC
-
-- **Completion Timestamp**: `2026-11-26`
-- **Locked Bugs Resolved**:
-  1. `BUG-NEW-01` (**CRITICAL**): Added `sortNamespacesForUser` and updated `listNamespacesForUser` in `src/worker/db/d1/dal/namespaces.ts:51-77` so namespaces owned by the user (`createdBy === userId`) always sort before alphabetically earlier joined namespaces.
-  2. `BUG-NEW-02` (**HIGH**): Updated `resolveUiRepoAccess`, `resolveAdminPageRepoAccess`, and `resolveAdminApiRepoAccess` in `src/worker/routes/ui/helpers.ts` and `handleOwnerOverview` in `src/worker/routes/ui/overview.ts` to authorize Site Admins (`canAccessAdminPanel(viewer.role)`).
-  3. `BUG-NEW-03` (**HIGH**): Updated `PUT /auth/api/repositories/:repositoryId/profile-readme` (`src/worker/routes/authRepositories.ts:386-396`) and `PUT /auth/api/repositories/:repositoryId/file` (`src/worker/routes/authRepositories.ts:456-466`) to authorize Site Admins (`canAccessAdminPanel(viewer.role)`).
-- **Out-of-Scope Modifications**: `None`.
-
-### Completed -> Phase 02: Web Commit Compaction Queue & Git Tree Mode/Conflict Integrity
-
-- **Completion Timestamp**: `2026-11-26`
-- **Locked Bugs Resolved**:
-  1. `BUG-NEW-04` (**HIGH**): Updated `commitRepositoryFile` in `src/worker/git/commitFile.ts:395-412` so that whenever `finalized.shouldQueueCompaction` is true, `{ kind: "compaction", doId: stub.id.toString(), repoId: input.doName }` is enqueued on `input.env.REPO_TASKS_QUEUE` (matching CLI `git push`).
-  2. `BUG-NEW-10` (**MEDIUM**): Added pure `resolveUpsertTreeEntryPlan` and updated `upsertTreePath` in `src/worker/git/commitFile.ts:133-240` to preserve executable file permissions (`100755`) when updating an existing executable file, and to reject file-vs-directory or non-regular entry (`40000`, `120000`, `160000`) path conflicts with `{ ok: false, reason: "invalid-path", detail }` before acquiring a DO receive lease.
-- **Out-of-Scope Modifications**: `None`.
-
-### Completed -> Phase 03: D1/KV/Cache Coherency & Demo Seeder Privacy Invariants
-
-- **Completion Timestamp**: `2026-11-26`
-- **Locked Bugs Resolved**:
-  1. `BUG-NEW-05` (**HIGH**): Added `repoBranchCacheKey` and `deleteRepoBranchCacheRecord` to `src/worker/repositories/routeCache.ts` and `invalidateRepoRefsAndBranchCache` to `src/worker/routes/admin.ts` so `PUT /:owner/:repo/admin/refs` and `PUT /:owner/:repo/admin/head` bump `repositories.updatedAt` in D1, delete `repo-branch:<repositoryId>` from `ROUTES` KV, and purge `/_cache/refs`.
-  2. `BUG-NEW-06` (**MEDIUM**): Updated Step 2 of `handleRepositoryDeleteMessage` in `src/worker/tasks/repositoryDelete.ts` to call `deleteRepoBranchCacheRecord(env, body.repositoryId)` alongside `deleteRouteCacheRecord`.
-  3. `BUG-NEW-07` (**MEDIUM**): Updated `seedSingleDemoRepository` in `src/worker/auth/demoSeed.ts` so only `public` demo repositories write to `ROUTES` KV (private `infra-notes` clears any stale entry), and updated `ensureDemoRepositoriesSeeded` & `ensureDemoTestUserSeeded` to check `listRepositoriesInNamespace(args.db, ...)`.
-  4. `BUG-NEW-12` (**LOW**): Updated `handleReceivePackPOST` (`src/worker/routes/git.ts`) and `commitRepositoryFile` (`src/worker/git/commitFile.ts`) to delete `repo-branch:<repositoryId>` from `ROUTES` KV on every push/commit, and included `oldOid` and `commitOid` in `refVariants` in `commitFile.ts` so OID-keyed `/_cache/readme` and `/_cache/owner-profile-readme` entries are evicted immediately.
-- **Out-of-Scope Modifications**: `None`.
-
-### Completed -> Phase 04: SSR Error Boundary Shell Context, 500 Sanitization & Blob Activity Parity
-
-- **Completion Timestamp**: `2026-11-26`
-- **Locked Bugs Resolved**:
-  1. `BUG-NEW-08` (**MEDIUM**): Added `resolvePublicErrorMessage` and `loadSiteBranding(env)` to `handleError` in `src/client/server/error.ts`, extended `badRequest` in `src/worker/routes/ui/helpers.ts` to accept `viewer`, updated `tree.ts` 404 path-not-found to use `renderUiDocumentResponse`, and threaded `viewer` through all `badRequest` and `handleError` calls in `tree.ts`, `blob.ts`, `commits.ts`, `overview.ts`, and `helpers.ts`.
-  2. `BUG-NEW-09` (**MEDIUM**): Updated `handleRefsApi` in `src/worker/routes/ui/refsApi.ts` and all 5 remaining catch blocks in `src/worker/routes/admin.ts` (`POST /admin/compact`, `DELETE /admin/compact`, `GET /admin/debug-commit/:commit`, `GET /admin/debug-oid/:oid`, `DELETE /admin/pack/:packKey`) to log structured warnings and return sanitized 500 JSON responses.
-  3. `BUG-NEW-11` (**LOW**): Updated `handleBlob` in `src/worker/routes/ui/blob.ts` to load `progress = await loadUiRepoActivity(env, access)` and pass `progress` to `renderBlobDocumentResponse`.
-- **Exact Files Modified**:
-  - `src/client/server/error.ts`
-  - `src/worker/routes/ui/helpers.ts`
-  - `src/worker/routes/ui/tree.ts`
-  - `src/worker/routes/ui/blob.ts`
-  - `src/worker/routes/ui/commits.ts`
-  - `src/worker/routes/ui/overview.ts`
-  - `src/worker/routes/ui/refsApi.ts`
-  - `src/worker/routes/admin.ts`
-  - `test/phase04-logic.node-test.ts`
-- **Verification Gates Passed**:
-  - `npm run typecheck` (`0` errors)
-  - `npx tsc --noEmit` (`0` errors)
-  - `npx --yes tsx --test test/phase04-logic.node-test.ts` (`7/7` tests pass)
-  - `npm run test` (`14/14` suites, `74/74` tests pass)
-  - `npm run format:check` (`PASS`)
-- **Out-of-Scope Modifications**: `None (0 files outside Phase 04 Scope Lock touched)`.
+### Phase 00 — Baseline Freeze & Forensic Audit
+- **Status:** `COMPLETED` (2026-11-26)
+- **What Was Done:**
+  - Read and verified live runtime code across Worker routes, Auth, D1/DO/R2/KV/Queues, Git protocol, React SSR/islands, and deploy scripts.
+  - Executed baseline validation commands (`typecheck`: PASS, `test`: PASS `75/75`, `cf-auto-deploy.node-test`: PASS `8/8`, `build`: PASS, `format:check`: FAIL on 2 files, `test:workers`: FAIL `349/350` at `test/demo-user-mock-repo.worker.test.ts:155`).
+  - Documented `21` verified findings (`F-01`–`F-21`) in `notes/PRODUCTION-FORENSIC-AUDIT-REPORT.md` and froze baseline docs `00`–`05`.
+- **Files Created/Updated:** `notes/PRODUCTION-FORENSIC-AUDIT-REPORT.md`, `notes/00-BASELINE-FREEZE-AND-INDEX.md`, `notes/01-PRODUCTION-FIX-PATCH-SPEC.md`, `notes/02-PHASED-UPDATE-ROADMAP.md`, `notes/03-PHASE-EXECUTION-LOG.md`, `notes/04-ERROR-HANDLING-INVENTORY.md`, `notes/05-ACTUAL-IMPLEMENTATION-STATUS.md` (zero application code touched).
 
 ---
 
-## 3. Remaining Phases Queue (`0 / 4` Remaining)
+### Phase 01 — Regression Fix, Production Auth & Session Security
+- **Status:** `PENDING (NEXT)`
+- **Target Findings:** `F-01`, `F-02`, `F-03`, `F-04`, `F-05`, `F-06`, `F-07`, `F-08`
+- **Features/Fixes To Implement:**
+  - Fix `footer.tsx` Profile route (`/profile/:owner`) and restore `100%` pass on `npm run test:workers`.
+  - Unify canonical D1 primary-admin resolution when `/auth/setup` uses a custom handle.
+  - Unlock primary-admin self-password change & admin reset UI when `ADMIN_PASSWORD` is unset.
+  - Wrap `/auth/setup` mutations atomically in D1 batch/transaction.
+  - Add session epoch / token-version revocation on password changes & admin resets.
+  - Fix `(env)` / `ADMIN_PASSWORD set` false status labels across `/admin/settings`, `/admin/security`, `/account`.
+  - Add isolate defense-in-depth fallback on KV auth rate limiting and HTTPS/HTTP adaptive cookies.
+- **Scope-Locked Touch Surface:** `footer.tsx`, `src/worker/auth/*`, `src/worker/routes/{authLogin,systemAdmin,authTokens,ui/overview}.ts`, `src/worker/index.ts` (primary admin lookup), `src/worker/db/d1/*`, `src/client/pages/{AccountPage,AdminSettingsPage,AdminSecurityPage}.tsx`, `src/client/islands/{change-password,admin-users/*}`, auth/worker tests.
+- **Completed Log (fill on completion):** _Pending._
 
-All 4 phases (`BUG-NEW-01` through `BUG-NEW-12`) have been implemented and verified.
+---
+
+### Phase 02 — Git Protocol, Ref Backfill, Compaction & Tier Reliability
+- **Status:** `PENDING` (`4` phases after Phase 01)
+- **Target Findings:** `F-09`, `F-10`, `F-17`, `F-18`, `F-19`
+- **Features/Fixes To Implement:**
+  - Inline `.refs` backfill recovery when `REPO_TASKS_QUEUE` is unbound (eliminates permanent `503` on incremental fetch).
+  - Clean queue-missing compaction handling + Free-tier alarm re-arm & CPU budget protection.
+  - Resolve Git v0/v1 vs v2 protocol mismatch on `handleUploadPackPOST`.
+  - Use request-scoped `c.var.limiter` and lift silent `60`-repo `"main"` cap in `systemAdmin.ts`.
+  - Harden post-push D1 `updatedAt` and KV/Cache invalidation reliability.
+- **Completed Log (fill on completion):** _Pending._
+
+---
+
+### Phase 03 — Real Repo Metadata, Branding Defaults & Web Git Editing
+- **Status:** `PENDING`
+- **Target Findings:** `F-11`, `F-12`, `F-16`
+- **Features/Fixes To Implement:**
+  - Remove client regex language guesses, hardcoded dropdown options, and `"Vib Tools"` empty fallbacks; serve real repo metadata + neutral branding defaults.
+  - Add web file upload (binary), delete, rename/move, branch/tag UI management, and configurable author commit emails.
+  - Fix `rawpath` hotlink guard for direct opens & forwarded proxy hosts.
+- **Completed Log (fill on completion):** _Pending._
+
+---
+
+### Phase 04 — Component-Only UI System (`--radius: 0rem`), Global Toast & PWA
+- **Status:** `PENDING`
+- **Target Findings:** `F-13`, `F-14`, `F-15`
+- **Features/Fixes To Implement:**
+  - Add global `<ToastProvider />` with exact API success/error notifications and clipboard failure toasts.
+  - Unify global design tokens (`--radius: 0rem`, exact Segoe/Helvetica font stack, flat borders, no shadows) and enforce single-source `@/client/components/ui` usage across islands.
+  - Add PWA `manifest.webmanifest`, service worker (`sw.js`), and installable app icons.
+- **Completed Log (fill on completion):** _Pending._
+
+---
+
+### Phase 05 — Auto-Deploy Secret Hygiene, Bundle Cleanup & Formatting
+- **Status:** `PENDING`
+- **Target Findings:** `F-20`, `F-21`
+- **Features/Fixes To Implement:**
+  - Sync `SESSION_SECRET` before initial `wrangler deploy` and remove unused `CREDENTIAL_SECRET` / `ADMIN_BOOTSTRAP_SECRET` secret generation.
+  - Remove 22 unreferenced `/public/assets/aistudio/` artifacts and bring `npm run format:check` (`prettier --check .`) to `0` errors.
+- **Completed Log (fill on completion):** _Pending._

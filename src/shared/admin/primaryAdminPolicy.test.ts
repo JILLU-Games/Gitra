@@ -53,6 +53,37 @@ describe("primary admin namespace decoupling policy", () => {
       }),
       { ok: false, reason: "protected-admin" }
     );
+
+    // When password is not managed by env (D1 claimed admin), password change is allowed,
+    // but demoting to member or disabling remains strictly locked.
+    assert.deepEqual(
+      evaluatePrimaryAdminPatchPolicy({
+        isPrimaryAdmin: true,
+        hasPasswordChange: true,
+        passwordManagedByEnv: false,
+      }),
+      { ok: true }
+    );
+
+    assert.deepEqual(
+      evaluatePrimaryAdminPatchPolicy({
+        isPrimaryAdmin: true,
+        role: "member",
+        hasPasswordChange: true,
+        passwordManagedByEnv: false,
+      }),
+      { ok: false, reason: "protected-admin" }
+    );
+
+    assert.deepEqual(
+      evaluatePrimaryAdminPatchPolicy({
+        isPrimaryAdmin: true,
+        status: "disabled",
+        hasPasswordChange: true,
+        passwordManagedByEnv: false,
+      }),
+      { ok: false, reason: "protected-admin" }
+    );
   });
 
   it("allows full directory mutations for non-primary accounts", () => {

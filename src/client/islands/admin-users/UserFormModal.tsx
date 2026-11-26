@@ -16,6 +16,7 @@ import {
 type UserFormModalProps = {
   mode: "create" | "edit";
   initialUser?: AdminNamespaceEntry | null;
+  primaryPasswordManagedByEnv?: boolean;
   onClose: () => void;
   onCreated: (user: AdminNamespaceEntry, issuedPassword?: string) => void;
   onUpdated: (user: AdminNamespaceEntry, issuedPassword?: string) => void;
@@ -31,7 +32,7 @@ type ApiErrorReason =
   | "invalid-payload"
   | "not-found";
 
-function errorMessageForReason(reason?: string): string {
+function errorMessageForReason(reason: string | undefined, lockPassword: boolean): string {
   switch (reason as ApiErrorReason | undefined) {
     case "invalid-handle":
       return "Handle must be 1–40 lowercase letters, numbers, or internal hyphens.";
@@ -44,7 +45,9 @@ function errorMessageForReason(reason?: string): string {
     case "password-too-long":
       return `Password must be at most ${PASSWORD_MAX_LENGTH} characters.`;
     case "protected-admin":
-      return "The signed-in primary admin's role, status, and env password are locked.";
+      return lockPassword
+        ? "The signed-in primary admin's role, status, and env password are locked."
+        : "The signed-in primary admin's role and active status are locked.";
     case "not-found":
       return "User record could not be found.";
     default:
@@ -55,12 +58,14 @@ function errorMessageForReason(reason?: string): string {
 export function UserFormModal({
   mode,
   initialUser,
+  primaryPasswordManagedByEnv = true,
   onClose,
   onCreated,
   onUpdated,
 }: UserFormModalProps) {
   const isEdit = mode === "edit" && Boolean(initialUser);
   const isPrimaryAdmin = isEdit && Boolean(initialUser?.isPrimaryAdmin);
+  const lockPassword = isPrimaryAdmin && primaryPasswordManagedByEnv;
 
   const [handle, setHandle] = useState(initialUser?.slug ?? "");
   const [displayName, setDisplayName] = useState(initialUser?.displayName ?? "");
@@ -107,7 +112,7 @@ export function UserFormModal({
         );
         return;
       }
-    } else if (!isPrimaryAdmin && password.length > 0) {
+    } else if (!lockPassword && password.length > 0) {
       const pwCheck = validateUserPassword(password);
       if (!pwCheck.ok) {
         setError(
@@ -139,7 +144,7 @@ export function UserFormModal({
           user?: AdminNamespaceEntry;
         };
         if (!res.ok || !data.ok || !data.user) {
-          setError(errorMessageForReason(data.reason));
+          setError(errorMessageForReason(data.reason, lockPassword));
           return;
         }
         onCreated(data.user, password);
@@ -161,9 +166,9 @@ export function UserFormModal({
       if (!isPrimaryAdmin) {
         payload.role = role;
         payload.status = status;
-        if (password.length > 0) {
-          payload.password = password;
-        }
+      }
+      if (!lockPassword && password.length > 0) {
+        payload.password = password;
       }
 
       const res = await fetch(`/admin/api/users/${encodeURIComponent(initialUser.id)}`, {
@@ -182,7 +187,7 @@ export function UserFormModal({
         hasPassword?: boolean;
       };
       if (!res.ok || !data.ok) {
-        setError(errorMessageForReason(data.reason));
+        setError(errorMessageForReason(data.reason, lockPassword));
         return;
       }
 
@@ -196,7 +201,7 @@ export function UserFormModal({
           lastActiveAt: data.lastActiveAt ?? initialUser.lastActiveAt,
           hasPassword: data.hasPassword ?? initialUser.hasPassword,
         },
-        !isPrimaryAdmin && password.length > 0 ? password : undefined
+        !lockPassword && password.length > 0 ? password : undefined
       );
       onClose();
     } catch {
@@ -255,9 +260,9 @@ export function UserFormModal({
             <div className="flex items-start gap-2 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-[12px] text-accent">
               <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span>
-                You are editing the signed-in primary admin. Public @namespace handle and Display
-                name can be updated without changing your private sign-in username; role, active
-                status, and env password remain locked.
+                {lockPassword
+                  ? "You are editing the signed-in primary admin. Public @namespace handle and Display name can be updated without changing your private sign-in username; role, active status, and env password remain locked."
+                  : "You are editing the signed-in primary admin. Public @namespace handle, Display name, and D1 sign-in password can be updated; role and active status remain locked."}
               </span>
             </div>
           ) : null}
@@ -356,7 +361,7 @@ export function UserFormModal({
             </div>
           </div>
 
-          {!isPrimaryAdmin ? (
+          {!lockPassword ? (
             <div>
               <div className="mb-1 flex items-center justify-between gap-2">
                 <label

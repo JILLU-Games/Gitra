@@ -4,18 +4,23 @@ import {
   findDirectoryAccountByUserId,
   findUserById,
   listNamespacesForUser,
+  resolvePrimaryAdminUser,
 } from "@/worker/db/d1/dal";
 import type { UserRow } from "@/worker/db/d1/schema";
 import type { AppContext } from "@/worker/routes/hono";
 import { z } from "zod";
 
-import { buildLocalAccountSubject, isProductionRuntime, resolveAdminAuthConfig } from "./adminAuth";
+import {
+  isProductionRuntime,
+  resolveAdminAuthConfig,
+  resolveAdminAuthSource,
+} from "./adminAuth";
 import { clearSessionCookie, getSessionCookie, setSessionCookie } from "./cookies";
 
 // Session cookie value shape: `goc_sess_<base64url AES-GCM blob>`.
-// The sealed blob contains the user id and expiry and is authenticated with
-// SESSION_SECRET. Validation decrypts the blob, checks expiry, and loads the
-// current user row. Rotating SESSION_SECRET makes existing cookies fail.
+// The sealed blob contains the user id, session epoch, and expiry, encrypted
+// with SESSION_SECRET. Validation decrypts the blob, checks expiry and epoch
+// against D1, and loads the current user row.
 const SESSION_TOKEN_PREFIX = "goc_sess_";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const SESSION_PURPOSE = "goc-browser-session-v1";
@@ -28,6 +33,7 @@ const SessionPayloadSchema = z.object({
   userId: z.string(),
   createdAt: z.number(),
   expiresAt: z.number(),
+  sessionEpoch: z.number().int().positive().optional(),
 });
 
 type SessionPayload = z.infer<typeof SessionPayloadSchema>;
@@ -148,9 +154,11 @@ function getEphemeralFallbackSecret(): string {
   return ephemeralFallbackSecret;
 }
 
+const DEV_PLACEHOLDER_SESSION_SECRET = "local-goc-session-secret-change-me";
+
 export function loadSessionConfig(env: Env): SessionConfigResult {
   // In Production Mode (`vite build` / `AUTH_MODE=production`), a real non-empty
-  // `SESSION_SECRET` is strictly required and never falls back to an ephemeral key.
+  // `SESSION_SECRET` (never the dev example placeholder) is strictly required.
   // In local Development / Live Preview when `SESSION_SECRET` is completely unset
   // (undefined), use a per-isolate random signing key so local dev works out of
   // the box. An explicitly empty string always fails closed.
@@ -162,6 +170,9 @@ export function loadSessionConfig(env: Env): SessionConfigResult {
   }
   const secret = env.SESSION_SECRET.trim();
   if (!secret) return { ok: false, reason: "missing_session_secret" };
+  if (isProductionRuntime(env) && secret === DEV_PLACEHOLDER_SESSION_SECRET) {
+    return { ok: false, reason: "missing_session_secret" };
+  }
   return { ok: true, secret };
 }
 
@@ -169,17 +180,28 @@ export async function createSessionForUser(
   env: Env,
   c: AppContext,
   userId: string,
-  now: number = Date.now()
+  now: number = Date.now(),
+  sessionEpoch?: number
 ): Promise<{ token: string }> {
   const config = loadSessionConfig(env);
   if (!config.ok) {
     throw new Error(config.reason);
+  }
+  let effectiveEpoch = sessionEpoch;
+  if (effectiveEpoch === undefined && env.DB) {
+    try {
+      const account = await findDirectoryAccountByUserId(env.DB, c.var.db, userId);
+      effectiveEpoch = account?.sessionEpoch ?? 1;
+    } catch {
+      effectiveEpoch = 1;
+    }
   }
   const token = await sealSession(config.secret, {
     version: SESSION_VERSION,
     userId,
     createdAt: now,
     expiresAt: now + SESSION_TTL_MS,
+    sessionEpoch: effectiveEpoch ?? 1,
   });
   setSessionCookie(c, token);
   return { token };
@@ -229,8 +251,11 @@ async function loadViewerUncached(c: AppContext): Promise<Viewer | null> {
   if (!active) return null;
 
   const authConfig = resolveAdminAuthConfig(c.env);
-  const primaryAdminSubject = buildLocalAccountSubject(authConfig.username);
-  const isPrimaryAdmin = active.user.tesseraSub === primaryAdminSubject;
+  const authSource = resolveAdminAuthSource(c.env);
+  const passwordManagedByEnv = authSource !== "d1";
+  const primaryAdminUser = await resolvePrimaryAdminUser(c.env.DB, c.var.db, c.env);
+  const isPrimaryAdmin = Boolean(primaryAdminUser && primaryAdminUser.id === active.user.id);
+  const tokenEpoch = active.payload.sessionEpoch ?? 1;
 
   let primaryNamespaceSlug: string | undefined;
   try {
@@ -242,10 +267,19 @@ async function loadViewerUncached(c: AppContext): Promise<Viewer | null> {
 
   if (isPrimaryAdmin) {
     let displayName: string | undefined;
+    let hasD1Password = false;
     try {
       const account = await findDirectoryAccountByUserId(c.env.DB, c.var.db, active.user.id);
+      if (account && tokenEpoch !== account.sessionEpoch) {
+        return null;
+      }
       displayName = account?.displayName;
-    } catch {
+      hasD1Password = authConfig.password === null && Boolean(account?.hasPassword);
+    } catch (error) {
+      c.var.logFor({ service: "SessionAuth" }).warn("session:primary-directory-lookup-failed", {
+        userId: active.user.id,
+        error: String(error),
+      });
       displayName = undefined;
     }
     return {
@@ -254,16 +288,17 @@ async function loadViewerUncached(c: AppContext): Promise<Viewer | null> {
       displayName,
       role: "admin",
       isPrimaryAdmin: true,
-      hasPassword: false,
+      hasPassword: hasD1Password,
+      passwordManagedByEnv,
     };
   }
 
   try {
     const account = await findDirectoryAccountByUserId(c.env.DB, c.var.db, active.user.id);
     if (account) {
-      // Immediately revoke access for disabled directory accounts even if
-      // their sealed session cookie has not yet expired.
-      if (account.status === "disabled") {
+      // Immediately revoke access for disabled directory accounts or tokens
+      // whose sessionEpoch predates a password change / admin reset.
+      if (account.status === "disabled" || tokenEpoch !== account.sessionEpoch) {
         return null;
       }
       return {
@@ -273,6 +308,7 @@ async function loadViewerUncached(c: AppContext): Promise<Viewer | null> {
         role: account.role,
         isPrimaryAdmin: false,
         hasPassword: account.hasPassword,
+        passwordManagedByEnv,
       };
     }
   } catch (error) {
@@ -291,6 +327,7 @@ async function loadViewerUncached(c: AppContext): Promise<Viewer | null> {
     role: "viewer",
     isPrimaryAdmin: false,
     hasPassword: false,
+    passwordManagedByEnv,
   };
 }
 

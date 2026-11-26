@@ -25,12 +25,13 @@ import type { Viewer } from "@/client/server/viewer";
 import {
   buildLocalAccountSubject,
   resolveAdminAuthConfig,
+  resolveAdminAuthSource,
   resolveInitialAdminNamespaceSlug,
 } from "@/worker/auth/adminAuth";
 import { sameOriginViolation } from "@/worker/auth/origin";
 import { hashPassword } from "@/worker/auth/passwords";
 import { viewerIsNamespaceMember } from "@/worker/auth/pat";
-import { loadViewer } from "@/worker/auth/session";
+import { createSessionForUser, loadViewer } from "@/worker/auth/session";
 import { getRepoStub, json, newPrefixedId } from "@/worker/common";
 import {
   deleteSiteBrandingAsset,
@@ -46,7 +47,6 @@ import {
   findNamespaceById,
   findNamespaceBySlug,
   findNamespaceDirectoryMeta,
-  findPrimaryAdminNamespace,
   findRepositoryById,
   findUserBySubject,
   insertMembershipIfMissing,
@@ -56,6 +56,7 @@ import {
   listAllRepositoriesWithNamespaces,
   listRepositoriesInNamespace,
   listRepositoryMetaMap,
+  resolvePrimaryAdminNamespace,
   revokePatAsAdmin,
   updateNamespaceHandle,
   upsertNamespaceDirectoryMeta,
@@ -79,8 +80,7 @@ const REPO_BRANCH_KV_PREFIX = "repo-branch:";
 const MAX_COLD_BRANCH_LOOKUPS = 60;
 
 async function resolvePrimaryAdminNamespaceId(c: AppContext): Promise<string | null> {
-  const adminSubject = buildLocalAccountSubject(resolveAdminAuthConfig(c.env).username);
-  const ns = await findPrimaryAdminNamespace(c.var.db, adminSubject);
+  const ns = await resolvePrimaryAdminNamespace(c.env.DB, c.var.db, c.env);
   return ns?.id ?? null;
 }
 
@@ -474,12 +474,14 @@ async function handlePatchDirectoryUser(c: AppContext, namespaceId: string): Pro
 
   // Primary signed-in admin can update displayName and rename their public
   // `@namespace` handle without altering `ADMIN_USERNAME`, while remaining
-  // protected from disable, demotion, or directory password override.
+  // protected from disable or demotion (and env/demo password override).
+  const authSource = resolveAdminAuthSource(c.env);
   const policyCheck = evaluatePrimaryAdminPatchPolicy({
     isPrimaryAdmin,
     status: parsed.data.status,
     role: parsed.data.role,
     hasPasswordChange: parsed.data.password !== undefined,
+    passwordManagedByEnv: authSource !== "d1",
   });
   if (!policyCheck.ok) {
     log.warn("system-admin:namespace-protected", { namespaceId });
@@ -575,14 +577,31 @@ async function handlePatchDirectoryUser(c: AppContext, namespaceId: string): Pro
   const lastActiveAt = existingMeta?.last_active_at ?? now;
   const hasPassword = Boolean(nextPasswordHash ?? existingMeta?.password_hash);
 
-  await upsertNamespaceDirectoryMeta(c.env.DB, ns.id, {
+  const shouldBumpSessionEpoch =
+    nextPasswordHash !== undefined || (nextStatus === "disabled" && existingMeta?.status !== "disabled");
+
+  const { sessionEpoch } = await upsertNamespaceDirectoryMeta(c.env.DB, ns.id, {
     displayName: nextDisplayName,
     role: nextRole,
     status: nextStatus,
     ...(nextPasswordHash !== undefined ? { passwordHash: nextPasswordHash } : {}),
+    bumpSessionEpoch: shouldBumpSessionEpoch,
     lastActiveAt,
     now,
   });
+
+  // If the signed-in primary admin rotated their own D1 password via /admin/users,
+  // re-seal the caller's browser cookie while revoking all earlier sessions.
+  if (nextPasswordHash !== undefined && viewer.userId === ns.createdBy) {
+    try {
+      await createSessionForUser(c.env, c, viewer.userId, now, sessionEpoch);
+    } catch (error) {
+      log.warn("system-admin:self-session-refresh-failed", {
+        actor: viewer.userId,
+        error: String(error),
+      });
+    }
+  }
 
   log.info("system-admin:namespace-updated", {
     actor: viewer.userId,
@@ -592,9 +611,10 @@ async function handlePatchDirectoryUser(c: AppContext, namespaceId: string): Pro
     role: nextRole,
     status: nextStatus,
     passwordUpdated: nextPasswordHash !== undefined,
+    sessionEpoch,
   });
 
-  return json({
+  const response = json({
     ok: true,
     id: ns.id,
     slug: nextSlug,
@@ -604,6 +624,10 @@ async function handlePatchDirectoryUser(c: AppContext, namespaceId: string): Pro
     lastActiveAt,
     hasPassword,
   } as const);
+  c.res.headers.forEach((value, key) => {
+    response.headers.append(key, value);
+  });
+  return response;
 }
 
 async function handleDeleteDirectoryUser(c: AppContext, namespaceId: string): Promise<Response> {
@@ -792,11 +816,17 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       loadSiteBranding(c.env),
     ]);
     const origin = resolveRequestOrigin(c);
+    const authSource = resolveAdminAuthSource(c.env);
+    const primaryAdminNamespaceSlug =
+      users.find((u) => u.isPrimaryAdmin)?.slug ??
+      viewer.primaryNamespaceSlug ??
+      resolveInitialAdminNamespaceSlug(c.env);
     return renderUiDocumentResponse(
       c.env,
       "system-admin-users",
       {
-        primaryNamespaceSlug: resolveAdminAuthConfig(c.env).username,
+        primaryNamespaceSlug: primaryAdminNamespaceSlug,
+        primaryPasswordManagedByEnv: authSource !== "d1",
         users,
         counts: {
           users: users.length,
@@ -828,10 +858,12 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       loadSiteBranding(c.env),
     ]);
     const authConfig = resolveAdminAuthConfig(c.env);
+    const authSource = resolveAdminAuthSource(c.env);
     const primaryAdminNamespaceSlug =
       users.find((u) => u.isPrimaryAdmin)?.slug ??
       viewer.primaryNamespaceSlug ??
       resolveInitialAdminNamespaceSlug(c.env);
+    const primaryAdminHandle = authSource === "d1" ? primaryAdminNamespaceSlug : authConfig.username;
     const origin = resolveRequestOrigin(c);
 
     return renderUiDocumentResponse(
@@ -839,7 +871,8 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       "system-admin-settings",
       {
         authMode: authConfig.mode,
-        primaryAdminHandle: authConfig.username,
+        authSource,
+        primaryAdminHandle,
         primaryAdminNamespaceSlug,
         totalUsers: users.length,
         activeUsers: users.filter((u) => u.status === "active").length,
@@ -874,21 +907,26 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       loadSiteBranding(c.env),
     ]);
     const authConfig = resolveAdminAuthConfig(c.env);
+    const authSource = resolveAdminAuthSource(c.env);
     const primaryAdminNamespaceSlug =
       users.find((u) => u.isPrimaryAdmin)?.slug ??
       viewer.primaryNamespaceSlug ??
       resolveInitialAdminNamespaceSlug(c.env);
+    const primaryAdminHandle = authSource === "d1" ? primaryAdminNamespaceSlug : authConfig.username;
     const origin = resolveRequestOrigin(c);
     return renderUiDocumentResponse(
       c.env,
       "system-admin-security",
       {
         authMode: authConfig.mode,
-        primaryAdminHandle: authConfig.username,
+        authSource,
+        primaryAdminHandle,
         primaryAdminNamespaceSlug,
         totalUsers: users.length,
         disabledUsers: users.filter((u) => u.status === "disabled").length,
-        usersWithPasswords: users.filter((u) => u.isPrimaryAdmin || u.hasPassword).length,
+        usersWithPasswords: users.filter(
+          (u) => u.hasPassword || (u.isPrimaryAdmin && authSource !== "d1")
+        ).length,
         counts: {
           users: users.length,
           repositories: repoRows.length,

@@ -147,12 +147,14 @@ describe("Dev Mode test user (@alex-dev) and mock GitHub-ready repository", () =
     });
     expect(adminProfileRes.status).toBe(200);
     const adminProfileHtml = await adminProfileRes.text();
-    const adminMainHtml = adminProfileHtml.split("<main")[1] ?? adminProfileHtml;
+    const adminMainHtml =
+      adminProfileHtml.split("<main")[1]?.split("</main>")[0] ?? adminProfileHtml;
     expect(adminMainHtml).toContain("Public profile");
     expect(adminMainHtml).not.toContain("Site Administration");
     expect(adminMainHtml).not.toContain("Back to Repositories");
     expect(adminMainHtml).not.toContain("Open /admin");
     expect(adminMainHtml).not.toContain('href="/admin"');
+    expect(adminProfileHtml).toContain('href="/profile/admin"');
 
     // 4. Member test user is blocked from Admin routes
     const adminPageRes = await SELF.fetch(`${ORIGIN}/admin`, {

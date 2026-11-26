@@ -1,59 +1,47 @@
-# 04 — ERROR HANDLING INVENTORY & HARDENING SPECIFICATION
+# 04 · Error Handling Inventory (Existing vs. Required Additions)
 
-- **Document ID**: `004-ERROR-HANDLING-INVENTORY`
-- **Baseline Reference**: `/notes/FORENSIC-PRODUCTION-AUDIT-REPORT.md`
-- **Current Phase Progress**: `Phase 04 Completed (4 / 4 Phases Executed — 100% Complete)`
+Grounded strictly in verified live source files (`src/worker/`, `src/client/`, `scripts/`).
 
 ---
 
-## 1. Existing Error Handling Verified in Live Source Tree
+## Part A — Existing Error Handling (Verified Live in Source)
 
-### 1.1 Top-Level Worker & Hono Error Boundary (`src/worker/index.ts`)
+### 1. Worker Top-Level Boundaries (`src/worker/index.ts`)
+- **404 Not Found (`index.ts:267-282`):** Renders SSR `"404"` document (with fallback `"Not found\n"` status `404`).
+- **Global `app.onError` (`index.ts:308-357`):**
+  - Resolves HTTP status (`resolveErrorStatus`), logs `worker:unhandled-error`, and detects JSON routes via `wantsJsonErrorResponse` (`/api/`, Git Smart HTTP endpoints, repo admin JSON routes, `Accept: application/json`, non-GET).
+  - Masks internal `5xx` details in non-debug mode (`LOG_LEVEL !== "debug"`) and wraps SSR `"error"` view inside fallback `buildEscapedErrorHtmlDocument(...)`.
 
-- **`app.onError` (`src/worker/index.ts:272-298`)**:
-  - Catches any unhandled exception escaping Hono/itty-router handlers.
-  - Emits structured error logs via `createLogger(c.env.LOG_LEVEL, { service: "Worker" }).error("request:unhandled-error", ...)`.
-  - When `c.env.LOG_LEVEL === "debug"`, passes the raw error to `handleError`; otherwise masks the error with `new HttpError(500, "Internal Server Error")`.
-  - For JSON routes (`/auth/api/*`, `/admin/api/*`, `/:owner/:repo/admin/*`), returns `{ ok: false, error: "Internal Server Error" }` with status `500` and `Cache-Control: no-store`.
+### 2. Authentication, Setup, CSRF & Rate-Limit Errors (`src/worker/auth/`, `src/worker/routes/auth*.ts`, `systemAdmin.ts`)
+- **Same-Origin CSRF Guard (`origin.ts`):** Mutating endpoints (`POST/PUT/PATCH/DELETE`) call `sameOriginViolation(c)` and log `same-origin-violation`.
+- **Zod Payload Validation (`requestSchemas.ts`):** All JSON bodies parsed via `safeParseJsonRequest` + Zod `.safeParse(...)`, returning explicit `400` tagged reasons (`invalid-payload`, `invalid-slug`, `slug-taken`, `password-too-short`, `password-too-long`, `private-repo-cannot-feature`).
+- **Login & Setup Query Redirect Codes (`AuthSignInPage.tsx:17-34`):** Maps structured URL error codes: `missing_credentials`, `invalid_credentials`, `account_disabled`, `rate_limited` (`429` + `Retry-After`), `session_create_failed`, `setup_locked`, `invalid_username`, `password_mismatch`, `weak_password`.
+- **Session Fail-Closed (`session.ts:159-169, 196-206, 273-293`):** Missing/blank/placeholder `SESSION_SECRET` fails closed in Production (`missing_session_secret`); disabled directory accounts (`status === "disabled"`) or D1 directory read failures immediately return `null` session.
+- **Role Guards (`systemAdmin.ts:87-98`, `admin.ts`, `authRepositories.ts`):** Reject non-admin sessions (`401` / `403` / `303` redirect) and enforce primary-admin delete/demote policy (`evaluatePrimaryAdminPatchPolicy`, `canRemoveNamespaceEntry`).
 
-### 1.2 Git Smart HTTP v2 Protocol & Receive Pipeline (`src/worker/routes/git.ts`, `src/worker/git/receive/pipeline.ts`)
+### 3. Git Smart HTTP v2, Streaming Receive & Repo DO (`src/worker/routes/git.ts`, `streamReceivePack.ts`, `fetch/plan.ts`, `do/repo/repoDO.ts`)
+- **Upload-Pack (`git.ts:85-93, 113-117, 210`):** Invalid gzip -> `400`; missing protocol v2 header/command -> `400`; unsupported v2 command -> `400`.
+- **Fetch Closure Budget & Missing Sidecars (`fetch/plan.ts:185-205`):** Missing `.refs` throws `FetchPlanRetryError` (`503 Retry-After: 10`); closure budget exceedance is logged and handled gracefully.
+- **Streaming Receive-Pack (`streamReceivePack.ts:121-140` & leases):** Maps `ReceivePipelineHttpError` status, pack header/version -> `415`, malformed/missing/delta resolution -> `400`, concurrent push lease busy -> `503 Retry-After: 10`, invalid refs/preflight conflicts -> Git pkt `report-status`.
+- **Repo DO RPC Policy (`repoDO.ts`, `catalog/compaction/requests.ts`, `packOperations.ts`):** Uses tagged unions (`ok / rejected / queued / no_work`) rather than throwing across RPC boundaries; cleans up staged R2 keys on web-commit abort (`commitFile.ts:83-106`).
+- **Queue Delete Safety (`admin.ts:334-347`, `systemAdmin.ts:653-671`):** Fails safely with `503` before deleting D1 rows if `repository-delete` queue dispatch or inline cleanup throws.
 
-- **Authentication & Authorization (`src/worker/auth/gitAuth.ts:55-161`)**:
-  - `401 Unauthorized` with `WWW-Authenticate: Basic realm="git-on-cloudflare", charset="UTF-8"` for missing/invalid credentials or anonymous private repo access.
-  - `403 Forbidden` when an authenticated user/PAT lacks namespace/repo grant or attempts `git-receive-pack` with a `"pull"`-only token.
-  - `404 Not Found` when the repository or namespace does not exist.
-- **Receive Lease Contention & Pack Failures (`src/worker/git/receive/pipeline.ts:62-215`)**:
-  - Concurrent push during an active lease returns `503 Service Unavailable` with `Retry-After: 10` (`receiveBusyResponse`).
-  - Subrequest or pack limit exhaustion returns pkt-line `unpack-error` report-status or HTTP `413` / `400`.
-  - `finally` block guarantees staged R2 pack cleanup (`deleteStagedPack`) and lease release (`stub.abortReceive(leaseToken)`).
-
-### 1.3 Auth, Session, CSRF & Personal Access Token APIs (`src/worker/routes/auth*.ts`)
-
-- **CSRF Guard (`src/worker/routes/authShared.ts:38-84`)**:
-  - Verifies `Origin` / `Referer` against request host on all mutating `/auth/api/*` and `/admin/api/*` endpoints; rejects cross-origin requests with `403 { error: "cross-origin-request-rejected" }`.
-- **Rate Limiting (`src/worker/do/auth/authDO.ts`)**:
-  - Enforces per-IP sliding-window login and password-verification rate limits (`429 Too Many Requests` with `Retry-After`).
-- **Role & Input Validation (`src/worker/routes/authRepositories.ts`, `src/worker/routes/authTokens.ts`)**:
-  - Rejects `viewer` role mutations with `403 { ok: false, reason: "viewer-read-only" }`.
-  - Rejects non-admin `scope: "global"` PAT creation with `403 { error: "admin-only-global-scope" }`.
-  - Validates slugs, visibility, branch refs, file paths, and file size limits with explicit tagged error reasons (`invalid-slug`, `invalid-ref`, `invalid-path`, `too-large`, `repo-busy`).
-- **Git Tree Mode & Path Conflict Validation (`src/worker/git/commitFile.ts:133-240` — Added in Phase 02)**:
-  - `resolveUpsertTreeEntryPlan` rejects leaf overwrites of non-regular entries (`40000`, `120000`, `160000`) and intermediate traversal through non-directory entries with `{ ok: false, reason: "invalid-path", detail }` (`HTTP 400`).
-
-### 1.4 Durable Object & Queue Task Resilience (`src/worker/do/repo/repoDO.ts`, `src/worker/tasks/*.ts`)
-
-- **Tagged-Union RPC Outcomes**:
-  - `beginReceive`, `finalizeReceive`, `beginCompaction`, and `commitCompaction` return typed tagged unions (`busy`, `committed`, `stale-lease`, `packset-changed`, `ref-conflict`) rather than throwing exceptions across DO boundaries.
-- **Queue Retry & Dead-Letter Avoidance (`src/worker/tasks/compaction.ts`, `src/worker/tasks/refBackfill.ts`, `src/worker/tasks/repositoryDelete.ts`)**:
-  - Transient errors clean up staged R2 artifacts, release active DO leases, and call `retryQueueMessage(message, delaySeconds)`.
-  - Deterministic corrupt pack failures in `refBackfill.ts` (`isDeterministicPackFailure`) log a warning and `ack()` to avoid infinite retry loops.
+### 4. Client UI & Auto-Deploy Error Handling
+- **SSR & Form Banners (`src/client/components/ui/error-banner.tsx`, `confirm-modal.tsx`, `admin-settings.tsx`, `change-password.tsx`, `UserFormModal.tsx`):** Inline `role="alert"` banners show validation/API failures per form/modal.
+- **Auto-Deploy CLI (`scripts/cf-auto-deploy.mjs:529-532`):** Fails fast on non-zero child command exit or API error and prints message to stderr.
 
 ---
 
-## 2. Error Handling Gaps Found in Audit & Hardening Status
+## Part B — Missing / Broken Error Handling To Add (Mapped to Phases)
 
-| Bug ID       | Target Phase | Error Handling Gap in Baseline                                                                                                                                                                                                                                                                                                                                                                                                       | Hardening Status                                                                                                                                                                                                                                                                                      |
-| ------------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BUG-NEW-10` | **Phase 02** | `upsertTreePath` (`src/worker/git/commitFile.ts`) silently overwrote an existing file with a directory (or vice versa) when a conflicting path was submitted to `PUT /auth/api/repositories/:id/file`.                                                                                                                                                                                                                               | **COMPLETED (Phase 02)**: `resolveUpsertTreeEntryPlan` returns `{ ok: false, reason: "invalid-path", detail }` when a leaf targets a non-regular file entry (`40000`, `120000`, `160000`) or an intermediate segment hits a non-directory entry, returning `400` before acquiring a DO receive lease. |
-| `BUG-NEW-08` | **Phase 04** | 1. `handleError` (`src/client/server/error.ts:95-120`) rendered raw 500 error messages into HTML even when `LOG_LEVEL !== "debug"`.<br>2. `handleError` and `tree.ts:106-118` omitted `loadSiteBranding(env)`.<br>3. `badRequest` and `handleError` calls in `blob.ts`, `tree.ts`, `commits.ts`, and `overview.ts` omitted `viewer: access.viewer`, causing signed-in users to see a signed-out navbar/sidebar on 400/404/500 pages. | **COMPLETED (Phase 04)**: `resolvePublicErrorMessage` sanitizes 500 HTML messages in `handleError` when `LOG_LEVEL !== "debug"`, loads `branding = await loadSiteBranding(env)`, and threads `viewer` across all `badRequest` and `handleError` routes.                                               |
-| `BUG-NEW-09` | **Phase 04** | 1. `handleRefsApi` (`src/worker/routes/ui/refsApi.ts:32-40`) returned raw `e.message` on HTTP 500 without logging or `Cache-Control: no-store`.<br>2. Five endpoints in `src/worker/routes/admin.ts` (`POST /admin/compact`, `DELETE /admin/compact`, `GET /admin/debug-commit/:commit`, `GET /admin/debug-oid/:oid`, `DELETE /admin/pack/:packKey`) returned raw `json({ error: String(e) }, 500)` without logging.                 | **COMPLETED (Phase 04)**: Logs structured warnings and returns sanitized `500` JSON responses across `handleRefsApi` and all 5 endpoints in `src/worker/routes/admin.ts`.                                                                                                                             |
+| Finding | File / Path | Current Defect in Error Handling | Required Error-Handling Fix | Phase |
+| :--- | :--- | :--- | :--- | :--- |
+| **`F-04`** | `src/worker/routes/authLogin.ts:618-652` | Sequential unbatched D1 writes during `/auth/setup`; mid-flight failure leaves `users` row behind and locks setup with `setup_locked` | Atomic D1 batching or rollback cleanup on failure so partial errors return retryable `500`/redirect without corrupting D1 state | **Phase 01** |
+| **`F-07`** | `src/worker/auth/rateLimit.ts:119-153` | Silently ignores missing `ROUTES` KV or KV `get`/`put` exceptions (fail-open) and suffers RMW races | Add isolate-local fallback counter map + log degraded KV mode instead of silent open pass | **Phase 01** |
+| **`F-08`** | `src/worker/auth/cookies.ts:17-23` | Hardcodes `__Host-` + `Secure`; on plain-HTTP non-localhost deployments, browsers silently reject the cookie and redirect back to `/auth` with **no error explanation** | Dynamically toggle secure/non-secure cookie options based on HTTPS vs plain-HTTP request protocol | **Phase 01** |
+| **`F-09`** | `src/worker/git/operations/fetch/plan.ts:185-188` | Throws `503 Retry-After: 10` (`missing-ref-index`) even when `REPO_TASKS_QUEUE` is absent so backfill never starts | Fallback to bounded inline backfill when Queue is absent, or return explicit `503` diagnostic reason when backfill still fails | **Phase 02** |
+| **`F-10`** | `src/worker/routes/admin.ts:69-96`, `requests.ts:103-122` | Silently drops `sendOptionalMaintenanceTask` (`false`) when Queues disabled while returning `202 { status: "queued" }` forever | Return explicit `409` / `501` (`queues-required`) or run safe bounded compaction; emit clear Free-tier CPU guard warnings | **Phase 02** |
+| **`F-17`** | `src/worker/routes/git.ts:95-117` | Rejects v0/v1 clients with raw `400` despite JSDoc claiming legacy support | Support legacy v0/v1 or return explicit structured Smart HTTP error with accurate protocol message | **Phase 02** |
+| **`F-19`** | `src/worker/routes/git.ts:221-247` | Swallows D1 `touchRepositoryUpdatedAt` & KV cleanup errors silently inside `waitUntil` | Await sync or enqueue retry task + structured `error` telemetry when invalidation fails | **Phase 02** |
+| **`F-13`** | `home-repos.tsx:325`, `RepositoriesSection.tsx:247`, `TokensSection.tsx:112`, `blob-actions.tsx:33` | Silent `catch {}` or `console.warn` on Clipboard API failure; no global Toast for API/action success or failure | Add global `<ToastProvider />` surfacing exact original API & clipboard errors/successes everywhere | **Phase 04** |
+| **`F-20`** | `scripts/cf-auto-deploy.mjs:476-511` | Deploys Worker *before* uploading `SESSION_SECRET` (causing temporary `session_create_failed` errors on first live traffic) | Pre-reconcile required Worker secrets or fail cleanly prior to exposing first deploy traffic | **Phase 05** |

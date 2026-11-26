@@ -13,6 +13,7 @@ import { hydrateIsland } from "@/client/hydrate";
 export type ChangePasswordIslandProps = {
   isPrimaryAdmin: boolean;
   hasPassword: boolean;
+  passwordManagedByEnv?: boolean;
 };
 
 type ChangePasswordErrorReason =
@@ -20,8 +21,11 @@ type ChangePasswordErrorReason =
   | "invalid-current-password"
   | "password-too-short"
   | "password-too-long"
+  | "managed-by-env"
   | "primary-admin-managed-by-env"
+  | "password-not-set"
   | "no-password-set"
+  | "rate-limited"
   | "not-found";
 
 function describeChangePasswordError(reason?: string): string {
@@ -32,16 +36,24 @@ function describeChangePasswordError(reason?: string): string {
       return `New password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
     case "password-too-long":
       return `New password must be at most ${PASSWORD_MAX_LENGTH} characters.`;
+    case "managed-by-env":
     case "primary-admin-managed-by-env":
       return "Primary administrator password is managed via ADMIN_PASSWORD or Demo Mode.";
+    case "password-not-set":
     case "no-password-set":
       return "No password is set for this account. Ask an administrator to set one in Users.";
+    case "rate-limited":
+      return "Too many password update attempts. Wait a few minutes and try again.";
     default:
       return "Could not update password. Please check your inputs and try again.";
   }
 }
 
-export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePasswordIslandProps) {
+export function ChangePasswordIsland({
+  isPrimaryAdmin,
+  hasPassword,
+  passwordManagedByEnv = true,
+}: ChangePasswordIslandProps) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -50,7 +62,7 @@ export function ChangePasswordIsland({ isPrimaryAdmin, hasPassword }: ChangePass
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  if (isPrimaryAdmin) {
+  if (isPrimaryAdmin && passwordManagedByEnv) {
     return (
       <div className="flex items-start gap-2.5 rounded-md border border-border bg-surface px-4 py-3 text-[12px] text-fgBody">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-fgMuted" aria-hidden="true" />

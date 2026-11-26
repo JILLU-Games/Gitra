@@ -8,6 +8,7 @@ import { DEFAULT_SITE_BRANDING, type SiteBrandingConfig } from "@/shared/brandin
 
 export type AdminSettingsPageProps = {
   authMode: "demo" | "configured";
+  authSource?: "demo" | "env" | "d1";
   primaryAdminHandle: string;
   primaryAdminNamespaceSlug?: string;
   totalUsers: number;
@@ -22,6 +23,7 @@ export type AdminSettingsPageProps = {
 
 export function AdminSettingsPage({
   authMode,
+  authSource,
   primaryAdminHandle,
   primaryAdminNamespaceSlug,
   totalUsers,
@@ -33,6 +35,7 @@ export function AdminSettingsPage({
   origin,
   branding,
 }: AdminSettingsPageProps) {
+  const resolvedAuthSource = authSource ?? (authMode === "configured" ? "env" : "demo");
   const publicNamespace = primaryAdminNamespaceSlug ?? primaryAdminHandle;
   const resolvedBranding = branding ?? DEFAULT_SITE_BRANDING;
   const counts: AdminNavCounts = {
@@ -58,12 +61,16 @@ export function AdminSettingsPage({
           <AdminSettingsIsland initialBranding={resolvedBranding} />
         </IslandHost>
 
-        {/* Instance & Auth Configuration (Env-configured / Read-only) */}
+        {/* Instance & Auth Configuration (Read-only runtime status) */}
         <section className="rounded-md border border-border bg-surface">
           <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
             <span className="text-[13px] font-semibold text-fg">Instance &amp; Authentication</span>
             <span className="rounded border border-border bg-canvas px-1.5 py-0.5 font-mono text-[10px] text-fgMuted">
-              env-configured · read-only
+              {resolvedAuthSource === "d1"
+                ? "d1-auth · read-only"
+                : resolvedAuthSource === "env"
+                  ? "env-configured · read-only"
+                  : "demo-mode · read-only"}
             </span>
           </div>
           <dl className="m-0 divide-y divide-borderSubtle text-[12px]">
@@ -76,7 +83,11 @@ export function AdminSettingsPage({
               <dd className="m-0 flex flex-wrap items-center gap-2 font-mono text-fg sm:justify-end">
                 <span className="font-medium">{primaryAdminHandle}</span>
                 <span className="text-[11px] font-sans text-fgMuted">
-                  (env-configured · private)
+                  {resolvedAuthSource === "d1"
+                    ? "(d1-directory · setup claimed)"
+                    : resolvedAuthSource === "env"
+                      ? "(env-configured · private)"
+                      : "(demo-mode · private)"}
                 </span>
               </dd>
             </div>
@@ -100,10 +111,15 @@ export function AdminSettingsPage({
             <div className="flex flex-col justify-between gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
               <dt className="shrink-0 text-fgMuted">Admin Auth Mode</dt>
               <dd className="m-0 break-words text-fgBody sm:text-right">
-                {authMode === "configured" ? (
+                {resolvedAuthSource === "env" ? (
                   <>
                     Configured (<code className="font-mono">ADMIN_PASSWORD</code> set · Demo Login
                     disabled)
+                  </>
+                ) : resolvedAuthSource === "d1" ? (
+                  <>
+                    Production D1 Auth (<code className="font-mono">ADMIN_PASSWORD</code> unset ·
+                    Initial admin claimed in D1)
                   </>
                 ) : (
                   <>

@@ -10,11 +10,13 @@ import {
   isDemoModeEnabled,
   isProductionRuntime,
   resolveAdminAuthConfig,
+  resolveAdminAuthSource,
   resolveAuthRuntimeMode,
   resolveInitialAdminNamespaceSlug,
   sanitizeNextRedirect,
   verifyAdminCredentials,
 } from "@/worker/auth/adminAuth";
+import { isHttpsSessionContext } from "@/worker/auth/cookies";
 import { isAllowedOrigin } from "@/worker/auth/origin";
 import { hashPassword, verifyPassword } from "@/worker/auth/passwords";
 import {
@@ -23,6 +25,7 @@ import {
   buildAuthRateLimitKey,
   evaluateAuthRateLimit,
   extractClientIp,
+  mergeRateLimitStates,
   recordAuthRateLimitFailure,
 } from "@/worker/auth/rateLimit";
 
@@ -110,6 +113,32 @@ describe("adminAuth pure logic", () => {
       namespaceSlug: "admin",
       subject: "local:admin",
     });
+  });
+
+  it("rejects the dev placeholder SESSION_SECRET in production mode while allowing real secrets", async () => {
+    const { loadSessionConfig } = await import("@/worker/auth/session");
+    const devPlaceholder = "local-goc-session-secret-change-me";
+
+    expect(
+      loadSessionConfig({
+        AUTH_MODE: "development",
+        SESSION_SECRET: devPlaceholder,
+      } as unknown as Env)
+    ).toEqual({ ok: true, secret: devPlaceholder });
+
+    expect(
+      loadSessionConfig({
+        AUTH_MODE: "production",
+        SESSION_SECRET: devPlaceholder,
+      } as unknown as Env)
+    ).toEqual({ ok: false, reason: "missing_session_secret" });
+
+    expect(
+      loadSessionConfig({
+        AUTH_MODE: "production",
+        SESSION_SECRET: "prod-64-hex-session-secret-value",
+      } as unknown as Env)
+    ).toEqual({ ok: true, secret: "prod-64-hex-session-secret-value" });
   });
 
   it("uses constant-time equality cleanly", async () => {
@@ -235,5 +264,72 @@ describe("PBKDF2-SHA256 password hashing", () => {
     expect(await verifyPassword("anything123", "")).toBe(false);
     expect(await verifyPassword("anything123", "not-a-valid-hash")).toBe(false);
     expect(await verifyPassword("anything123", "pbkdf2_sha256$10$abcd$ef01")).toBe(false);
+  });
+});
+
+describe("resolveAdminAuthSource", () => {
+  it("resolves demo in dev when ADMIN_PASSWORD is unset", () => {
+    expect(resolveAdminAuthSource({})).toBe("demo");
+  });
+
+  it("resolves env when ADMIN_PASSWORD is set", () => {
+    expect(resolveAdminAuthSource({ ADMIN_PASSWORD: "env-secret" })).toBe("env");
+    expect(resolveAdminAuthSource({ AUTH_MODE: "production", ADMIN_PASSWORD: "env-secret" })).toBe(
+      "env"
+    );
+  });
+
+  it("resolves d1 in production when ADMIN_PASSWORD is unset", () => {
+    expect(resolveAdminAuthSource({ AUTH_MODE: "production" })).toBe("d1");
+  });
+});
+
+describe("isHttpsSessionContext", () => {
+  it("detects https protocol from direct URL", () => {
+    expect(isHttpsSessionContext("https://example.com/auth")).toBe(true);
+    expect(isHttpsSessionContext("http://localhost:3000/auth")).toBe(false);
+  });
+
+  it("detects https from x-forwarded-proto or origin headers for proxy / preview containers", () => {
+    expect(
+      isHttpsSessionContext("http://localhost:3000/auth", {
+        forwardedProto: "https",
+      })
+    ).toBe(true);
+    expect(
+      isHttpsSessionContext("http://localhost:3000/auth", {
+        origin: "https://preview.run.app",
+      })
+    ).toBe(true);
+    expect(
+      isHttpsSessionContext("http://localhost:3000/auth", {
+        forwardedProto: "http",
+        origin: "http://localhost:3000",
+      })
+    ).toBe(false);
+  });
+});
+
+describe("mergeRateLimitStates", () => {
+  it("merges active states taking maximum failures and earliest window start", () => {
+    const now = 1_700_000_000_000;
+    const local = { failures: 3, windowStartedAt: now - 10_000 };
+    const remote = { failures: 5, windowStartedAt: now - 5_000 };
+
+    const merged = mergeRateLimitStates(local, remote, now);
+    expect(merged).toEqual({
+      failures: 5,
+      windowStartedAt: now - 10_000,
+    });
+  });
+
+  it("ignores expired states during merge", () => {
+    const now = 1_700_000_000_000;
+    const expired = { failures: 7, windowStartedAt: now - 400_000 }; // older than 300s window
+    const active = { failures: 2, windowStartedAt: now - 10_000 };
+
+    expect(mergeRateLimitStates(expired, active, now)).toEqual(active);
+    expect(mergeRateLimitStates(active, expired, now)).toEqual(active);
+    expect(mergeRateLimitStates(expired, null, now)).toBeNull();
   });
 });

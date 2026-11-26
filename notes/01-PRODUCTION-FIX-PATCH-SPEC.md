@@ -1,790 +1,161 @@
-# 01 — PRODUCTION FIX PATCH SPECIFICATION (Exact File Paths, Line Numbers & Code Block Proofs)
+# 01 · Production Fix Patch Specification (Code Proof & Scope Locks)
 
-- **Document ID**: `001-PRODUCTION-FIX-PATCH-SPEC`
-- **Source Audit**: `/notes/FORENSIC-PRODUCTION-AUDIT-REPORT.md`
-- **Coverage**: All `12` verified findings (`BUG-NEW-01` through `BUG-NEW-12`), organized under strict **Phase Scope Locks** (`Phase 01` through `Phase 04`).
-
----
-
-## PHASE 01 SCOPE LOCK: Identity Ownership & Site Admin Cross-Namespace RBAC (`BUG-NEW-01`, `BUG-NEW-02`, `BUG-NEW-03`)
-
-### Phase 01 Strict Scope Lock Boundary
-
-- **Allowed Source Files to Modify**:
-  1. `src/worker/db/d1/dal/namespaces.ts`
-  2. `src/worker/routes/ui/helpers.ts`
-  3. `src/worker/routes/ui/overview.ts`
-  4. `src/worker/routes/authRepositories.ts`
-- **Allowed Test Files to Add/Update**:
-  - `test/phase04-logic.node-test.ts` or targeted unit/worker tests
-- **Forbidden Outside Scope**:
-  - Any UI design/layout changes, Git pack engine files, Queue task handlers, or Error page components.
+Every patch specification below maps **1:1** to verified findings `F-01` through `F-21` from `notes/PRODUCTION-FORENSIC-AUDIT-REPORT.md`.  
+**Execution Rule:** No code is changed until explicitly starting each phase; every phase strictly honors its **Scope Lock**.
 
 ---
 
-### Patch Spec `BUG-NEW-01`: Prioritize User-Owned Namespace (`createdBy === userId`) in `listNamespacesForUser`
+## Phase 01 — Regression Fix, Production Auth & Session Security (`F-01`–`F-08`)
 
-- **Exact File**: `src/worker/db/d1/dal/namespaces.ts`
-- **Exact Lines**: `44-60`
-- **Current Live Code (BEFORE)**:
+### Scope Lock (`Phase 01`)
+- **Allowed Paths:** `src/client/components/footer.tsx`, `src/worker/auth/{adminAuth,session,cookies,rateLimit}.ts`, `src/worker/routes/{authLogin,systemAdmin,ui/overview}.ts`, `src/worker/index.ts` (primary admin lookup lines only), `src/worker/db/d1/*`, `drizzle/d1/*`, `src/client/pages/{AccountPage,AdminSettingsPage,AdminSecurityPage}.tsx`, `src/client/islands/change-password.tsx`, `src/client/islands/admin-users/{index,UserFormModal}.tsx`, `test/auth*.ts`, `test/admin-auth*.ts`, `test/demo-user-mock-repo.worker.test.ts`.
+- **Forbidden Outside Scope:** Do NOT alter Git protocol/pack/compaction (`src/worker/git/`, `src/worker/do/`), homepage metadata (`home-repos.tsx`), CSS tokens, PWA, or `scripts/cf-auto-deploy*.mjs`.
 
-```ts
-// src/worker/db/d1/dal/namespaces.ts:44-60
-export async function listNamespacesForUser(db: D1Db, userId: string): Promise<Namespace[]> {
-  const memberships = await db
-    .select()
-    .from(namespaceMemberships)
-    .where(eq(namespaceMemberships.userId, userId));
-  if (memberships.length === 0) {
-    return [];
-  }
-  const namespaces: Namespace[] = [];
-  for (const m of memberships) {
-    const ns = await findNamespaceById(db, m.namespaceId);
-    if (ns) namespaces.push(ns);
-  }
-  namespaces.sort((a, b) => a.slug.localeCompare(b.slug));
-  return namespaces;
-}
-```
+### Patch Specs (`F-01`–`F-08`)
 
-- **Exact Code Patch (AFTER)**:
+1. **`F-01` Footer Profile Route Collision & Worker Test Failure**
+   - **Target:** `src/client/components/footer.tsx:108-114`
+   - **Current Code:**
+     ```tsx
+     <a href={`/${viewer.primaryNamespaceSlug}`} className={LINK_CLASS}>
+       Profile
+     </a>
+     ```
+   - **Required Patch:** Import `buildNamespaceProfileHref` from `@/shared/admin/panel` and use `href={buildNamespaceProfileHref(viewer.primaryNamespaceSlug)}` (so `@admin` routes to `/profile/admin`, matching `AdminSettingsPage.tsx:87` & `AccountPage.tsx:254`, and `<footer ...>` stops emitting `href="/admin"` for Profile). Also verify `test/demo-user-mock-repo.worker.test.ts:150-155` scopes assertions to `<main>` cleanly or confirm both fixes pass `npm run test:workers`.
 
-```ts
-// src/worker/db/d1/dal/namespaces.ts:44-66
-export async function listNamespacesForUser(db: D1Db, userId: string): Promise<Namespace[]> {
-  const memberships = await db
-    .select()
-    .from(namespaceMemberships)
-    .where(eq(namespaceMemberships.userId, userId));
-  if (memberships.length === 0) {
-    return [];
-  }
-  const namespaces: Namespace[] = [];
-  for (const m of memberships) {
-    const ns = await findNamespaceById(db, m.namespaceId);
-    if (ns) namespaces.push(ns);
-  }
-  // Prioritize the user's own personal namespace (createdBy === userId) first
-  // so `namespaces[0]?.slug` always resolves the user's true primary handle
-  // even when an admin is added as an owner of alphabetically earlier namespaces.
-  namespaces.sort((a, b) => {
-    const aOwned = a.createdBy === userId ? 0 : 1;
-    const bOwned = b.createdBy === userId ? 0 : 1;
-    if (aOwned !== bOwned) return aOwned - bOwned;
-    return a.slug.localeCompare(b.slug);
-  });
-  return namespaces;
-}
-```
+2. **`F-02` Production `/auth/setup` Primary-Admin Subject Mismatch**
+   - **Target:** `src/worker/routes/authLogin.ts:617-622`, `src/worker/auth/session.ts:236-238`, `src/worker/routes/systemAdmin.ts:81-85,799`, `src/worker/index.ts:84-87,182-185,235-238`, `src/worker/routes/ui/overview.ts:112,189-195`
+   - **Current Code (`authLogin.ts:617` vs `session.ts:236-238`):**
+     ```ts
+     // setup:
+     const subject = buildLocalAccountSubject(handleCheck.slug);
+     // session check:
+     const primaryAdminSubject = buildLocalAccountSubject(authConfig.username);
+     const isPrimaryAdmin = active.user.tesseraSub === primaryAdminSubject;
+     ```
+   - **Required Patch:** Store/resolve an explicit canonical primary-admin role/flag in D1 (`users` or `directory_meta` / deterministic first claimed admin lookup when `authConfig.password === null`), OR unify `resolvePrimaryAdminAccount(db, env)` into one shared helper in `src/worker/auth/` and `src/worker/db/d1/dal` so `/auth/setup` with custom handle (e.g. `@founder`) is recognized consistently across `session.ts`, `systemAdmin.ts`, `index.ts`, and `ui/overview.ts`.
 
----
+3. **`F-03` D1 Primary-Admin Password Change & Admin Reset UI Block**
+   - **Target:** `src/client/islands/change-password.tsx:53-67`, `src/client/pages/AccountPage.tsx:229-230`, `src/client/islands/admin-users/UserFormModal.tsx:63,110,161,254-263,359`, `src/worker/routes/authTokens.ts:59-72`, `src/worker/routes/systemAdmin.ts:231-250,478-487`
+   - **Current Code (`change-password.tsx:53`):**
+     ```tsx
+     if (isPrimaryAdmin) { return <div>Managed by environment configuration</div>; }
+     ```
+   - **Required Patch:** Pass explicit boolean `passwordManagedByEnv` (`resolveAdminAuthConfig(env).password !== null`) in viewer/admin props. Lock password change UI ONLY when `isPrimaryAdmin && passwordManagedByEnv`; allow D1-claimed primary admin to change password in `/user/settings/security` and manage via `/admin/users` (while still blocking demote/disable/delete in `evaluatePrimaryAdminPatchPolicy`).
 
-### Patch Spec `BUG-NEW-02`: Allow Site Admins (`canAccessAdminPanel(viewer.role)`) Across Repo Admin, Private Repo Views, and Owner Overview
+4. **`F-04` Non-Transactional `/auth/setup` Partial Failure Lockout**
+   - **Target:** `src/worker/routes/authLogin.ts:618-652`
+   - **Required Patch:** Wrap user creation, namespace claim, membership insert, and directory metadata upsert via `c.env.DB.batch([...])` or add compensating cleanup on throw so partial failure leaves `users` clean and `/auth/setup` retryable.
 
-- **Exact File 1**: `src/worker/routes/ui/helpers.ts`
-- **Exact Lines**: `238-285`, `333-351`, `386-401`
-- **Current Live Code (BEFORE)**:
+5. **`F-05` Session Revocation After Password Change or Reset**
+   - **Target:** `src/worker/auth/session.ts:26-31,183-188,198-206`, `src/worker/routes/authLogin.ts:482-484`, `src/worker/routes/systemAdmin.ts:501`
+   - **Required Patch:** Add integer `sessionEpoch` (or `passwordUpdatedAt` / `tokenVersion` column in D1 `directory_meta` or `users`, defaulting to `1`) into `SessionPayloadSchema` (`session.ts:26-31`), compare during `readActiveSessionUncached`, and bump on password change (`authLogin.ts:483`) and admin password reset (`systemAdmin.ts:501`) + update `Set-Cookie` on self password change.
 
-```ts
-// src/worker/routes/ui/helpers.ts:242-279
-if (route.visibility === "private") {
-  const membership = await loadSessionMembership(request, env, route.namespaceId);
-  if (membership.kind !== "member") {
-    return { ok: false, response: notFound() };
-  }
-  const canEditFiles = membership.viewer.role !== "viewer";
-  return {
-    ok: true,
-    owner,
-    repo,
-    repoId: `${owner}/${repo}`,
-    route,
-    viewer: membership.viewer,
-    showActivityBanner: canEditFiles,
-    canViewerManageRepo: canEditFiles,
-  };
-}
+6. **`F-06` False `"ADMIN_PASSWORD set"` / `"(env)"` Status Labels**
+   - **Target:** `src/worker/auth/adminAuth.ts:41-45,153-158`, `src/worker/routes/systemAdmin.ts:709,739,769,841,886`, `src/client/pages/AdminSettingsPage.tsx:66,79,103-107`, `src/client/pages/AdminSecurityPage.tsx:138`, `src/client/pages/AccountPage.tsx:229-230`
+   - **Required Patch:** Distinguish `mode: "demo" | "d1" | "env"` (or pass `passwordSource: "env" | "d1" | "demo"` cleanly alongside `mode`) so Production without `ADMIN_PASSWORD` displays `D1 Admin Auth (Setup claimed · Demo Login disabled)` instead of `ADMIN_PASSWORD set` / `(env)`.
 
-let viewer: ViewerIdentity | null = null;
-let showActivityBanner = false;
-if (hasSessionCookie(request)) {
-  const membership = await loadSessionMembership(request, env, route.namespaceId);
-  if (membership.kind === "member") {
-    viewer = membership.viewer;
-    showActivityBanner = membership.viewer.role !== "viewer";
-  } else if (membership.kind === "signed-in-non-member") {
-    viewer = membership.viewer;
-  }
-}
-```
+7. **`F-07` Non-Atomic & Fail-Open KV Rate Limiting**
+   - **Target:** `src/worker/auth/rateLimit.ts:119-153`
+   - **Required Patch:** Add an in-memory isolate fallback rate-limiter map (defense-in-depth during concurrent requests / KV blips) plus stricter fail-closed/degraded handling when `ROUTES` throws on `checkAuthRateLimit` (with structured log visibility).
 
-```ts
-// src/worker/routes/ui/helpers.ts:333-351 (resolveAdminPageRepoAccess)
-const membership = await loadSessionMembership(request, env, route.namespaceId);
-if (membership.kind === "member") {
-  return {
-    ok: true,
-    owner,
-    repo,
-    repoId: `${owner}/${repo}`,
-    route,
-    viewer: membership.viewer,
-  };
-}
-if (route.visibility === "private") {
-  return { ok: false, response: notFound() };
-}
-if (membership.kind === "signed-in-non-member") {
-  return { ok: false, response: forbidden("Forbidden") };
-}
-```
-
-```ts
-// src/worker/routes/ui/helpers.ts:386-401 (resolveAdminApiRepoAccess)
-const membership = await loadSessionMembership(request, env, route.namespaceId);
-if (membership.kind === "member") {
-  return {
-    ok: true,
-    owner,
-    repo,
-    repoId: `${owner}/${repo}`,
-    route,
-  };
-}
-if (route.visibility === "private") {
-  return { ok: false, response: notFound() };
-}
-if (membership.kind === "signed-in-non-member") {
-  return { ok: false, response: jsonError("Forbidden", 403) };
-}
-```
-
-- **Exact Code Patch (AFTER)** in `src/worker/routes/ui/helpers.ts`:
-
-```ts
-// Import `canAccessAdminPanel` from "@/shared/admin/panel" at top of src/worker/routes/ui/helpers.ts
-import { canAccessAdminPanel } from "@/shared/admin/panel";
-
-// In resolveUiRepoAccess (src/worker/routes/ui/helpers.ts:242-285):
-if (route.visibility === "private") {
-  const membership = await loadSessionMembership(request, env, route.namespaceId);
-  const isSiteAdmin =
-    membership.kind === "signed-in-non-member" && canAccessAdminPanel(membership.viewer.role);
-  if (membership.kind !== "member" && !isSiteAdmin) {
-    return { ok: false, response: notFound() };
-  }
-  const activeViewer = membership.viewer;
-  const canEditFiles = activeViewer.role !== "viewer";
-  return {
-    ok: true,
-    owner,
-    repo,
-    repoId: `${owner}/${repo}`,
-    route,
-    viewer: activeViewer,
-    showActivityBanner: canEditFiles,
-    canViewerManageRepo: canEditFiles,
-  };
-}
-
-let viewer: ViewerIdentity | null = null;
-let showActivityBanner = false;
-if (hasSessionCookie(request)) {
-  const membership = await loadSessionMembership(request, env, route.namespaceId);
-  if (membership.kind === "member") {
-    viewer = membership.viewer;
-    showActivityBanner = membership.viewer.role !== "viewer";
-  } else if (membership.kind === "signed-in-non-member") {
-    viewer = membership.viewer;
-    showActivityBanner = canAccessAdminPanel(membership.viewer.role);
-  }
-}
-```
-
-```ts
-// In resolveAdminPageRepoAccess (src/worker/routes/ui/helpers.ts:333-355):
-const membership = await loadSessionMembership(request, env, route.namespaceId);
-if (
-  membership.kind === "member" ||
-  (membership.kind === "signed-in-non-member" && canAccessAdminPanel(membership.viewer.role))
-) {
-  return {
-    ok: true,
-    owner,
-    repo,
-    repoId: `${owner}/${repo}`,
-    route,
-    viewer: membership.viewer,
-  };
-}
-if (route.visibility === "private") {
-  return { ok: false, response: notFound() };
-}
-if (membership.kind === "signed-in-non-member") {
-  return { ok: false, response: forbidden("Forbidden") };
-}
-```
-
-```ts
-// In resolveAdminApiRepoAccess (src/worker/routes/ui/helpers.ts:386-405):
-const membership = await loadSessionMembership(request, env, route.namespaceId);
-if (
-  membership.kind === "member" ||
-  (membership.kind === "signed-in-non-member" && canAccessAdminPanel(membership.viewer.role))
-) {
-  return {
-    ok: true,
-    owner,
-    repo,
-    repoId: `${owner}/${repo}`,
-    route,
-  };
-}
-if (route.visibility === "private") {
-  return { ok: false, response: notFound() };
-}
-if (membership.kind === "signed-in-non-member") {
-  return { ok: false, response: jsonError("Forbidden", 403) };
-}
-```
-
-- **Exact File 2**: `src/worker/routes/ui/overview.ts`
-- **Exact Lines**: `111-125`
-- **Current Live Code (BEFORE)**:
-
-```ts
-// src/worker/routes/ui/overview.ts:111-123
-const isViewerReadOnly = viewer?.role === "viewer";
-const isAdmin = canAccessAdminPanel(viewer?.role);
-const canManageProfile = Boolean(viewer && (isAdmin || isNamespaceMember) && !isViewerReadOnly);
-const canPinRepos = canManageProfile;
-const canFeatureHomepage = Boolean(viewer && isAdmin && !isViewerReadOnly);
-const rows = await listRepositoriesForNamespace(db, {
-  namespaceSlug: owner,
-  viewerUserId: isNamespaceMember ? viewer?.userId : undefined,
-});
-```
-
-- **Exact Code Patch (AFTER)** in `src/worker/routes/ui/overview.ts`:
-  - When `isAdmin || isNamespaceMember` is true, list all repositories in the namespace (`listRepositoriesInNamespace(db, namespace.id)`) so Site Admins visiting `/:owner` also see private repositories under that namespace (consistent with `/admin/repositories` and `canManageProfile`).
-
-```ts
-// src/worker/routes/ui/overview.ts:111-125
-const isViewerReadOnly = viewer?.role === "viewer";
-const isAdmin = canAccessAdminPanel(viewer?.role);
-const canReadPrivateNamespaceRepos = Boolean(viewer && (isAdmin || isNamespaceMember));
-const canManageProfile = Boolean(canReadPrivateNamespaceRepos && !isViewerReadOnly);
-const canPinRepos = canManageProfile;
-const canFeatureHomepage = Boolean(viewer && isAdmin && !isViewerReadOnly);
-const rows = canReadPrivateNamespaceRepos
-  ? await listRepositoriesInNamespace(db, namespace.id)
-  : await listRepositoriesForNamespace(db, {
-      namespaceSlug: owner,
-      viewerUserId: undefined,
-    });
-```
+8. **`F-08` Plain-HTTP Session Cookies on Non-Localhost Hosts**
+   - **Target:** `src/worker/auth/cookies.ts:11-38`, `src/worker/auth/origin.ts`
+   - **Current Code (`cookies.ts:17-23`):**
+     ```ts
+     const SHARED_COOKIE_OPTIONS = { httpOnly: true, secure: true, sameSite: "None", partitioned: true, prefix: "host" };
+     ```
+   - **Required Patch:** Derive request security dynamically from `isSecureRequest(c)` (`url.protocol === "https:"` or `x-forwarded-proto === "https"`): use `__Host-` + `Secure; SameSite=None; Partitioned` on HTTPS, and fall back to `goc_session` (`Path=/; HttpOnly; SameSite=Lax; secure: false`) on plain HTTP (`http://192.168.x.x` / local IP) so self-hosted HTTP works without breaking iframe HTTPS preview.
 
 ---
 
-### Patch Spec `BUG-NEW-03`: Authorize Site Admins (`canAccessAdminPanel(viewer.role)`) in `handleCommitProfileReadme` and `handleCommitRepositoryFile`
+## Phase 02 — Background Queues, Compaction, Tier Policy & Git Engine (`F-09`, `F-10`, `F-17`–`F-19`)
 
-- **Exact File**: `src/worker/routes/authRepositories.ts`
-- **Exact Lines**: `385-394`, `456-465`
-- **Current Live Code (BEFORE)**:
+### Scope Lock (`Phase 02`)
+- **Allowed Paths:** `src/worker/git/operations/fetch/plan.ts`, `src/worker/tasks/{dispatch,packRefBackfill,compaction,queue}.ts`, `src/worker/routes/{admin,git,systemAdmin}.ts`, `src/worker/do/repo/catalog/compaction/{requests,lease,plan}.ts`, `src/worker/common/tier.ts`, related worker unit/integration tests (`test/*.worker.test.ts`, `test/pack-ref-index.test.ts`).
+- **Forbidden Outside Scope:** Do NOT alter auth login/session files (`src/worker/auth/`), client UI styles/pages (`src/client/components/ui/`), or deploy scripts.
 
-```ts
-// src/worker/routes/authRepositories.ts:386-393 (handleCommitProfileReadme)
-if (
-  repo.slug !== PROFILE_REPO_SLUG ||
-  !(await viewerIsNamespaceMember(db, viewer.userId, repo.namespaceId))
-) {
-  return Response.json(
-    { ok: false, reason: "not-member", detail: "Not authorized for this profile repository." },
-    { status: 403 }
-  );
-}
-```
+### Patch Specs (`F-09`, `F-10`, `F-17`–`F-19`)
 
-```ts
-// src/worker/routes/authRepositories.ts:457-464 (handleCommitRepositoryFile)
-if (!(await viewerIsNamespaceMember(db, viewer.userId, repo.namespaceId))) {
-  return Response.json(
-    { ok: false, reason: "not-member", detail: "Not a member of this repository's namespace." },
-    { status: 403 }
-  );
-}
-```
+1. **`F-09` `.refs` Backfill Deadlock Without Queue Binding**
+   - **Target:** `src/worker/git/operations/fetch/plan.ts:132-139,185-188`, `src/worker/tasks/dispatch.ts:113-132`, `src/worker/tasks/refBackfill.ts`
+   - **Required Patch:** When `!hasRepoTasksQueue(env)`, run a bounded inline single-pack `.refs` backfill (or fallback closure via sidecar/inline execution guarded by `limiter`) so incremental `git fetch` (`haves.length > 0`) recovers cleanly instead of returning infinite `503 Retry-After: 10`.
 
-- **Exact Code Patch (AFTER)**:
+2. **`F-10` Manual Compaction Stuck `"queued"` & Free-Tier Hazard**
+   - **Target:** `src/worker/routes/admin.ts:69-96`, `src/worker/do/repo/catalog/compaction/requests.ts:103-122`, `src/worker/do/repo/catalog/compaction/lease.ts:285-289`, `src/worker/common/tier.ts:44-46`
+   - **Required Patch:**
+     - If `!hasRepoTasksQueue(env)`, reject manual compaction cleanly with explicit `409` / `501` (`reason: "queues-required"`) or execute bounded small-repo compaction inline without writing permanent orphan `compactionWantedAt`.
+     - If `hasRepoTasksQueue(env)` on `CLOUDFLARE_TIER=free`, gate heavy pack rewrites explicitly by pack/object byte budget (or require explicit force / return clear tier warning) AND allow `rearmCompactionQueueFromAlarm` when `compactionWantedAt` was manually requested (`wantedAt` explicitly admin-initiated) so queued manual compaction never deadlocks.
 
-```ts
-// src/worker/routes/authRepositories.ts:386-395 (handleCommitProfileReadme)
-const isAdmin = canAccessAdminPanel(viewer.role);
-if (
-  repo.slug !== PROFILE_REPO_SLUG ||
-  (!isAdmin && !(await viewerIsNamespaceMember(db, viewer.userId, repo.namespaceId)))
-) {
-  return Response.json(
-    { ok: false, reason: "not-member", detail: "Not authorized for this profile repository." },
-    { status: 403 }
-  );
-}
-```
+3. **`F-17` Legacy Git Smart HTTP v0/v1 Clients Rejected**
+   - **Target:** `src/worker/routes/git.ts:95-117`
+   - **Required Patch:** Either implement minimal v0/v1 `want`/`have` upload-pack body translation in `handleUploadPackPOST` when `Git-Protocol: version=2` is omitted, OR update `/info/refs` & `handleUploadPackPOST` error + comments cleanly with an explicit documented protocol error & client upgrade guidance (removing contradictory JSDoc claiming legacy support).
 
-```ts
-// src/worker/routes/authRepositories.ts:457-466 (handleCommitRepositoryFile)
-const isAdmin = canAccessAdminPanel(viewer.role);
-if (!isAdmin && !(await viewerIsNamespaceMember(db, viewer.userId, repo.namespaceId))) {
-  return Response.json(
-    { ok: false, reason: "not-member", detail: "Not a member of this repository's namespace." },
-    { status: 403 }
-  );
-}
-```
+4. **`F-18` `systemAdmin.ts` 60-Repo Cold Branch Cap & Standalone Limiter**
+   - **Target:** `src/worker/routes/systemAdmin.ts:79,169-173,271`
+   - **Required Patch:** Pass `c.var.limiter` instead of standalone `getLimiter()` on line `271`; respect subrequest headroom dynamically or paginate/mark unresolved overflow (`"..."` / lazy resolve) instead of silently faking `"main"` for repo #61+.
+
+5. **`F-19` Non-Atomic `waitUntil` Post-Push Cache & `updatedAt` Sync**
+   - **Target:** `src/worker/routes/git.ts:221-247`, `src/worker/git/receive/streamReceivePack.ts:80-90`
+   - **Required Patch:** Await `touchRepositoryUpdatedAt` + KV branch/refs cache purge before returning `receive-pack` completion (or immediately purge on error fallback + retry via `enqueueRouteCacheSync`) so pushed refs never serve stale `updatedAt` keys.
 
 ---
 
-## PHASE 02 SCOPE LOCK: Web Commit Engine Compaction Queue & Git Tree Mode/Conflict Integrity (`BUG-NEW-04`, `BUG-NEW-10`)
+## Phase 03 — Real Repo Metadata, Branding Defaults & Web Git Editing (`F-11`, `F-12`, `F-16`)
 
-### Phase 02 Strict Scope Lock Boundary
+### Scope Lock (`Phase 03`)
+- **Allowed Paths:** `src/client/islands/home-repos.tsx`, `src/shared/branding.ts`, `src/worker/index.ts` (repo prop enrichment lines only), `src/worker/routes/{authRepositories,admin,ui/raw}.ts`, `src/worker/git/commitFile.ts`, `src/client/islands/{repo-overview-actions,blob-editor,blob-actions}.tsx`, `src/client/pages/{OverviewPage,TreePage,BlobPage}.tsx`.
+- **Forbidden Outside Scope:** Do NOT alter auth, Session, compaction, or global CSS/Toast/PWA systems (Phase 04).
 
-- **Allowed Source Files to Modify**:
-  1. `src/worker/git/commitFile.ts`
-- **Allowed Test Files to Add/Update**:
-  - `test/phase04-logic.node-test.ts` or targeted unit tests
-- **Forbidden Outside Scope**:
-  - Any UI pages/islands, Auth routes, Admin routes, or Demo seeder files.
+### Patch Specs (`F-11`, `F-12`, `F-16`)
 
----
+1. **`F-11` Real Metadata, Clean Empty Filter & Generic Neutral Branding Defaults**
+   - **Target:** `src/client/islands/home-repos.tsx:99-123,206-217,438-457`, `src/shared/branding.ts:28-50`, `src/worker/index.ts:99-108,158-167,195-204`
+   - **Required Patch:** Derive primary repository language/topics/defaultBranch/license cleanly on server/DB (or from repository tree metadata cached in KV) instead of slug regexes; remove hardcoded `TypeScript`/`Python` dummy dropdown injection when `set.size === 0`; remove hardcoded `"Official open-source repository published by Vib Tools."` fallback; replace hardcoded Vib Tools URLs/emails in `DEFAULT_SITE_BRANDING` (`production` vs `demo`) with neutral self-hosted defaults.
 
-### Patch Spec `BUG-NEW-04`: Enqueue `REPO_TASKS_QUEUE` Compaction in `commitRepositoryFile` When `finalized.shouldQueueCompaction` Is True
+2. **`F-12` Web Repo File Delete / Rename / Binary Upload / Branch-Tag UI & Configurable Author Email**
+   - **Target:** `src/worker/git/commitFile.ts`, `src/worker/routes/authRepositories.ts:305,326,421,503`, `src/client/islands/repo-overview-actions.tsx`, `src/client/islands/blob-editor.tsx`
+   - **Required Patch:** Extend tree mutation helper (`commitRepositoryFile` -> upsert / delete / rename + binary `Uint8Array` blob support), add `DELETE` / `POST /upload` routes under `/auth/api/repositories/:id/file`, expose UI for file upload / delete / rename and branch/tag creation/switching wired to `/:owner/:repo/admin/refs` (for repo admins), and let authenticated users configure commit email on profile instead of `${authorSlug}@local.dev`.
 
-- **Exact File**: `src/worker/git/commitFile.ts`
-- **Exact Lines**: `347-357`
-- **Current Live Code (BEFORE)**:
-
-```ts
-// src/worker/git/commitFile.ts:347-357
-if (finalized.status !== "committed") {
-  await deleteStagedPack(stagedUpload).catch(() => {});
-  return {
-    ok: false,
-    status: 409,
-    reason: "conflict",
-    detail: `Finalize rejected (${finalized.status}).`,
-  };
-}
-
-leaseToken = undefined;
-```
-
-- **Exact Code Patch (AFTER)**:
-
-```ts
-// src/worker/git/commitFile.ts:347-370
-if (finalized.status !== "committed") {
-  await deleteStagedPack(stagedUpload).catch(() => {});
-  return {
-    ok: false,
-    status: 409,
-    reason: "conflict",
-    detail: `Finalize rejected (${finalized.status}).`,
-  };
-}
-
-leaseToken = undefined;
-
-if (finalized.shouldQueueCompaction && args.env.REPO_TASKS_QUEUE) {
-  const enqueueTask = args.env.REPO_TASKS_QUEUE.send({
-    kind: "compaction",
-    doId,
-    repoId,
-  }).catch((error) => {
-    log.warn("commit-file:compaction-enqueue-failed", {
-      error: String(error),
-    });
-  });
-  if (args.ctx) {
-    args.ctx.waitUntil(enqueueTask);
-  } else {
-    await enqueueTask;
-  }
-}
-```
+3. **`F-16` Raw Path Hotlink Guard Fix**
+   - **Target:** `src/worker/routes/ui/raw.ts:86-98`
+   - **Required Patch:** Allow same-origin requests via `Sec-Fetch-Site: same-origin | none` (direct navigation / new tab) OR matching forwarded host (`x-forwarded-host` / `url.host`), blocking only cross-site `Referer` / `Sec-Fetch-Site: cross-site` hotlinks.
 
 ---
 
-### Patch Spec `BUG-NEW-10`: Preserve Executable File Mode (`100755`) & Reject File/Directory Path Conflicts in `upsertTreePath`
+## Phase 04 — Component-Only Design System, Global Toast & PWA (`F-13`, `F-14`, `F-15`)
 
-- **Exact File**: `src/worker/git/commitFile.ts`
-- **Exact Lines**: `127-187`
-- **Current Live Code (BEFORE)**:
+### Scope Lock (`Phase 04`)
+- **Allowed Paths:** `src/client/styles/app.css`, `src/client/components/ui/*`, `src/client/components/{header,footer,Sidebar,AdminSettingsLayout,UserSettingsLayout}.tsx`, `src/client/server/document.tsx`, `src/client/islands/*`, `public/` (PWA manifest, service worker, icons), `vite.config.ts`.
+- **Forbidden Outside Scope:** Zero changes to Worker API logic, Git protocol, D1/DO schemas, or deploy scripts.
 
-```ts
-// src/worker/git/commitFile.ts:150-179
-const segment = args.segments[args.index]!;
-const isLeaf = args.index === args.segments.length - 1;
+### Patch Specs (`F-13`, `F-14`, `F-15`)
 
-let nextChildOid: string;
-let nextChildMode: string;
-if (isLeaf) {
-  nextChildOid = args.leafBlobOid;
-  nextChildMode = "100644";
-} else {
-  const existingSubtree = existingEntries.find(
-    (entry) => entry.name === segment && entry.mode.startsWith("40000")
-  );
-  nextChildOid = await upsertTreePath({
-    env: args.env,
-    repoId: args.repoId,
-    cacheCtx: args.cacheCtx,
-    treeOid: existingSubtree?.oid,
-    segments: args.segments,
-    index: args.index + 1,
-    leafBlobOid: args.leafBlobOid,
-    objectsOut: args.objectsOut,
-  });
-  nextChildMode = "40000";
-}
-```
+1. **`F-13` Global Toast Notification Provider & Clipboard Feedback**
+   - **Required Patch:** Create global `<ToastProvider />` + `showToast({ tone, title, message })` in `src/client/components/ui/toast.tsx` (mounted via shell), replace all silent clipboard `catch {}` (`home-repos.tsx:325`, `RepositoriesSection.tsx:247`, `TokensSection.tsx:112`, `blob-actions.tsx:33`) and raw `window.location.reload()` timers (`useRepoAdminActions.ts:59-61`) with unified original API error/success toasts.
 
-- **Exact Code Patch (AFTER)**:
+2. **`F-14` Full PWA Installability Support**
+   - **Target:** `public/manifest.webmanifest`, `public/sw.js`, `public/icons/*`, `src/client/server/document.tsx:45-83`, `src/client/entries/shell.ts`
+   - **Required Patch:** Add real Web App Manifest (`manifest.webmanifest`), static SVG/PNG install icons, offline-first navigation/static-asset Service Worker (`sw.js`), `<link rel="manifest">`, `theme-color`, `apple-touch-icon`, and service worker registration in `shell.ts`.
 
-```ts
-// src/worker/git/commitFile.ts:150-198
-const segment = args.segments[args.index]!;
-const isLeaf = args.index === args.segments.length - 1;
-const existingEntry = existingEntries.find((entry) => entry.name === segment);
-
-let nextChildOid: string;
-let nextChildMode: string;
-if (isLeaf) {
-  if (existingEntry && existingEntry.mode !== "100644" && existingEntry.mode !== "100755") {
-    throw new InvalidTreePathConflictError(
-      `Cannot overwrite non-regular file entry '${segment}' (mode ${existingEntry.mode}).`
-    );
-  }
-  nextChildOid = args.leafBlobOid;
-  nextChildMode = existingEntry?.mode === "100755" ? "100755" : "100644";
-} else {
-  if (existingEntry && !existingEntry.mode.startsWith("40000")) {
-    throw new InvalidTreePathConflictError(
-      `Path segment '${segment}' already exists as a non-directory entry (mode ${existingEntry.mode}).`
-    );
-  }
-  nextChildOid = await upsertTreePath({
-    env: args.env,
-    repoId: args.repoId,
-    cacheCtx: args.cacheCtx,
-    treeOid: existingEntry?.oid,
-    segments: args.segments,
-    index: args.index + 1,
-    leafBlobOid: args.leafBlobOid,
-    objectsOut: args.objectsOut,
-  });
-  nextChildMode = "40000";
-}
-```
-
-And in `commitRepositoryFile`'s `catch` or around `upsertTreePath`, if `error instanceof InvalidTreePathConflictError`, abort the receive lease and return `{ ok: false, status: 400, reason: "invalid-path", detail: error.message }`.
+3. **`F-15` Flat Zero-Radius (`--radius: 0rem`) Design Tokens & Single-Source UI Primitives**
+   - **Target:** `src/client/styles/app.css:11,13`, `src/client/components/ui/{button,card,input,badge,confirm-modal}.tsx`, all islands bypassing `ui/*`
+   - **Required Patch:** Set exact font stack `"Segoe UI", "Segoe UI Web", system-ui, -apple-system, "Helvetica Neue", sans-serif`; enforce `--radius: 0rem` (replace `rounded-md` / `rounded` / `rounded-full` & `shadow-lg` on global UI primitives, keeping only 1 subtle border token and 2 accent tokens light+dark); migrate inline custom buttons/inputs/modals across islands to `@/client/components/ui`.
 
 ---
 
-## PHASE 03 SCOPE LOCK: D1/KV/Cache Coherency & Demo Seeder Privacy Invariants (`BUG-NEW-05`, `BUG-NEW-06`, `BUG-NEW-07`, `BUG-NEW-12`)
+## Phase 05 — Deploy Pipeline, Secret Hygiene & Bundle Cleanup (`F-20`, `F-21`)
 
-### Phase 03 Strict Scope Lock Boundary
+### Scope Lock (`Phase 05`)
+- **Allowed Paths:** `scripts/cf-auto-deploy-lib.mjs`, `scripts/cf-auto-deploy.mjs`, `test/cf-auto-deploy.node-test.ts`, `wrangler.paid.jsonc`, `public/assets/aistudio/` (removal), `package.json` (only if script cleanup strictly needed).
+- **Forbidden Outside Scope:** Zero edits to application runtime `src/`.
 
-- **Allowed Source Files to Modify**:
-  1. `src/worker/repositories/routeCache.ts`
-  2. `src/worker/routes/admin.ts`
-  3. `src/worker/tasks/repositoryDelete.ts`
-  4. `src/worker/auth/demoSeed.ts`
-  5. `src/worker/git/commitFile.ts`
-  6. `src/worker/routes/git.ts`
-- **Allowed Test Files to Add/Update**:
-  - `test/phase04-logic.node-test.ts` or targeted unit tests
-- **Forbidden Outside Scope**:
-  - Any UI components/islands, SSR page templates, or Auth login/session handlers.
+### Patch Specs (`F-20`, `F-21`)
 
----
+1. **`F-20` Deploy Ordering & Unused Secrets Cleanup**
+   - **Target:** `scripts/cf-auto-deploy-lib.mjs:11-15`, `scripts/cf-auto-deploy.mjs:476-511`, `test/cf-auto-deploy.node-test.ts`
+   - **Required Patch:** Reduce `REQUIRED_WORKER_SECRETS` to active runtime secrets (`["SESSION_SECRET"]`, removing unused `CREDENTIAL_SECRET` & `ADMIN_BOOTSTRAP_SECRET` — or clarify migration), and run secret reconciliation **before** (or cleanly verified prior to public routing of) `wrangler deploy` so new deployments never boot without `SESSION_SECRET`.
 
-### Patch Spec `BUG-NEW-05` & `BUG-NEW-06` & `BUG-NEW-12`: Centralize `deleteRepoBranchCacheRecord` and Invalidate on `PUT /admin/head`, `PUT /admin/refs`, Repo Delete, CLI Push, and Web Commit
-
-- **Exact File 1**: `src/worker/repositories/routeCache.ts`
-- **Add Helper**:
-
-```ts
-const REPO_BRANCH_CACHE_PREFIX = "repo-branch:";
-
-export function buildRepoBranchCacheKey(repositoryId: string): string {
-  return `${REPO_BRANCH_CACHE_PREFIX}${repositoryId}`;
-}
-
-export async function deleteRepoBranchCacheRecord(
-  env: Pick<Env, "ROUTES">,
-  repositoryId: string
-): Promise<void> {
-  if (!env.ROUTES) return;
-  await env.ROUTES.delete(buildRepoBranchCacheKey(repositoryId));
-}
-```
-
-- **Exact File 2**: `src/worker/routes/admin.ts` (`PUT /:owner/:repo/admin/refs` and `PUT /:owner/:repo/admin/head`, lines `113-166`)
-- **Current Live Code (BEFORE)**:
-
-```ts
-// src/worker/routes/admin.ts:123-128
-const stub = getRepoStub(env, repoId);
-const limiter = createSubrequestLimiter(6);
-await limiter.run("do:set-refs", async () => {
-  await stub.setRefs(refs.data);
-});
-return json({ ok: true, count: refs.data.length });
-```
-
-```ts
-// src/worker/routes/admin.ts:158-163
-const stub = getRepoStub(env, repoId);
-const limiter = createSubrequestLimiter(6);
-await limiter.run("do:set-head", async () => {
-  await stub.setHead(head.data);
-});
-return json({ ok: true, head: head.data });
-```
-
-- **Exact Code Patch (AFTER)** in `src/worker/routes/admin.ts`:
-  - After `stub.setRefs(refs.data)` and after `stub.setHead(head.data)`:
-    1. Touch `repositories.updatedAt` in D1 via `touchRepositoryUpdatedAt(createD1Db(env.AUTH_DB), access.route.repositoryId)`.
-    2. Delete `repo-branch:${access.route.repositoryId}` via `deleteRepoBranchCacheRecord(env, access.route.repositoryId)`.
-    3. Purge `/_cache/refs` via `cacheDeleteJSON(buildCacheKeyFrom(request, "/_cache/refs", { repo: repoId }))`.
-
-- **Exact File 3**: `src/worker/tasks/repositoryDelete.ts:68-75` (`BUG-NEW-06`)
-- **Exact Code Patch (AFTER)**:
-
-```ts
-// Step 2: Best-effort KV route cache and cached default-branch eviction.
-try {
-  await limiter.run("kv:delete-route-cache", async () => {
-    await deleteRouteCacheRecord(env, body.namespaceSlug, body.repoSlug);
-    await deleteRepoBranchCacheRecord(env, body.repositoryId);
-  });
-} catch (error) {
-  log.warn("repository-delete:route-cache-delete-failed", { error: String(error) });
-}
-```
-
-- **Exact File 4**: `src/worker/routes/git.ts:221-238` and `src/worker/git/commitFile.ts:360-420` (`BUG-NEW-12`)
-  - In `git.ts:221-238` (`onRefsChanged`), also call `await deleteRepoBranchCacheRecord(c.env, access.route.repositoryId).catch(() => {});`.
-  - In `commitFile.ts:360-420`:
-    1. Capture the previous `updatedAt` timestamp before `touchRepositoryUpdatedAt`, or include `commitOid` and `parentOid` in `refVariants` when purging `/_cache/readme` and `/_cache/owner-profile-readme`.
-    2. Call `await deleteRepoBranchCacheRecord(args.env, args.repositoryId).catch(() => {});`.
-
----
-
-### Patch Spec `BUG-NEW-07`: Enforce Public-Only `ROUTES` KV Invariant & Namespace-Scoped Check in `demoSeed.ts`
-
-- **Exact File**: `src/worker/auth/demoSeed.ts`
-- **Exact Lines**: `914-919` and `1010-1015`
-- **Current Live Code (BEFORE)**:
-
-```ts
-// src/worker/auth/demoSeed.ts:914-919
-await putRouteCacheRecord(args.env, args.namespaceSlug, args.spec.slug, {
-  repositoryId: created.repositoryId,
-  namespaceId: args.namespaceId,
-  doId: created.doId,
-});
-```
-
-```ts
-// src/worker/auth/demoSeed.ts:1010-1015
-const existing = await listRepositoriesForUser(args.db, args.userId);
-if (existing.length > 0) {
-  demoRepositoriesSeededInIsolate = true;
-  return;
-}
-```
-
-- **Exact Code Patch (AFTER)**:
-
-```ts
-// src/worker/auth/demoSeed.ts:914-924
-if (args.spec.visibility === "public") {
-  await putRouteCacheRecord(args.env, args.namespaceSlug, args.spec.slug, {
-    repositoryId: created.repositoryId,
-    namespaceId: args.namespaceId,
-    doId: created.doId,
-  });
-} else {
-  await deleteRouteCacheRecord(args.env, args.namespaceSlug, args.spec.slug);
-}
-```
-
-```ts
-// src/worker/auth/demoSeed.ts:1010-1015
-const existing = await listRepositoriesInNamespace(args.db, args.namespaceId);
-if (existing.length > 0) {
-  demoRepositoriesSeededInIsolate = true;
-  return;
-}
-```
-
----
-
-## PHASE 04 SCOPE LOCK: SSR Error Boundary Shell Context, 500 Sanitization & Blob Activity Parity (`BUG-NEW-08`, `BUG-NEW-09`, `BUG-NEW-11`)
-
-### Phase 04 Strict Scope Lock Boundary
-
-- **Allowed Source Files to Modify**:
-  1. `src/client/server/error.ts`
-  2. `src/worker/routes/ui/helpers.ts`
-  3. `src/worker/routes/ui/tree.ts`
-  4. `src/worker/routes/ui/blob.ts`
-  5. `src/worker/routes/ui/commits.ts`
-  6. `src/worker/routes/ui/overview.ts`
-  7. `src/worker/routes/ui/refsApi.ts`
-  8. `src/worker/routes/admin.ts`
-- **Allowed Test Files to Add/Update**:
-  - `test/phase04-logic.node-test.ts` or targeted unit tests
-- **Forbidden Outside Scope**:
-  - Any D1 schema/DAL files, Git pack indexer/rewrite files, or Queue consumers.
-
----
-
-### Patch Spec `BUG-NEW-08`: Load Site Branding, Preserve Signed-In `viewer`, and Sanitize 500 Messages in `handleError`, `badRequest`, and `tree.ts`
-
-- **Exact File 1**: `src/client/server/error.ts:87-139`
-- **Current Live Code (BEFORE)**:
-
-```ts
-// src/client/server/error.ts:95-120
-export async function handleError(
-  env: Env,
-  err: unknown,
-  defaultTitle = "Error",
-  extra?: ErrorBoundaryExtra
-): Promise<Response> {
-  const { status, message } = classifyError(err);
-  const title = `${status} — ${defaultTitle}`;
-  createLogger(env.LOG_LEVEL, {
-    service: "ui-error-boundary",
-    repoId: extra?.owner && extra?.repo ? `${extra.owner}/${extra.repo}` : undefined,
-  }).warn("ui:handle-error", { status, title, error: message });
-
-  try {
-    const html = await renderUiView(
-      env,
-      "error",
-      {
-        title,
-        status,
-        message,
-        owner: extra?.owner,
-        repo: extra?.repo,
-        refEnc: extra?.refEnc,
-      },
-      { viewer: extra?.viewer ?? null }
-    );
-```
-
-- **Exact Code Patch (AFTER)** in `src/client/server/error.ts`:
-  1. When `status >= 500` and `env.LOG_LEVEL !== "debug"`, sanitize the displayed `publicMessage` to `"Internal Server Error"` (while still logging the full `message` in `ui:handle-error`).
-  2. Load `const branding = await loadSiteBranding(env);` and pass `{ viewer: extra?.viewer ?? null, branding }` to `renderUiView`.
-
-- **Exact File 2**: `src/worker/routes/ui/helpers.ts:48-55`
-  - Expand `badRequest` `extra` parameter type to `ErrorBoundaryExtra` (`{ owner?: string; repo?: string; refEnc?: string; viewer?: ViewerIdentity | null }`).
-
-- **Exact Files 3–6**: `src/worker/routes/ui/blob.ts`, `src/worker/routes/ui/tree.ts`, `src/worker/routes/ui/commits.ts`, `src/worker/routes/ui/overview.ts`
-  - Pass `viewer: access.viewer` to every `badRequest(...)` and `handleError(...)` call inside repository routes.
-  - In `src/worker/routes/ui/tree.ts:106-118`, replace direct `renderUiView(env, "error", ...)` with `renderUiDocumentResponse(env, "error", ..., { status: 404, viewer: access.viewer, headers: { "Cache-Control": "no-store" } })`.
-
----
-
-### Patch Spec `BUG-NEW-09`: Sanitize & Log 500 JSON Errors in `handleRefsApi` and 5 Remaining Endpoints in `src/worker/routes/admin.ts`
-
-- **Exact File 1**: `src/worker/routes/ui/refsApi.ts:32-40`
-- **Current Live Code (BEFORE)**:
-
-```ts
-// src/worker/routes/ui/refsApi.ts:32-40
-  } catch (e: unknown) {
-    return new Response(
-      JSON.stringify({
-        error: e instanceof Error ? e.message : String(e),
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
-```
-
-- **Exact Code Patch (AFTER)**:
-
-```ts
-// src/worker/routes/ui/refsApi.ts:32-45
-  } catch (e: unknown) {
-    createLogger(env.LOG_LEVEL, { service: "RefsApi", repoId }).warn("refs-api:failed", {
-      error: e instanceof Error ? e.message : String(e),
-    });
-    return new Response(
-      JSON.stringify({
-        error: "Internal Server Error",
-      }),
-      {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json; charset=UTF-8",
-          "Cache-Control": "no-store",
-        },
-      }
-    );
-  }
-```
-
-- **Exact File 2**: `src/worker/routes/admin.ts` (lines `69-71`, `84-86`, `197-199`, `214-216`, `245-247`)
-  - Replace all 5 remaining `return jsonError(String(e), 500);` blocks with structured `createLogger(env.LOG_LEVEL, { service: "AdminRoutes", repoId }).warn(...)` logging and `return jsonError("Internal Server Error", 500);`.
-
----
-
-### Patch Spec `BUG-NEW-11`: Load `loadUiRepoActivity` (`progress`) on Direct Blob View (`GET /:owner/:repo/blob`)
-
-- **Exact File**: `src/worker/routes/ui/blob.ts:241-251`
-- **Current Live Code (BEFORE)**:
-
-```ts
-// src/worker/routes/ui/blob.ts:241-251
-  try {
-    return await renderBlobDocumentResponse({
-      request,
-      env,
-      ctx,
-      access,
-      owner,
-      repo,
-      repoId,
-      ref,
-      path,
-    });
-  } catch (e: unknown) {
-```
-
-- **Exact Code Patch (AFTER)**:
-
-```ts
-// src/worker/routes/ui/blob.ts:241-253
-  try {
-    const progress = await loadUiRepoActivity(env, access);
-    return await renderBlobDocumentResponse({
-      request,
-      env,
-      ctx,
-      access,
-      owner,
-      repo,
-      repoId,
-      ref,
-      path,
-      progress,
-    });
-  } catch (e: unknown) {
-```
+2. **`F-21` Remove Unreferenced `/public/assets/aistudio/` & Fix Prettier Baseline**
+   - **Target:** `/public/assets/aistudio/` (`22` unreferenced files), `wrangler.paid.jsonc`
+   - **Required Patch:** Remove unreferenced AI Studio design artifacts from `public/assets/aistudio/` so they are not copied into Production `dist/client`, format `wrangler.paid.jsonc`, and verify `npm run format:check` exits `0`.

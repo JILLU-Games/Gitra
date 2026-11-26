@@ -40,6 +40,7 @@ export type AccountPageProps = {
   viewerRole?: DirectoryRole;
   isPrimaryAdmin?: boolean;
   hasPassword?: boolean;
+  passwordManagedByEnv?: boolean;
   activeSection?: UserSettingsSection;
   namespaces: AccountNamespace[];
   repositories: AccountRepository[];
@@ -88,6 +89,7 @@ export function AccountPage({
   viewerRole = "member",
   isPrimaryAdmin = false,
   hasPassword = false,
+  passwordManagedByEnv = true,
   activeSection = "all",
   namespaces,
   repositories,
@@ -226,7 +228,7 @@ export function AccountPage({
                 <Lock className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
               </div>
               <p className="m-0 mt-1 text-[12px] text-fgMuted">
-                {isPrimaryAdmin
+                {isPrimaryAdmin && passwordManagedByEnv
                   ? "Env / Demo config"
                   : hasPassword
                     ? "Password enabled"
@@ -270,8 +272,15 @@ export function AccountPage({
                 Password &amp; Security
               </h2>
             ) : null}
-            <IslandHost name="change-password" props={{ isPrimaryAdmin, hasPassword }}>
-              <ChangePasswordIsland isPrimaryAdmin={isPrimaryAdmin} hasPassword={hasPassword} />
+            <IslandHost
+              name="change-password"
+              props={{ isPrimaryAdmin, hasPassword, passwordManagedByEnv }}
+            >
+              <ChangePasswordIsland
+                isPrimaryAdmin={isPrimaryAdmin}
+                hasPassword={hasPassword}
+                passwordManagedByEnv={passwordManagedByEnv}
+              />
             </IslandHost>
           </section>
         ) : null}

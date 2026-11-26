@@ -271,4 +271,70 @@ describe("admin login and session lifecycle", () => {
       spy.mockRestore();
     }
   });
+
+  it("invalidates session cookies when account session_epoch is bumped", async () => {
+    const owner = `sess-epoch-${Math.random().toString(36).slice(2, 8)}`;
+    const seeded = await setupRepoForTests(env, owner, "site");
+    // Ensure initial directory row exists with epoch 1
+    await upsertNamespaceDirectoryMeta(env.DB, seeded.namespaceId, {
+      displayName: owner,
+      role: "member",
+      status: "active",
+      now: Date.now(),
+    });
+
+    const res1 = await workerExports.default.fetch("https://example.com/auth/account", {
+      headers: { Cookie: seeded.cookieHeader },
+      redirect: "manual",
+    });
+    expect(res1.status).toBe(200);
+
+    // Bump sessionEpoch in directory meta (simulates password reset or rotation)
+    await upsertNamespaceDirectoryMeta(env.DB, seeded.namespaceId, {
+      displayName: owner,
+      role: "member",
+      status: "active",
+      bumpSessionEpoch: true,
+      now: Date.now(),
+    });
+
+    // Earlier minted cookie with previous epoch fails closed
+    const res2 = await workerExports.default.fetch("https://example.com/auth/account", {
+      headers: { Cookie: seeded.cookieHeader },
+      redirect: "manual",
+    });
+    expect(res2.status).toBe(302);
+    expect(res2.headers.get("location")).toBe("/auth");
+  });
+
+  it("issues plain HTTP session cookie without Secure or __Host- when connection is not HTTPS", async () => {
+    const form = new URLSearchParams({ username: "admin", password: "admin123" });
+    const loginRes = await workerExports.default.fetch("http://localhost:3000/auth/login", {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: "http://localhost:3000",
+      },
+      body: form.toString(),
+    });
+    expect(loginRes.status).toBe(303);
+    const setCookie = loginRes.headers.get("set-cookie") ?? "";
+    const sessionCookiePart = setCookie
+      .split(",")
+      .find((part) => part.trim().startsWith("goc_session="));
+    expect(sessionCookiePart).toBeTruthy();
+    expect(sessionCookiePart).not.toContain("Secure");
+    expect(sessionCookiePart).toContain("SameSite=Lax");
+    expect(setCookie).not.toContain("__Host-goc_session=");
+
+    const tokenMatch = sessionCookiePart?.match(/goc_session=([^;]+)/);
+    expect(tokenMatch).toBeTruthy();
+    const token = tokenMatch![1];
+
+    const accountRes = await workerExports.default.fetch("http://localhost:3000/auth/account", {
+      headers: { Cookie: `goc_session=${token}` },
+    });
+    expect(accountRes.status).toBe(200);
+  });
 });

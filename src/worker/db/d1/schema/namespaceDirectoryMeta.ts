@@ -16,6 +16,7 @@ export const namespaceDirectoryMeta = sqliteTable(
     role: text("role").$type<DirectoryRole>().notNull().default("member"),
     status: text("status").$type<DirectoryStatus>().notNull().default("active"),
     passwordHash: text("password_hash"),
+    sessionEpoch: integer("session_epoch").notNull().default(1),
     lastActiveAt: integer("last_active_at"),
     updatedAt: integer("updated_at").notNull(),
   },

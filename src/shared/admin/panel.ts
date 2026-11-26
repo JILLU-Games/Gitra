@@ -422,14 +422,17 @@ export type PrimaryAdminPatchInput = {
   status?: DirectoryStatus;
   role?: DirectoryRole;
   hasPasswordChange: boolean;
+  passwordManagedByEnv?: boolean;
 };
 
 /**
  * Validates directory patch requests against primary-admin protections:
  * - Primary admin can rename their public `@namespace` handle and display name
  *   without altering their private env sign-in username.
- * - Primary admin cannot be disabled, demoted from `admin`, or given a
- *   directory password override.
+ * - Primary admin cannot be disabled or demoted from `admin`.
+ * - Password overrides are blocked when credentials come from env/demo, while
+ *   D1-claimed primary admin credentials (`passwordManagedByEnv === false`) may
+ *   update their D1 password hash.
  */
 export function evaluatePrimaryAdminPatchPolicy(
   input: PrimaryAdminPatchInput
@@ -439,7 +442,8 @@ export function evaluatePrimaryAdminPatchPolicy(
   }
   const wantsDisable = input.status !== undefined && input.status !== "active";
   const wantsDemote = input.role !== undefined && input.role !== "admin";
-  if (wantsDisable || wantsDemote || input.hasPasswordChange) {
+  const blockPassword = input.passwordManagedByEnv ?? true;
+  if (wantsDisable || wantsDemote || (blockPassword && input.hasPasswordChange)) {
     return { ok: false, reason: "protected-admin" };
   }
   return { ok: true };

@@ -1,4 +1,5 @@
 import type { Viewer } from "@/client/server/viewer";
+import { buildNamespaceProfileHref } from "@/shared/admin/panel";
 import {
   DEFAULT_SITE_BRANDING,
   extractHostLabel,
@@ -107,7 +108,10 @@ export function Footer({ branding, viewer, origin }: FooterProps) {
                   <>
                     {viewer.primaryNamespaceSlug ? (
                       <li>
-                        <a href={`/${viewer.primaryNamespaceSlug}`} className={LINK_CLASS}>
+                        <a
+                          href={buildNamespaceProfileHref(viewer.primaryNamespaceSlug)}
+                          className={LINK_CLASS}
+                        >
                           Profile
                         </a>
                       </li>

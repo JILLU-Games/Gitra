@@ -187,6 +187,17 @@ export const AdminLoginRequestSchema = z.preprocess(
   })
 );
 
+export const ProductionSetupRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    username: LowercaseSlugInputSchema,
+    displayName: TrimmedStringSchema.optional(),
+    password: StringOrEmptySchema,
+    confirmPassword: StringOrEmptySchema,
+    next: TrimmedStringSchema,
+  })
+);
+
 const DirectoryRoleSchema = z.enum(["admin", "member", "viewer"]);
 const DirectoryStatusSchema = z.enum(["active", "disabled"]);
 

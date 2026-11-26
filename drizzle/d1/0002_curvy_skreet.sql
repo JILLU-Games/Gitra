@@ -1,0 +1,1 @@
+ALTER TABLE `namespace_directory_meta` ADD `session_epoch` integer DEFAULT 1 NOT NULL;

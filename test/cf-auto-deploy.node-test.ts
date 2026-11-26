@@ -93,7 +93,14 @@ test("buildGeneratedWranglerConfig produces Free config with custom domain and r
   assert.equal("limits" in generated, false);
   assert.equal("queues" in generated, false);
   assert.deepEqual(generated.routes, [{ pattern: "git.vibtools.io", custom_domain: true }]);
+  assert.equal(generated.vars.AUTH_MODE, "production");
   assert.equal(generated.vars.CLOUDFLARE_TIER, "free");
+
+  const devLeakConfig = resolveDeployConfig({
+    CLOUDFLARE_API_TOKEN: "cf-secret-token",
+    AUTH_MODE: "development",
+  });
+  assert.equal(devLeakConfig.envSecrets.AUTH_MODE, "production");
 });
 
 test("buildGeneratedWranglerConfig produces Paid config with cpu_ms and queues when enabled", () => {

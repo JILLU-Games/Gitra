@@ -5,12 +5,17 @@ import {
   type DirectoryRole,
   type DirectoryStatus,
 } from "@/shared/admin/panel";
+import {
+  buildLocalAccountSubject,
+  resolveAdminAuthConfig,
+  type AdminAuthEnv,
+} from "@/worker/auth/adminAuth";
 import type { Logger } from "@/worker/common/logger";
 import type { Db } from "@/worker/db/d1/client";
 import { namespaceMemberships } from "@/worker/db/d1/schema/namespaceMemberships";
 import { namespaces, type NamespaceRow } from "@/worker/db/d1/schema/namespaces";
 import { repositories } from "@/worker/db/d1/schema/repositories";
-import { users } from "@/worker/db/d1/schema/users";
+import { users, type UserRow } from "@/worker/db/d1/schema/users";
 import { listNamespacesForUser } from "./namespaces";
 import { findUserBySubject } from "./users";
 
@@ -20,6 +25,7 @@ export type NamespaceDirectoryMetaRow = {
   role: DirectoryRole;
   status: DirectoryStatus;
   password_hash: string | null;
+  session_epoch: number;
   last_active_at: number | null;
   updated_at: number;
 };
@@ -46,6 +52,7 @@ export type DirectoryAuthAccount = {
   status: DirectoryStatus;
   passwordHash: string | null;
   hasPassword: boolean;
+  sessionEpoch: number;
 };
 
 export async function listAllNamespaceDirectoryEntries(
@@ -58,7 +65,7 @@ export async function listAllNamespaceDirectoryEntries(
     db.select({ namespaceId: repositories.namespaceId }).from(repositories),
     d1
       .prepare(
-        `SELECT namespace_id, display_name, role, status, password_hash, last_active_at, updated_at
+        `SELECT namespace_id, display_name, role, status, password_hash, session_epoch, last_active_at, updated_at
          FROM namespace_directory_meta`
       )
       .all<NamespaceDirectoryMetaRow>(),
@@ -110,24 +117,31 @@ export async function upsertNamespaceDirectoryMeta(
     role: DirectoryRole;
     status: DirectoryStatus;
     passwordHash?: string | null;
+    bumpSessionEpoch?: boolean;
     lastActiveAt?: number;
     now: number;
   }
-): Promise<void> {
+): Promise<{ sessionEpoch: number }> {
   const lastActiveAt = meta.lastActiveAt ?? meta.now;
+  const initialEpoch = meta.bumpSessionEpoch ? 2 : 1;
+  const epochExpr = meta.bumpSessionEpoch
+    ? "namespace_directory_meta.session_epoch + 1"
+    : "namespace_directory_meta.session_epoch";
 
   if (meta.passwordHash !== undefined) {
-    await d1
+    const row = await d1
       .prepare(
-        `INSERT INTO namespace_directory_meta (namespace_id, display_name, role, status, password_hash, last_active_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO namespace_directory_meta (namespace_id, display_name, role, status, password_hash, session_epoch, last_active_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ${initialEpoch}, ?, ?)
          ON CONFLICT(namespace_id) DO UPDATE SET
            display_name = excluded.display_name,
            role = excluded.role,
            status = excluded.status,
            password_hash = excluded.password_hash,
+           session_epoch = ${epochExpr},
            last_active_at = excluded.last_active_at,
-           updated_at = excluded.updated_at`
+           updated_at = excluded.updated_at
+         RETURNING session_epoch`
       )
       .bind(
         namespaceId,
@@ -138,23 +152,26 @@ export async function upsertNamespaceDirectoryMeta(
         lastActiveAt,
         meta.now
       )
-      .run();
-    return;
+      .first<{ session_epoch: number }>();
+    return { sessionEpoch: row?.session_epoch ?? 1 };
   }
 
-  await d1
+  const row = await d1
     .prepare(
-      `INSERT INTO namespace_directory_meta (namespace_id, display_name, role, status, last_active_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO namespace_directory_meta (namespace_id, display_name, role, status, session_epoch, last_active_at, updated_at)
+       VALUES (?, ?, ?, ?, ${initialEpoch}, ?, ?)
        ON CONFLICT(namespace_id) DO UPDATE SET
          display_name = excluded.display_name,
          role = excluded.role,
          status = excluded.status,
+         session_epoch = ${epochExpr},
          last_active_at = excluded.last_active_at,
-         updated_at = excluded.updated_at`
+         updated_at = excluded.updated_at
+       RETURNING session_epoch`
     )
     .bind(namespaceId, meta.displayName, meta.role, meta.status, lastActiveAt, meta.now)
-    .run();
+    .first<{ session_epoch: number }>();
+  return { sessionEpoch: row?.session_epoch ?? 1 };
 }
 
 export async function findNamespaceDirectoryMeta(
@@ -163,7 +180,7 @@ export async function findNamespaceDirectoryMeta(
 ): Promise<NamespaceDirectoryMetaRow | null> {
   const row = await d1
     .prepare(
-      `SELECT namespace_id, display_name, role, status, password_hash, last_active_at, updated_at
+      `SELECT namespace_id, display_name, role, status, password_hash, session_epoch, last_active_at, updated_at
        FROM namespace_directory_meta
        WHERE namespace_id = ?
        LIMIT 1`
@@ -195,6 +212,7 @@ export async function findDirectoryAccountBySlug(
     status: meta?.status ?? "active",
     passwordHash: meta?.password_hash ?? null,
     hasPassword: Boolean(meta?.password_hash),
+    sessionEpoch: meta?.session_epoch ?? 1,
   };
 }
 
@@ -226,7 +244,16 @@ export async function findDirectoryAccountByUserId(
     status: meta?.status ?? "active",
     passwordHash: meta?.password_hash ?? null,
     hasPassword: Boolean(meta?.password_hash),
+    sessionEpoch: meta?.session_epoch ?? 1,
   };
+}
+
+/**
+ * Returns true if at least one user account exists in D1.
+ */
+export async function hasAnyRegisteredUsers(d1: D1Database): Promise<boolean> {
+  const row = await d1.prepare(`SELECT 1 AS found FROM users LIMIT 1`).first<{ found: number }>();
+  return Boolean(row);
 }
 
 /**
@@ -249,22 +276,25 @@ export async function touchDirectoryLastActive(
 }
 
 /**
- * Updates only the stored password hash for a directory user account.
+ * Updates the stored password hash for a directory user account and increments
+ * `session_epoch` atomically so all prior session cookies are immediately revoked.
  */
 export async function updateDirectoryPasswordHash(
   d1: D1Database,
   namespaceId: string,
   passwordHash: string,
   now: number
-): Promise<void> {
-  await d1
+): Promise<{ sessionEpoch: number }> {
+  const row = await d1
     .prepare(
       `UPDATE namespace_directory_meta
-       SET password_hash = ?, updated_at = ?
-       WHERE namespace_id = ?`
+       SET password_hash = ?, session_epoch = session_epoch + 1, updated_at = ?
+       WHERE namespace_id = ?
+       RETURNING session_epoch`
     )
     .bind(passwordHash, now, namespaceId)
-    .run();
+    .first<{ session_epoch: number }>();
+  return { sessionEpoch: row?.session_epoch ?? 1 };
 }
 
 /**
@@ -313,6 +343,69 @@ export async function findPrimaryAdminNamespace(
   adminSubject: string
 ): Promise<NamespaceRow | undefined> {
   const user = await findUserBySubject(db, adminSubject);
+  if (!user) return undefined;
+
+  const ownedRows = await db
+    .select()
+    .from(namespaces)
+    .where(eq(namespaces.createdBy, user.id))
+    .orderBy(asc(namespaces.createdAt), asc(namespaces.id))
+    .limit(1);
+  if (ownedRows[0]) return ownedRows[0];
+
+  const memberNamespaces = await listNamespacesForUser(db, user.id);
+  return memberNamespaces[0];
+}
+
+/**
+ * Resolves the primary administrator user row across both env/demo mode
+ * (`local:<ADMIN_USERNAME>`) and first-run Production Setup mode (where
+ * `ADMIN_PASSWORD` is unset and the founder claimed a custom `@handle` via
+ * `POST /auth/setup`, resulting in `local:<handle>`).
+ */
+export async function resolvePrimaryAdminUser(
+  d1: D1Database,
+  db: Db,
+  env: AdminAuthEnv
+): Promise<UserRow | undefined> {
+  const authConfig = resolveAdminAuthConfig(env);
+  const configuredSubject = buildLocalAccountSubject(authConfig.username);
+  const configuredUser = await findUserBySubject(db, configuredSubject);
+  if (configuredUser) {
+    return configuredUser;
+  }
+
+  // Only fall back to the earliest D1-claimed local admin when ADMIN_PASSWORD
+  // is unset (unconfigured Production mode using `/auth/setup`).
+  if (authConfig.password !== null) {
+    return undefined;
+  }
+
+  const row = await d1
+    .prepare(
+      `SELECT u.id AS id, u.tessera_sub AS tesseraSub, u.created_at AS createdAt
+       FROM users u
+       INNER JOIN namespaces n ON n.created_by = u.id
+       INNER JOIN namespace_directory_meta m ON m.namespace_id = n.id
+       WHERE u.tessera_sub LIKE 'local:%'
+         AND m.role = 'admin'
+       ORDER BY u.created_at ASC, u.id ASC
+       LIMIT 1`
+    )
+    .first<UserRow>();
+  return row ?? undefined;
+}
+
+/**
+ * Resolves the primary administrator's canonical public Git namespace across
+ * both env/demo mode and first-run Production Setup mode.
+ */
+export async function resolvePrimaryAdminNamespace(
+  d1: D1Database,
+  db: Db,
+  env: AdminAuthEnv
+): Promise<NamespaceRow | undefined> {
+  const user = await resolvePrimaryAdminUser(d1, db, env);
   if (!user) return undefined;
 
   const ownedRows = await db

@@ -1,69 +1,65 @@
-# 05 — ACTUAL IMPLEMENTATION STATUS & FEATURE LEDGER
+# 05 · Actual Implementation Status Ledger
 
-- **Document ID**: `005-ACTUAL-IMPLEMENTATION-STATUS`
-- **Baseline Reference**: `/notes/FORENSIC-PRODUCTION-AUDIT-REPORT.md`
-- **Current Phase Progress**: `Phase 04 Completed (4 / 4 Phases Executed — 100% Complete)`
+Truth ledger distinguishing what is **actually working in Production**, what is **Demo-only**, and what is **broken, simulated, or missing** at the frozen baseline (`2026-11-26`), plus phase tracking.
 
 ---
 
-## 1. Currently Working Actual Production & Demo Features (Live Status After Phase 04)
+## 1. Currently Working Features (Verified at Baseline)
 
-| Feature Domain                        | Specific Capability                                                                                                                                                                                                                                                                           | Backend / Storage Engine                                                               | Production Status                                  |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| **Git Smart HTTP v2**                 | `GET /:owner/:repo/info/refs?service=git-upload-pack` & `git-receive-pack`                                                                                                                                                                                                                    | Worker + D1 + `RepoDurableObject`                                                      | **100% Working**                                   |
-| **Git Clone / Fetch**                 | `POST /:owner/:repo/git-upload-pack` (`ls-refs`, streaming `fetch`, delta assembly)                                                                                                                                                                                                           | Worker + R2 (`REPO_BUCKET`) + DO Pack Catalog                                          | **100% Working**                                   |
-| **Git Push**                          | `POST /:owner/:repo/git-receive-pack` (lease lock, streaming R2 upload, 2-pass indexer, `.idx` + `.pi` generation, ref commit, compaction queue, `repo-branch` KV eviction)                                                                                                                   | Worker + R2 + DO SQLite + D1 + `ROUTES` KV + `REPO_TASKS_QUEUE`                        | **100% Working (Upgraded in Phase 03)**            |
-| **Authentication & Primary Handle**   | Primary Admin (`AUTH_ADMIN_PASSWORD`) + Directory User login (`user_credentials`), Argon2id verify, rate limiting, rotating session cookies, deterministic owned-namespace `primaryNamespaceSlug` (`BUG-NEW-01` fixed)                                                                        | `AuthDurableObject` + D1 (`users`, `sessions`, `user_credentials`, `namespaces`)       | **100% Working (Upgraded in Phase 01)**            |
-| **Personal Access Tokens**            | Mint, list, and revoke PATs (`goc_...`) with `namespace`, `repo`, and admin `global` (`*`) scopes (`pull` / `push`)                                                                                                                                                                           | D1 (`personal_access_tokens`, `pat_namespace_grants`, `pat_repo_grants`)               | **100% Working**                                   |
-| **Repository Lifecycle & KV Hygiene** | Create repo (with optional `README.md` or `.vibtools/profile/README.md`), toggle `public`/`private`, edit description, pin to profile, pin to homepage, public-only `ROUTES` KV policy in demo seeder, full `ROUTES` + `repo-branch` KV cleanup on delete (`BUG-NEW-06`, `BUG-NEW-07` fixed)  | D1 (`repositories`) + `ROUTES` KV + `RepoDurableObject` + R2                           | **100% Working (Upgraded in Phase 03)**            |
-| **Site Admin Cross-Namespace RBAC**   | Site Admin (`role === "admin"`) access to `"Storage"` (`/:owner/:repo/admin`), private repository views, `/:owner` private repo listings, and cross-namespace web file & `.vibtools` profile README commits (`BUG-NEW-02`, `BUG-NEW-03` fixed)                                                | `src/worker/routes/ui/helpers.ts`, `overview.ts`, `authRepositories.ts`                | **100% Working (Upgraded in Phase 01)**            |
-| **Web File Editor & Commit Engine**   | In-browser file editing & markdown preview (`BlobEditorIsland`, `ProfileReadmeEditorIsland`) producing real Git commits & packfiles, preserving `100755` executable mode, rejecting file/directory conflicts, enqueuing compaction, and evicting OID-keyed README caches (`BUG-NEW-12` fixed) | `commitRepositoryFile` (`src/worker/git/commitFile.ts`) + R2 + DO + `REPO_TASKS_QUEUE` | **100% Working (Upgraded in Phase 02 & Phase 03)** |
-| **Repository Browsing UI**            | Repo overview, README rendering, branch/tag ref switcher, tree browser, syntax-highlighted blob view (with live repo activity banner: `BUG-NEW-11` fixed), raw download, commit history, commit diff, and error boundary preserving custom branding & viewer (`BUG-NEW-08` fixed)             | SSR Pages + Hydrated Islands + R2 Pack Reader + Cache API                              | **100% Working (Upgraded in Phase 04)**            |
-| **System Admin Console & Repo Admin** | `/admin/*` & `/:owner/:repo/admin/*` (with full D1/KV/cache invalidation on `HEAD` & `refs` updates and structured logging + sanitized 500 JSON responses: `BUG-NEW-05`, `BUG-NEW-09` fixed)                                                                                                  | `systemAdmin.ts`, `admin.ts`, D1, KV, R2, DO, Queues                                   | **100% Working (Upgraded in Phase 03 & Phase 04)** |
+| Domain | Feature | Runtime Verification Proof | Parity Note |
+| :--- | :--- | :--- | :--- |
+| **Git Smart HTTP v2** | `GET /info/refs`, `POST /git-upload-pack` (`ls-refs`, streaming `fetch`), `POST /git-receive-pack` (streaming pack ingest, lease lock) | `src/worker/routes/git.ts`, `streamReceivePack.ts`, `uploadStream/index.ts`, verified by `test:workers` | Incremental fetch fails `503` if pack `.refs` missing & Queues unbound (`F-09`); v0/v1 rejected (`F-17`) |
+| **Auth Core** | PBKDF2-SHA256 (`100k` iter, 16B salt) verification, AES-GCM-256 `goc_sess_` sealed cookies, same-origin CSRF checks, PAT generation/scoping/revocation | `src/worker/auth/{session,pat,origin}.ts`, `authLogin.ts`, `authTokens.ts`, verified by `test:auth` | `/auth/setup`, D1 primary admin UI, session revocation & HTTP cookies have bugs (`F-02`–`F-08`) |
+| **Control-Plane CRUD** | User creation/edit/disable/delete, Namespace rename & KV cache cleanup, Repo create/visibility/description/pin/`homePinned`/delete, Site Branding CRUD + R2 logo/favicon/og uploads | `src/worker/routes/{systemAdmin,authRepositories}.ts`, `src/worker/db/d1/dal/` | Cold branch lookup caps at `60` (`F-18`); footer Profile link breaks on `admin` (`F-01`) |
+| **Repo Code Browser** | SSR overview, directory tree, syntax-highlighted blob view, commit list, merge commit expansion, commit diff inspection, markdown README rendering | `src/worker/routes/ui/{overview,tree,blob,commits}.ts`, `src/client/pages/*` | `rawpath` rejects direct opens (`F-16`) |
+| **Web Single-File Edit** | Create README, create new text file, edit existing text file (`PUT /auth/api/repositories/:id/file`, `profile-readme`), committing directly to DO + R2 pack | `src/worker/git/commitFile.ts`, `authRepositories.ts:361-525`, `blob-editor.tsx` | Missing upload/delete/rename/folder/branch/tag UI; stamps `@local.dev` email (`F-12`) |
+| **Repo DO & Pack Tools** | Pack catalog inspection, OID/Commit debug inspection, stale pack removal (`DELETE /admin/pack/:key`), repo purge (`DELETE /admin/purge`) | `src/worker/routes/admin.ts`, `src/worker/do/repo/repoDO.ts`, `compactionCard.tsx` | Compaction hangs `"queued"` without Queues (`F-10`) |
+| **Deploy Automation** | D1/KV/R2/Queue resource creation & ID resolution, Free vs Paid Wrangler config synthesis, idempotent D1 migrations | `scripts/cf-auto-deploy.mjs`, `cf-auto-deploy-lib.mjs` (`8/8` node tests pass) | Secret upload runs post-deploy + creates unused secrets (`F-20`) |
 
 ---
 
-## 2. Phase-by-Phase Production Upgrade Tracker
+## 2. Demo-Mode-Only Features (Compiled / Gated Out in Production)
 
-| Phase        | Bug IDs      | Feature / Subsystem Being Upgraded to 100% Production Readiness                                                                                                                   | Current Status           |
-| ------------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| **Phase 01** | `BUG-NEW-01` | User-owned namespace (`createdBy === userId`) priority in `listNamespacesForUser` so admin-created accounts never hijack `viewer.primaryNamespaceSlug` or `/user/profile` updates | **COMPLETED (Phase 01)** |
-| **Phase 01** | `BUG-NEW-02` | Site Admin (`role === "admin"`) access to `"Storage"` (`/:owner/:repo/admin`), private repository pages, and private repos on `/:owner` across non-member namespaces              | **COMPLETED (Phase 01)** |
-| **Phase 01** | `BUG-NEW-03` | Site Admin (`role === "admin"`) authorization on `PUT /auth/api/repositories/:id/file` and `PUT /auth/api/repositories/:id/profile-readme`                                        | **COMPLETED (Phase 01)** |
-| **Phase 02** | `BUG-NEW-04` | Automatic `REPO_TASKS_QUEUE` compaction task dispatch after web file commits when `finalized.shouldQueueCompaction` is true                                                       | **COMPLETED (Phase 02)** |
-| **Phase 02** | `BUG-NEW-10` | Executable file mode (`100755`) preservation and file-vs-directory path conflict rejection in `upsertTreePath`                                                                    | **COMPLETED (Phase 02)** |
-| **Phase 03** | `BUG-NEW-05` | D1 `repositories.updatedAt` bump, `repo-branch:<id>` KV eviction, and `/_cache/refs` purge on `PUT /:owner/:repo/admin/head` & `PUT /:owner/:repo/admin/refs`                     | **COMPLETED (Phase 03)** |
-| **Phase 03** | `BUG-NEW-06` | `repo-branch:<repositoryId>` KV eviction during `handleRepositoryDeleteMessage`                                                                                                   | **COMPLETED (Phase 03)** |
-| **Phase 03** | `BUG-NEW-07` | Public-only `ROUTES` KV invariant for seeded demo repositories (`infra-notes` excluded) and namespace-scoped check in `ensureDemoRepositoriesSeeded`                              | **COMPLETED (Phase 03)** |
-| **Phase 03** | `BUG-NEW-12` | `repo-branch:<repositoryId>` KV eviction on push/web-commit and aligned README cache invalidation keys                                                                            | **COMPLETED (Phase 03)** |
-| **Phase 04** | `BUG-NEW-08` | Custom site branding and signed-in `viewer` preservation on all SSR error/400/404 pages + 500 error message sanitization when `LOG_LEVEL !== "debug"`                             | **COMPLETED (Phase 04)** |
-| **Phase 04** | `BUG-NEW-09` | Structured warning logs and sanitized 500 JSON responses in `handleRefsApi` and all remaining `routes/admin.ts` endpoints                                                         | **COMPLETED (Phase 04)** |
-| **Phase 04** | `BUG-NEW-11` | Active repository receive/compaction status banner (`loadUiRepoActivity`) on direct `GET /:owner/:repo/blob` requests                                                             | **COMPLETED (Phase 04)** |
+| Feature | How Separated | Production Behavior |
+| :--- | :--- | :--- |
+| **`POST /auth/demo-login`** (`admin` & `alex-dev` 1-click sign-in) | `if (import.meta.env.PROD \|\| !isDemoModeEnabled(c.env)) return 403` (`authLogin.ts:680`) | Compiled out & returns `403` in Production |
+| **Quick Demo Login UI Card & Test Credentials Display** | `showDemoUi = !import.meta.env.PROD && demoMode` (`AuthSignInPage.tsx:48,178-220`) | Stripped cleanly from `/auth` in Production |
+| **Lazy Workspace Seeding (`ensureDemoTestUserSeeded`)** | `if (import.meta.env.PROD) return` (`index.ts:63,77,175,226`, `authLogin.ts:349`) | Never executes in Production (`users` starts empty for `/auth/setup`) |
+| **Default Demo Password Fallback (`admin123`)** | Blocked when `import.meta.env.PROD` or `AUTH_MODE=production` (`adminAuth.ts:153-159`) | Fails closed (`password: null`) until `/auth/setup` or `ADMIN_PASSWORD` secret |
 
 ---
 
-## 3. Completed Phase Upgrades Log
+## 3. Broken, Simulated, Missing or Unverified Features (Active Backlog)
 
-### Phase 01 Completed (`2026-11-26`)
+1. **Footer `Profile` link (`F-01` — BROKEN + TEST FAILING):** `footer.tsx:110` links to `/${slug}` instead of `/profile/${slug}` -> collides with `/admin` and fails `test/demo-user-mock-repo.worker.test.ts:155`.
+2. **Production `/auth/setup` Custom Handle (`F-02` — BROKEN):** Custom handle breaks `isPrimaryAdmin`, primary-admin deletion protection, and SSR ownership flags.
+3. **D1 Primary Admin Password Management (`F-03` — UI BLOCKED):** UI disables change/reset even when `ADMIN_PASSWORD` is unset.
+4. **Atomic `/auth/setup` (`F-04` — MISSING):** Partial D1 failure locks `/auth/setup`.
+5. **Session Revocation on Password Rotation (`F-05` — MISSING):** Old 30-day cookies remain active.
+6. **Accurate Auth Source Labels (`F-06` — MISLEADING):** Shows `ADMIN_PASSWORD set` / `(env)` when using D1 auth.
+7. **Atomic/Resilient Rate Limiting (`F-07` — WEAK):** KV RMW race + fail-open behavior.
+8. **HTTP Plain-LAN Auth Cookies (`F-08` — BROKEN ON HTTP):** `__Host-` + `Secure` dropped outside HTTPS/localhost.
+9. **Queue-less Incremental `git fetch` (`F-09` — BROKEN `503`):** `.refs` backfill never executes without `REPO_TASKS_QUEUE`.
+10. **Queue-less / Free-Tier Compaction (`F-10` — BROKEN / STALLED):** Hangs `"queued"` or risks CPU Error `1102`.
+11. **Real Homepage Repo Language/Topics & Neutral Branding (`F-11` — SIMULATED/HARDCODED):** Client regex guesses languages, injects `TypeScript`/`Python`, falls back to `"Vib Tools"`.
+12. **Web Binary Upload, File Delete/Rename, Branch/Tag UI & Real Author Email (`F-12` — MISSING):** Only single-text upsert exists; commits use `${slug}@local.dev`.
+13. **Global Toast System (`F-13` — MISSING):** Silent clipboard catches & `window.location.reload()` timers.
+14. **PWA Support (`F-14` — MISSING):** No `manifest.webmanifest`, `sw.js`, or mobile install icons.
+15. **Component-Only Flat Design (`--radius: 0rem`) (`F-15` — NON-COMPLIANT):** Rounded corners, shadows, incomplete font fallback stack, and raw element duplication in islands.
+16. **`rawpath` Direct Tab Open (`F-16` — BROKEN):** Returns `403` without exact same-host `Referer`.
+17. **Git Smart HTTP v0/v1 Clients (`F-17` — BROKEN `400`):** Rejected despite JSDoc claims.
+18. **60+ Repo Admin Listing (`F-18` — INCOMPLETE):** Hardcodes `"main"` beyond #60 cold repos; uses standalone `getLimiter()`.
+19. **Reliable Post-Push Sync (`F-19` — FRAGILE):** `waitUntil` swallows D1/KV errors leaving stale cache version keys.
+20. **Deploy Secret Ordering & Hygiene (`F-20` — BUGGY):** Deploys Worker before uploading `SESSION_SECRET`; provisions 2 unused secrets.
+21. **Format Check & Bundle Bloat (`F-21` — FAILING/BLOAT):** `npm run format:check` fails on checkout; `22` unreferenced `/public/assets/aistudio/` files ship to `dist/client`.
 
-- **`BUG-NEW-01` Fixed**: `sortNamespacesForUser` & `listNamespacesForUser` in `src/worker/db/d1/dal/namespaces.ts:51-77` prioritize `createdBy === userId`.
-- **`BUG-NEW-02` Fixed**: `resolveUiRepoAccess`, `resolveAdminPageRepoAccess`, `resolveAdminApiRepoAccess` (`src/worker/routes/ui/helpers.ts`), and `handleOwnerOverview` (`src/worker/routes/ui/overview.ts`) authorize Site Admins (`canAccessAdminPanel(viewer.role)`).
-- **`BUG-NEW-03` Fixed**: `PUT /auth/api/repositories/:repositoryId/profile-readme` and `PUT /auth/api/repositories/:repositoryId/file` (`src/worker/routes/authRepositories.ts`) authorize Site Admins (`canAccessAdminPanel(viewer.role)`).
+---
 
-### Phase 02 Completed (`2026-11-26`)
+## 4. Phase Completion Status Tracker
 
-- **`BUG-NEW-04` Fixed**: `commitRepositoryFile` (`src/worker/git/commitFile.ts:395-412`) enqueues `{ kind: "compaction", doId: stub.id.toString(), repoId: input.doName }` on `input.env.REPO_TASKS_QUEUE` when `finalized.shouldQueueCompaction` is true.
-- **`BUG-NEW-10` Fixed**: `resolveUpsertTreeEntryPlan` & `upsertTreePath` (`src/worker/git/commitFile.ts:133-240`) preserve `100755` executable mode and reject file-vs-directory or non-regular entry (`40000`, `120000`, `160000`) path conflicts with `{ ok: false, reason: "invalid-path", detail }`.
-
-### Phase 03 Completed (`2026-11-26`)
-
-- **`BUG-NEW-05` Fixed**: `invalidateRepoRefsAndBranchCache` (`src/worker/routes/admin.ts:30-45`) bumps `repositories.updatedAt`, deletes `repo-branch:<repositoryId>` from `ROUTES` KV, and purges `/_cache/refs` on `PUT /:owner/:repo/admin/refs` and `PUT /:owner/:repo/admin/head`.
-- **`BUG-NEW-06` Fixed**: `handleRepositoryDeleteMessage` (`src/worker/tasks/repositoryDelete.ts:72`) deletes `repo-branch:<repositoryId>` from `ROUTES` KV alongside `deleteRouteCacheRecord`.
-- **`BUG-NEW-07` Fixed**: `seedSingleDemoRepository` (`src/worker/auth/demoSeed.ts:912-921`) writes to `ROUTES` KV only for `public` repositories (and deletes any entry for private repositories like `infra-notes`), while `ensureDemoRepositoriesSeeded` and `ensureDemoTestUserSeeded` check `listRepositoriesInNamespace`.
-- **`BUG-NEW-12` Fixed**: `handleReceivePackPOST` (`src/worker/routes/git.ts:227`) and `commitRepositoryFile` (`src/worker/git/commitFile.ts:437, 443-445`) delete `repo-branch:<repositoryId>` and include `oldOid` and `commitOid` in `refVariants` when purging `/_cache/readme` and `/_cache/owner-profile-readme`.
-
-### Phase 04 Completed (`2026-11-26`)
-
-- **`BUG-NEW-08` Fixed**: `resolvePublicErrorMessage` & `handleError` (`src/client/server/error.ts:58-120`) mask non-debug 500 error messages as `"Internal Server Error"`, load `loadSiteBranding(env)`, and thread `viewer` through `badRequest` and `handleError` in `helpers.ts`, `tree.ts`, `blob.ts`, `commits.ts`, and `overview.ts`.
-- **`BUG-NEW-09` Fixed**: `handleRefsApi` (`src/worker/routes/ui/refsApi.ts:32-49`) and all 5 remaining catch blocks in `src/worker/routes/admin.ts` log structured warnings and return sanitized 500 JSON responses.
-- **`BUG-NEW-11` Fixed**: `handleBlob` (`src/worker/routes/ui/blob.ts:245-253`) loads `progress = await loadUiRepoActivity(env, access)` and passes `progress` to `renderBlobDocumentResponse`.
+- **Baseline (Frozen):** Complete (`21` pending items across Phases `01`–`05`).
+- **Phase 01 (`F-01`–`F-08`):** Pending.
+- **Phase 02 (`F-09`, `F-10`, `F-17`–`F-19`):** Pending.
+- **Phase 03 (`F-11`, `F-12`, `F-16`):** Pending.
+- **Phase 04 (`F-13`–`F-15`):** Pending.
+- **Phase 05 (`F-20`, `F-21`):** Pending.

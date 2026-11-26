@@ -13,4 +13,5 @@ export type Viewer = {
   role: DirectoryRole;
   isPrimaryAdmin: boolean;
   hasPassword: boolean;
+  passwordManagedByEnv?: boolean;
 };

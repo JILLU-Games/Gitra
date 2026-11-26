@@ -1,5 +1,6 @@
 import {
   canAccessAdminPanel,
+  normalizeNamespaceHandle,
   sanitizeDisplayName,
   validateUserPassword,
 } from "@/shared/admin/panel";
@@ -11,6 +12,7 @@ import {
   DEFAULT_DEMO_USER_USERNAME,
   DEFAULT_POST_LOGIN_REDIRECT,
   isDemoModeEnabled,
+  isProductionRuntime,
   resolveAdminAuthConfig,
   resolveInitialAdminNamespaceSlug,
   sanitizeNextRedirect,
@@ -42,17 +44,20 @@ import {
   findNamespaceBySlug,
   findPrimaryAdminNamespace,
   findUserBySubject,
+  hasAnyRegisteredUsers,
   insertMembershipIfMissing,
   insertUserIfNew,
+  resolvePrimaryAdminUser,
   touchDirectoryLastActive,
   updateDirectoryDisplayName,
   updateDirectoryPasswordHash,
-  upsertNamespaceProfileMeta,
 } from "@/worker/db/d1/dal";
+import { upsertNamespaceProfileMeta } from "@/worker/db/d1/dal";
 import type { AppContext, AppRouter } from "./hono";
 import {
   AdminLoginRequestSchema,
   ChangePasswordRequestSchema,
+  ProductionSetupRequestSchema,
   ProfileMetaUpdateRequestSchema,
 } from "./requestSchemas";
 import { safeRedirect } from "./authShared";
@@ -103,6 +108,30 @@ async function readLoginPayload(c: AppContext): Promise<{
     // Fall through to empty payload so field validation surfaces missing_credentials.
   }
   return { username: "", password: "", next: "" };
+}
+
+async function readSetupPayload(c: AppContext): Promise<{
+  username: string;
+  displayName?: string;
+  password: string;
+  confirmPassword: string;
+  next: string;
+}> {
+  const contentType = c.req.header("content-type")?.toLowerCase() ?? "";
+  if (contentType.includes("application/json")) {
+    const rawBody = await safeParseJsonRequest(c.req.raw);
+    const parsed = ProductionSetupRequestSchema.safeParse(rawBody);
+    if (parsed.success) return parsed.data;
+    return { username: "", password: "", confirmPassword: "", next: "" };
+  }
+  try {
+    const form = await c.req.parseBody();
+    const parsed = ProductionSetupRequestSchema.safeParse(form);
+    if (parsed.success) return parsed.data;
+  } catch {
+    // Fall through to empty payload so field validation surfaces invalid_username.
+  }
+  return { username: "", password: "", confirmPassword: "", next: "" };
 }
 
 async function provisionAdminSession(args: {
@@ -173,7 +202,7 @@ async function provisionAdminSession(args: {
       createdAt: now,
     });
 
-    if (seedDemoRepos) {
+    if (!import.meta.env.PROD && seedDemoRepos) {
       await ensureDemoRepositoriesSeeded({
         env: c.env,
         db,
@@ -222,7 +251,15 @@ export function registerAuthLoginRoutes(router: AppRouter) {
 
       const errorCode = c.req.query("error") ?? undefined;
       const authConfig = resolveAdminAuthConfig(c.env);
-      const demoMode = authConfig.mode === "demo";
+      const demoMode = !import.meta.env.PROD && authConfig.mode === "demo";
+      const productionRuntime = !demoMode && isProductionRuntime(c.env);
+      const sessionOk = loadSessionConfig(c.env).ok;
+      const needsSetup =
+        productionRuntime &&
+        authConfig.password === null &&
+        sessionOk &&
+        !(await hasAnyRegisteredUsers(c.env.DB));
+      const sessionMissing = productionRuntime && !sessionOk;
 
       return await renderUiDocumentResponse(
         c.env,
@@ -230,6 +267,8 @@ export function registerAuthLoginRoutes(router: AppRouter) {
         {
           errorCode,
           demoMode,
+          needsSetup,
+          sessionMissing,
           demoUsername: demoMode ? authConfig.username : undefined,
           demoPassword: demoMode ? DEFAULT_DEMO_ADMIN_PASSWORD : undefined,
           demoUserUsername: demoMode ? DEFAULT_DEMO_USER_USERNAME : undefined,
@@ -264,7 +303,7 @@ export function registerAuthLoginRoutes(router: AppRouter) {
 
     const clientIp = extractClientIp(c.req.raw);
     const rateLimitKey = buildAuthRateLimitKey("login", clientIp, body.username);
-    const rateLimit = await checkAuthRateLimit(c.env, rateLimitKey);
+    const rateLimit = await checkAuthRateLimit(c.env, rateLimitKey, Date.now(), log);
     if (!rateLimit.allowed) {
       log.warn("auth:login-rate-limited", {
         ip: clientIp,
@@ -289,21 +328,28 @@ export function registerAuthLoginRoutes(router: AppRouter) {
         c,
         subject: verifiedAdmin.subject,
         initialNamespaceSlug: verifiedAdmin.namespaceSlug,
-        seedDemoRepos: verifiedAdmin.mode === "demo",
+        seedDemoRepos: !import.meta.env.PROD && verifiedAdmin.mode === "demo",
       });
 
       if (!sessionResult.ok) {
         return authErrorRedirect(c, sessionResult.reason, nextPath);
       }
-      await clearAuthRateLimit(c.env, rateLimitKey);
+      await clearAuthRateLimit(c.env, rateLimitKey, log);
       return safeRedirect(c, nextPath, 303);
     }
 
     // 2. Directory user account lookup by handle (`@slug` or `slug`).
-    // Primary admin accounts cannot sign in via their public `@namespace`
-    // handle—only via their configured `ADMIN_USERNAME` credential above.
+    // When `ADMIN_PASSWORD` is configured in env (or demo mode), primary admin
+    // accounts cannot sign in via their public `@namespace` handle—only via
+    // `ADMIN_USERNAME` above. When `ADMIN_PASSWORD` is unset in production and
+    // the initial admin was claimed in D1 via `/auth/setup`, D1 PBKDF2 auth
+    // authorizes that account.
     const normalizedHandle = body.username.trim().replace(/^@+/, "").toLowerCase();
-    if (normalizedHandle === DEFAULT_DEMO_USER_USERNAME && isDemoModeEnabled(c.env)) {
+    if (
+      !import.meta.env.PROD &&
+      normalizedHandle === DEFAULT_DEMO_USER_USERNAME &&
+      isDemoModeEnabled(c.env)
+    ) {
       await ensureDemoTestUserSeeded({
         env: c.env,
         db: c.var.db,
@@ -311,22 +357,23 @@ export function registerAuthLoginRoutes(router: AppRouter) {
         log,
       });
     }
-    const primaryAdminSubject = buildLocalAccountSubject(resolveAdminAuthConfig(c.env).username);
+    const authConfig = resolveAdminAuthConfig(c.env);
     const [account, primaryAdminUser] = await Promise.all([
       normalizedHandle
         ? findDirectoryAccountBySlug(c.env.DB, c.var.db, normalizedHandle)
         : Promise.resolve(null),
-      findUserBySubject(c.var.db, primaryAdminSubject),
+      resolvePrimaryAdminUser(c.env.DB, c.var.db, c.env),
     ]);
     const isPrimaryAdminAccount = Boolean(
       account && primaryAdminUser && account.userId === primaryAdminUser.id
     );
+    const allowD1AdminPassword = authConfig.password === null;
 
-    if (account && !isPrimaryAdminAccount && account.passwordHash) {
+    if (account && (!isPrimaryAdminAccount || allowD1AdminPassword) && account.passwordHash) {
       const passwordOk = await verifyPassword(body.password, account.passwordHash);
       if (passwordOk) {
         if (account.status === "disabled") {
-          await bumpAuthRateLimitFailure(c.env, rateLimitKey);
+          await bumpAuthRateLimitFailure(c.env, rateLimitKey, Date.now(), log);
           log.warn("auth:login-account-disabled", {
             userId: account.userId,
             slug: account.slug,
@@ -343,13 +390,13 @@ export function registerAuthLoginRoutes(router: AppRouter) {
         const now = Date.now();
         await touchDirectoryLastActive(c.env.DB, account.namespaceId, now);
         try {
-          await createSessionForUser(c.env, c, account.userId, now);
+          await createSessionForUser(c.env, c, account.userId, now, account.sessionEpoch);
         } catch (error) {
           log.error("auth:login-session-create-failed", { error: String(error) });
           return authErrorRedirect(c, "session_create_failed", nextPath);
         }
 
-        await clearAuthRateLimit(c.env, rateLimitKey);
+        await clearAuthRateLimit(c.env, rateLimitKey, log);
         log.info("auth:directory-user-login-success", {
           userId: account.userId,
           slug: account.slug,
@@ -365,7 +412,7 @@ export function registerAuthLoginRoutes(router: AppRouter) {
       }
     }
 
-    await bumpAuthRateLimitFailure(c.env, rateLimitKey);
+    await bumpAuthRateLimitFailure(c.env, rateLimitKey, Date.now(), log);
     log.info("auth:login-rejected", { reason: "invalid_credentials" });
     return authErrorRedirect(c, "invalid_credentials", nextPath);
   });
@@ -383,7 +430,7 @@ export function registerAuthLoginRoutes(router: AppRouter) {
     const viewer = await loadViewer(c);
     if (!viewer) return json({ ok: false, reason: "unauthorized" } as const, 401);
 
-    if (viewer.isPrimaryAdmin) {
+    if (viewer.isPrimaryAdmin && resolveAdminAuthConfig(c.env).password !== null) {
       return json({ ok: false, reason: "managed-by-env" } as const, 400);
     }
 
@@ -406,7 +453,7 @@ export function registerAuthLoginRoutes(router: AppRouter) {
 
     const clientIp = extractClientIp(c.req.raw);
     const rateLimitKey = buildAuthRateLimitKey("change-password", clientIp, viewer.userId);
-    const rateLimit = await checkAuthRateLimit(c.env, rateLimitKey);
+    const rateLimit = await checkAuthRateLimit(c.env, rateLimitKey, Date.now(), log);
     if (!rateLimit.allowed) {
       log.warn("auth:change-password-rate-limited", {
         userId: viewer.userId,
@@ -425,20 +472,43 @@ export function registerAuthLoginRoutes(router: AppRouter) {
 
     const matchesCurrent = await verifyPassword(currentPassword, account.passwordHash);
     if (!matchesCurrent) {
-      await bumpAuthRateLimitFailure(c.env, rateLimitKey);
+      await bumpAuthRateLimitFailure(c.env, rateLimitKey, Date.now(), log);
       log.warn("auth:change-password-invalid-current", { userId: viewer.userId });
       return json({ ok: false, reason: "invalid-current-password" } as const, 400);
     }
 
-    await clearAuthRateLimit(c.env, rateLimitKey);
+    await clearAuthRateLimit(c.env, rateLimitKey, log);
+    const now = Date.now();
     const nextHash = await hashPassword(newValidation.password);
-    await updateDirectoryPasswordHash(c.env.DB, account.namespaceId, nextHash, Date.now());
+    const { sessionEpoch } = await updateDirectoryPasswordHash(
+      c.env.DB,
+      account.namespaceId,
+      nextHash,
+      now
+    );
+
+    // Refresh the caller's session cookie with the bumped sessionEpoch while
+    // invalidating all prior session cookies for this account.
+    try {
+      await createSessionForUser(c.env, c, viewer.userId, now, sessionEpoch);
+    } catch (error) {
+      log.warn("auth:change-password-session-refresh-failed", {
+        userId: viewer.userId,
+        error: String(error),
+      });
+    }
+
     log.info("auth:change-password-success", {
       userId: viewer.userId,
       namespaceId: account.namespaceId,
+      sessionEpoch,
     });
 
-    return json({ ok: true } as const);
+    const response = json({ ok: true } as const);
+    c.res.headers.forEach((value, key) => {
+      response.headers.append(key, value);
+    });
+    return response;
   });
 
   // PUT /auth/api/profile: allow signed-in users to edit their display name,
@@ -507,9 +577,126 @@ export function registerAuthLoginRoutes(router: AppRouter) {
     } as const);
   });
 
+  // POST /auth/setup: one-time initial Production Admin claim when running in
+  // Production Mode without an env `ADMIN_PASSWORD` and with an empty D1 users
+  // table. Locks itself permanently as soon as any user exists in D1.
+  router.post(`/auth/setup`, async (c) => {
+    const log = c.var.logFor({ service: "AuthSetup" });
+    const violation = sameOriginViolation(c);
+    if (violation) {
+      log.warn("auth:setup-same-origin-violation");
+      return violation;
+    }
+
+    const authConfig = resolveAdminAuthConfig(c.env);
+    if (!isProductionRuntime(c.env) || authConfig.password !== null) {
+      return json({ error: "Initial production setup is unavailable" }, 403);
+    }
+
+    const body = await readSetupPayload(c);
+    const nextPath = sanitizeNextRedirect(body.next);
+
+    const sessionConfig = loadSessionConfig(c.env);
+    if (!sessionConfig.ok) {
+      log.warn("auth:setup-session-config-missing", { reason: sessionConfig.reason });
+      return authErrorRedirect(c, "session_create_failed", nextPath);
+    }
+
+    const clientIp = extractClientIp(c.req.raw);
+    const rateLimitKey = buildAuthRateLimitKey("setup", clientIp, "initial-admin");
+    const rateLimit = await checkAuthRateLimit(c.env, rateLimitKey, Date.now(), log);
+    if (!rateLimit.allowed) {
+      return authErrorRedirect(c, "rate_limited", nextPath, {
+        "Retry-After": String(rateLimit.retryAfterSeconds),
+      });
+    }
+
+    if (await hasAnyRegisteredUsers(c.env.DB)) {
+      await bumpAuthRateLimitFailure(c.env, rateLimitKey, Date.now(), log);
+      log.warn("auth:setup-already-claimed");
+      return authErrorRedirect(c, "setup_locked", nextPath);
+    }
+
+    const handleCheck = normalizeNamespaceHandle(body.username);
+    if (!handleCheck.ok) {
+      await bumpAuthRateLimitFailure(c.env, rateLimitKey, Date.now(), log);
+      return authErrorRedirect(c, "invalid_username", nextPath);
+    }
+
+    if (body.password !== body.confirmPassword) {
+      await bumpAuthRateLimitFailure(c.env, rateLimitKey, Date.now(), log);
+      return authErrorRedirect(c, "password_mismatch", nextPath);
+    }
+
+    const pwValidation = validateUserPassword(body.password);
+    if (!pwValidation.ok) {
+      await bumpAuthRateLimitFailure(c.env, rateLimitKey, Date.now(), log);
+      return authErrorRedirect(c, "weak_password", nextPath);
+    }
+
+    const now = Date.now();
+    const userId = generateUserId();
+    const namespaceId = generateNamespaceId();
+    const subject = buildLocalAccountSubject(handleCheck.slug);
+    const passwordHash = await hashPassword(pwValidation.password);
+    const displayName = sanitizeDisplayName(body.displayName || handleCheck.slug, handleCheck.slug);
+
+    // Execute all initial-admin D1 inserts in a single atomic batch so a
+    // mid-flight error rolls back cleanly and never strands a partial user row
+    // that permanently locks `/auth/setup`.
+    try {
+      const results = await c.env.DB.batch([
+        c.env.DB.prepare(
+          `INSERT INTO users (id, tessera_sub, created_at)
+           SELECT ?, ?, ?
+           WHERE NOT EXISTS (SELECT 1 FROM users LIMIT 1)`
+        ).bind(userId, subject, now),
+        c.env.DB.prepare(
+          `INSERT INTO namespaces (id, slug, created_by, created_at)
+           VALUES (?, ?, ?, ?)`
+        ).bind(namespaceId, handleCheck.slug, userId, now),
+        c.env.DB.prepare(
+          `INSERT INTO namespace_memberships (namespace_id, user_id, created_at)
+           VALUES (?, ?, ?)`
+        ).bind(namespaceId, userId, now),
+        c.env.DB.prepare(
+          `INSERT INTO namespace_directory_meta (
+             namespace_id, display_name, role, status, password_hash, session_epoch, last_active_at, updated_at
+           ) VALUES (?, ?, 'admin', 'active', ?, 1, ?, ?)`
+        ).bind(namespaceId, displayName, passwordHash, now, now),
+      ]);
+      if ((results[0]?.meta?.changes ?? 0) === 0) {
+        log.warn("auth:setup-concurrent-claim");
+        return authErrorRedirect(c, "setup_locked", nextPath);
+      }
+    } catch (error) {
+      const alreadyClaimed = await hasAnyRegisteredUsers(c.env.DB).catch(() => false);
+      if (alreadyClaimed) {
+        log.warn("auth:setup-already-claimed-batch", { error: String(error) });
+        return authErrorRedirect(c, "setup_locked", nextPath);
+      }
+      log.error("auth:setup-batch-failed", { error: String(error) });
+      return authErrorRedirect(c, "setup_failed", nextPath);
+    }
+
+    try {
+      await createSessionForUser(c.env, c, userId, now, 1);
+    } catch (error) {
+      log.error("auth:setup-session-create-failed", { error: String(error) });
+      return authErrorRedirect(c, "session_create_failed", nextPath);
+    }
+
+    await clearAuthRateLimit(c.env, rateLimitKey, log);
+    log.info("auth:production-admin-claimed", {
+      userId,
+      namespaceSlug: handleCheck.slug,
+    });
+    return safeRedirect(c, nextPath, 303);
+  });
+
   // POST /auth/demo-login: one-click local Development / Demo Mode sign-in.
-  // Automatically disabled in Production builds (`import.meta.env.PROD`), when
-  // `AUTH_MODE=production`, or whenever `ADMIN_PASSWORD` is configured in env.
+  // Compile-time eliminated in Production builds (`import.meta.env.PROD`), and
+  // disabled when `AUTH_MODE=production` or whenever `ADMIN_PASSWORD` is set.
   router.post(`/auth/demo-login`, async (c) => {
     const log = c.var.logFor({ service: "AuthLogin" });
     const violation = sameOriginViolation(c);
@@ -518,7 +705,7 @@ export function registerAuthLoginRoutes(router: AppRouter) {
       return violation;
     }
 
-    if (!isDemoModeEnabled(c.env)) {
+    if (import.meta.env.PROD || !isDemoModeEnabled(c.env)) {
       log.warn("auth:demo-login-disabled");
       return json({ error: "Demo login is disabled in production mode" }, 403);
     }

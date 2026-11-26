@@ -65,6 +65,7 @@ function sortUsers(list: AdminNamespaceEntry[]): AdminNamespaceEntry[] {
 
 export function AdminUsersIsland({
   primaryNamespaceSlug,
+  primaryPasswordManagedByEnv = true,
   users: initialUsers,
 }: AdminUsersIslandProps) {
   const [users, setUsers] = useState<AdminNamespaceEntry[]>(initialUsers);
@@ -413,11 +414,12 @@ export function AdminUsersIsland({
                   const canToggle = canToggleNamespaceStatus(entry);
                   const canRemove = canRemoveNamespaceEntry(entry);
                   const isBusy = busyId === entry.id;
-                  const loginStatusLabel = entry.isPrimaryAdmin
-                    ? "env / demo"
-                    : entry.hasPassword
-                      ? "password set"
-                      : "no password";
+                  const loginStatusLabel =
+                    entry.isPrimaryAdmin && primaryPasswordManagedByEnv
+                      ? "env / demo"
+                      : entry.hasPassword
+                        ? "password set"
+                        : "no password";
 
                   return (
                     <tr key={entry.id} className="transition-colors hover:bg-surfaceHover">
@@ -578,6 +580,7 @@ export function AdminUsersIsland({
         <UserFormModal
           mode="edit"
           initialUser={editingUser}
+          primaryPasswordManagedByEnv={primaryPasswordManagedByEnv}
           onClose={() => setEditingUser(null)}
           onCreated={handleUserCreated}
           onUpdated={handleUserUpdated}

@@ -9,23 +9,21 @@ import { renderUiDocumentResponse } from "./routes/uiResponse";
 import { loadSiteBranding } from "./branding";
 import { loadViewer } from "./auth/session";
 import {
-  buildLocalAccountSubject,
   DEFAULT_DEMO_USER_USERNAME,
   isDemoModeEnabled,
-  resolveAdminAuthConfig,
   resolveInitialAdminNamespaceSlug,
 } from "./auth/adminAuth";
 import { ensureDemoTestUserSeeded } from "./auth/demoSeed";
 import { createDb } from "./db/d1/client";
 import {
   findNamespaceBySlug,
-  findPrimaryAdminNamespace,
   listAllPublicNamespaceDirectory,
   listNamespacesForUser,
   listPublicNamespaceSummaries,
   listPublicRepositoriesWithNamespaces,
   listRepositoriesForUser,
   listRepositoryMetaMap,
+  resolvePrimaryAdminNamespace,
 } from "./db/d1/dal";
 import {
   computeNamespaceDirectoryTotals,
@@ -60,6 +58,7 @@ function resolveRequestOrigin(c: AppContext): string {
 }
 
 async function ensureDemoWorkspaceOnPublicEntry(c: AppContext): Promise<void> {
+  if (import.meta.env.PROD) return;
   if (!isDemoModeEnabled(c.env)) return;
   const existing = await findNamespaceBySlug(c.var.db, DEFAULT_DEMO_USER_USERNAME);
   if (existing) return;
@@ -73,15 +72,14 @@ async function ensureDemoWorkspaceOnPublicEntry(c: AppContext): Promise<void> {
 }
 
 app.get("/", async (c) => {
-  await ensureDemoWorkspaceOnPublicEntry(c);
+  if (!import.meta.env.PROD) {
+    await ensureDemoWorkspaceOnPublicEntry(c);
+  }
   const [viewer, branding] = await Promise.all([loadViewer(c), loadSiteBranding(c.env)]);
   const origin = resolveRequestOrigin(c);
   const [publicRows, primaryAdminNs] = await Promise.all([
     listPublicRepositoriesWithNamespaces(c.var.db),
-    findPrimaryAdminNamespace(
-      c.var.db,
-      buildLocalAccountSubject(resolveAdminAuthConfig(c.env).username)
-    ),
+    resolvePrimaryAdminNamespace(c.env.DB, c.var.db, c.env),
   ]);
   const primaryAdminSlug = primaryAdminNs?.slug ?? resolveInitialAdminNamespaceSlug(c.env);
 
@@ -169,15 +167,14 @@ app.get("/", async (c) => {
 });
 
 app.get("/explore", async (c) => {
-  await ensureDemoWorkspaceOnPublicEntry(c);
+  if (!import.meta.env.PROD) {
+    await ensureDemoWorkspaceOnPublicEntry(c);
+  }
   const [viewer, branding] = await Promise.all([loadViewer(c), loadSiteBranding(c.env)]);
   const origin = resolveRequestOrigin(c);
   const [publicRows, primaryAdminNs] = await Promise.all([
     listPublicRepositoriesWithNamespaces(c.var.db),
-    findPrimaryAdminNamespace(
-      c.var.db,
-      buildLocalAccountSubject(resolveAdminAuthConfig(c.env).username)
-    ),
+    resolvePrimaryAdminNamespace(c.env.DB, c.var.db, c.env),
   ]);
   const primaryAdminSlug = primaryAdminNs?.slug ?? resolveInitialAdminNamespaceSlug(c.env);
   const [publicMeta, publicNamespaces] = await Promise.all([
@@ -218,17 +215,16 @@ app.get("/explore", async (c) => {
 });
 
 app.get("/namespaces", async (c) => {
-  await ensureDemoWorkspaceOnPublicEntry(c);
+  if (!import.meta.env.PROD) {
+    await ensureDemoWorkspaceOnPublicEntry(c);
+  }
   const [viewer, branding] = await Promise.all([loadViewer(c), loadSiteBranding(c.env)]);
   const origin = resolveRequestOrigin(c);
   const query = (c.req.query("q") ?? "").trim().slice(0, 80);
 
   const [publicRows, primaryAdminNs] = await Promise.all([
     listPublicRepositoriesWithNamespaces(c.var.db),
-    findPrimaryAdminNamespace(
-      c.var.db,
-      buildLocalAccountSubject(resolveAdminAuthConfig(c.env).username)
-    ),
+    resolvePrimaryAdminNamespace(c.env.DB, c.var.db, c.env),
   ]);
   const primaryAdminSlug = primaryAdminNs?.slug ?? resolveInitialAdminNamespaceSlug(c.env);
   const allNamespaces = await listAllPublicNamespaceDirectory(

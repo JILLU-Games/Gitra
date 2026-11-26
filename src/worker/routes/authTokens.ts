@@ -69,6 +69,7 @@ async function renderUserSettingsView(
       viewerRole: viewer.role,
       isPrimaryAdmin: viewer.isPrimaryAdmin,
       hasPassword: viewer.hasPassword,
+      passwordManagedByEnv: viewer.passwordManagedByEnv,
       activeSection,
       namespaces: namespaces.map((ns) => ({ id: ns.id, slug: ns.slug })),
       repositories: repositoryRows.map((row) => ({

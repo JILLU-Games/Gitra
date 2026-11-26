@@ -1,163 +1,76 @@
-# 02 — PHASED UPDATE ROADMAP (A–Z Step-by-Step Implementation Plan)
+# 02 · A–Z Phased Update Roadmap
 
-- **Document ID**: `002-PHASED-UPDATE-ROADMAP`
-- **Total Phases**: `4` Sequential Scope-Locked Phases (`Phase 01` -> `Phase 02` -> `Phase 03` -> `Phase 04`)
-- **Total Bugs Resolved**: `12` (`BUG-NEW-01` through `BUG-NEW-12`)
+All **21 verified findings (`F-01`–`F-21`)** are organized into **5 strict, non-overlapping sequential phases** so each phase completes cleanly, passes regression gates, and leaves unrelated modules untouched.
 
 ---
 
-## Roadmap Overview
+## Phase Sequence Overview
 
-| Phase        | Phase Name                                                                | Locked Bugs                                            | Target Subsystems                                                                                                                                | Current Status        |
-| ------------ | ------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
-| **Phase 01** | Identity Ownership & Site Admin Cross-Namespace RBAC                      | `BUG-NEW-01`, `BUG-NEW-02`, `BUG-NEW-03`               | Primary namespace resolution, System Admin `"Storage"` & private repo access, cross-namespace Web Commit & Profile README RBAC                   | **PENDING (Next Up)** |
-| **Phase 02** | Web Commit Compaction Queue & Git Tree Mode/Conflict Integrity            | `BUG-NEW-04`, `BUG-NEW-10`                             | `commitRepositoryFile` compaction queue dispatch, `upsertTreePath` executable bit preservation & file/directory conflict rejection               | **PENDING**           |
-| **Phase 03** | D1/KV/Cache Coherency & Demo Seeder Privacy Invariants                    | `BUG-NEW-05`, `BUG-NEW-06`, `BUG-NEW-07`, `BUG-NEW-12` | Repo Admin `HEAD`/`refs` cache invalidation, `repo-branch:<id>` KV deletion on repo delete/push/commit, Demo Seeder private repo KV exclusion    | **PENDING**           |
-| **Phase 04** | SSR Error Boundary Shell Context, 500 Sanitization & Blob Activity Parity | `BUG-NEW-08`, `BUG-NEW-09`, `BUG-NEW-11`               | Custom branding & signed-in `viewer` preservation on error pages, 500 message sanitization in HTML & JSON endpoints, direct blob activity banner | **PENDING**           |
-
----
-
-## Phase 01: Identity Ownership & Site Admin Cross-Namespace RBAC
-
-### 1. Objective
-
-Eliminate the critical primary-namespace hijacking vulnerability when an admin creates users (`BUG-NEW-01`), and unify Site Admin (`role === "admin"`) authorization across Repo Admin diagnostics (`/:owner/:repo/admin`), private repository UI views, owner profiles (`/:owner`), web file commits, and `.vibtools` profile README commits (`BUG-NEW-02`, `BUG-NEW-03`).
-
-### 2. Strict Scope Lock
-
-- **Bugs Locked**: `BUG-NEW-01`, `BUG-NEW-02`, `BUG-NEW-03`
-- **Files Allowed to Edit**:
-  - `src/worker/db/d1/dal/namespaces.ts`
-  - `src/worker/routes/ui/helpers.ts`
-  - `src/worker/routes/ui/overview.ts`
-  - `src/worker/routes/authRepositories.ts`
-  - `test/phase04-logic.node-test.ts` (for regression tests)
-- **Zero Impact Outside Scope**: No changes to client React components, CSS, Git pack engine, Queue tasks, or Demo seeder.
-
-### 3. Step-by-Step Implementation Plan
-
-1. Update `listNamespacesForUser` in `src/worker/db/d1/dal/namespaces.ts:44-60` to sort namespaces owned by `userId` (`ns.createdBy === userId`) ahead of non-owned namespaces before alphabetical comparison.
-2. Update `resolveUiRepoAccess`, `resolveAdminPageRepoAccess`, and `resolveAdminApiRepoAccess` in `src/worker/routes/ui/helpers.ts` to treat `membership.kind === "signed-in-non-member" && canAccessAdminPanel(membership.viewer.role)` as authorized with full admin management visibility.
-3. Update `handleOwnerOverview` in `src/worker/routes/ui/overview.ts:111-125` so Site Admins (`canAccessAdminPanel(viewer?.role)`) also load private repositories in the namespace (`listRepositoriesInNamespace(db, namespace.id)`).
-4. Update `handleCommitProfileReadme` and `handleCommitRepositoryFile` in `src/worker/routes/authRepositories.ts:386-393, 457-464` to authorize `canAccessAdminPanel(viewer.role) || viewerIsNamespaceMember(...)`.
-5. Add unit/regression tests and run all verification gates.
-
-### 4. Phase 01 Verification Gates
-
-- `npm run typecheck`
-- `npx tsc --noEmit`
-- `npx --yes tsx --test test/phase04-logic.node-test.ts`
-- `npm run test`
-- `npm run format:check`
+| Phase | Focus Area | Findings Included | Gate Command |
+| :--- | :--- | :--- | :--- |
+| **Phase 01** | Regression Repair, Auth Separation, Primary-Admin & Session Security | `F-01`, `F-02`, `F-03`, `F-04`, `F-05`, `F-06`, `F-07`, `F-08` | `npm run typecheck && npm run test && npm run test:auth && npm run test:workers` |
+| **Phase 02** | Git Protocol, Ref Backfill, Compaction & Tier Reliability | `F-09`, `F-10`, `F-17`, `F-18`, `F-19` | `npm run typecheck && npm run test && npm run test:workers` |
+| **Phase 03** | Real Repo Metadata, Web Git Completeness & Raw Link Handling | `F-11`, `F-12`, `F-16` | `npm run typecheck && npm run test && npm run test:workers && npm run build` |
+| **Phase 04** | Global Component-Only UI (`--radius: 0rem`), Toast System & PWA | `F-13`, `F-14`, `F-15` | `npm run typecheck && npm run build && npm run test:workers` (+ headless browser check) |
+| **Phase 05** | Auto-Deploy Secret Timing, Unused Artifacts & Prettier Cleanliness | `F-20`, `F-21` | `node --test test/cf-auto-deploy.node-test.ts && npm run format:check && npm run build && npm run test:workers` |
 
 ---
 
-## Phase 02: Web Commit Compaction Queue & Git Tree Mode/Conflict Integrity
+## Detailed Step-by-Step Phase Plans
 
-### 1. Objective
-
-Ensure web file commits enqueue background pack compaction when `finalized.shouldQueueCompaction` is true (`BUG-NEW-04`), and ensure `upsertTreePath` preserves `100755` executable file modes and rejects destructive file-vs-directory path conflicts (`BUG-NEW-10`).
-
-### 2. Strict Scope Lock
-
-- **Bugs Locked**: `BUG-NEW-04`, `BUG-NEW-10`
-- **Files Allowed to Edit**:
-  - `src/worker/git/commitFile.ts`
-  - `test/phase04-logic.node-test.ts` (for regression tests)
-- **Zero Impact Outside Scope**: No changes to UI pages, Auth/RBAC routes, Admin routes, or KV caches.
-
-### 3. Step-by-Step Implementation Plan
-
-1. In `src/worker/git/commitFile.ts:127-187`, introduce `InvalidTreePathConflictError` and update `upsertTreePath` to:
-   - Preserve `100755` when updating an existing executable file (`existingEntry?.mode === "100755" ? "100755" : "100644"`).
-   - Throw `InvalidTreePathConflictError` if `isLeaf === true` and `existingEntry` exists with a non-regular file mode (`40000`, `120000`, `160000`).
-   - Throw `InvalidTreePathConflictError` if `isLeaf === false` and `existingEntry` exists with a non-directory mode (`!existingEntry.mode.startsWith("40000")`).
-2. Map `InvalidTreePathConflictError` in `commitRepositoryFile` to `{ ok: false, status: 400, reason: "invalid-path", detail: error.message }`.
-3. In `src/worker/git/commitFile.ts:347-360`, check `if (finalized.shouldQueueCompaction && args.env.REPO_TASKS_QUEUE)` after `finalized.status === "committed"` and enqueue `{ kind: "compaction", doId, repoId }`.
-4. Add unit/regression tests and run all verification gates.
-
-### 4. Phase 02 Verification Gates
-
-- `npm run typecheck`
-- `npx tsc --noEmit`
-- `npx --yes tsx --test test/phase04-logic.node-test.ts`
-- `npm run test`
-- `npm run format:check`
+### Phase 01 — Regression Repair, Auth & Session Security
+- **Findings:** `F-01`, `F-02`, `F-03`, `F-04`, `F-05`, `F-06`, `F-07`, `F-08`
+- **Why First:** Unblocks the currently failing `npm run test:workers` suite (`F-01`) and closes every Critical/High auth & setup lockout defect (`F-02`–`F-08`) before touching any feature or UI layer.
+- **Exact Steps:**
+  1. Fix `src/client/components/footer.tsx:110` to use `buildNamespaceProfileHref(viewer.primaryNamespaceSlug)` so `/admin` collision stops and `test/demo-user-mock-repo.worker.test.ts` turns green.
+  2. Introduce a single canonical D1 primary-admin resolver (handling custom `/auth/setup` handles cleanly) and replace duplicated `buildLocalAccountSubject(resolveAdminAuthConfig(...).username)` checks across `session.ts`, `systemAdmin.ts`, `index.ts`, and `ui/overview.ts`.
+  3. Make `/auth/setup` atomic via D1 batching (`F-04`).
+  4. Unlock `/user/settings/security` password change & `/admin/users` modal for D1-claimed primary admin (`passwordManagedByEnv === false`), and fix `"ADMIN_PASSWORD set"` / `"(env)"` status text (`F-03`, `F-06`).
+  5. Add session epoch / password-version validation in `session.ts` and bump it on password changes & admin resets (`F-05`).
+  6. Add in-memory defense-in-depth + safer failure behavior in `rateLimit.ts` (`F-07`), and adaptive HTTPS/HTTP session cookies in `cookies.ts` (`F-08`).
+- **Scope Lock Check:** No Git engine, homepage repo metadata, CSS theme, or deploy script edits allowed.
 
 ---
 
-## Phase 03: D1/KV/Cache Coherency & Demo Seeder Privacy Invariants
-
-### 1. Objective
-
-Ensure Repo Admin `HEAD` and `refs` mutations, repository deletions, CLI pushes, and web commits maintain 100% cache coherency across D1 `repositories.updatedAt`, `ROUTES` KV (`repo-branch:<id>`), and Cache API (`/_cache/*`) (`BUG-NEW-05`, `BUG-NEW-06`, `BUG-NEW-12`), and prevent `demoSeed.ts` from writing private repositories into the public `ROUTES` KV cache (`BUG-NEW-07`).
-
-### 2. Strict Scope Lock
-
-- **Bugs Locked**: `BUG-NEW-05`, `BUG-NEW-06`, `BUG-NEW-07`, `BUG-NEW-12`
-- **Files Allowed to Edit**:
-  - `src/worker/repositories/routeCache.ts`
-  - `src/worker/routes/admin.ts`
-  - `src/worker/tasks/repositoryDelete.ts`
-  - `src/worker/auth/demoSeed.ts`
-  - `src/worker/git/commitFile.ts`
-  - `src/worker/routes/git.ts`
-  - `test/phase04-logic.node-test.ts` (for regression tests)
-- **Zero Impact Outside Scope**: No changes to UI components, SSR error templates, or Git object parsers.
-
-### 3. Step-by-Step Implementation Plan
-
-1. Export `buildRepoBranchCacheKey` and `deleteRepoBranchCacheRecord` from `src/worker/repositories/routeCache.ts`.
-2. Update `PUT /:owner/:repo/admin/refs` and `PUT /:owner/:repo/admin/head` in `src/worker/routes/admin.ts:113-166` to touch `repositories.updatedAt`, delete `repo-branch:<repositoryId>`, and delete `/_cache/refs`.
-3. Update `handleRepositoryDeleteMessage` in `src/worker/tasks/repositoryDelete.ts:68-75` to call `deleteRepoBranchCacheRecord(env, body.repositoryId)`.
-4. Update `handleReceivePackPOST` (`src/worker/routes/git.ts:221-238`) and `commitRepositoryFile` (`src/worker/git/commitFile.ts:360-420`) to delete `repo-branch:<repositoryId>` and align README cache invalidation keys.
-5. Update `seedSingleDemoRepository` (`src/worker/auth/demoSeed.ts:914-919`) so only `visibility === "public"` writes to `ROUTES` KV, and update `ensureDemoRepositoriesSeeded` (`src/worker/auth/demoSeed.ts:1011`) to use `listRepositoriesInNamespace(args.db, args.namespaceId)`.
-
-### 4. Phase 03 Verification Gates
-
-- `npm run typecheck`
-- `npx tsc --noEmit`
-- `npx --yes tsx --test test/phase04-logic.node-test.ts`
-- `npm run test`
-- `npm run format:check`
+### Phase 02 — Git Protocol, Ref Backfill, Compaction & Tier Policy
+- **Findings:** `F-09`, `F-10`, `F-17`, `F-18`, `F-19`
+- **Why Second:** Stabilizes the core Cloudflare storage/queue engine across both `--no-queues`/Free Tier and Paid Tier once auth gates are verified green.
+- **Exact Steps:**
+  1. Add bounded inline `.refs` backfill fallback (or queue-free sidecar recovery) in `fetch/plan.ts` + `dispatch.ts` when `REPO_TASKS_QUEUE` is unbound (`F-09`).
+  2. Prevent manual compaction `"queued"` deadlocks under `--no-queues` and Free Tier alarm re-arming, and protect Free Tier against CPU Error `1102` (`F-10`).
+  3. Resolve `handleUploadPackPOST` protocol v0/v1 vs v2 contract & JSDoc alignment (`F-17`).
+  4. Replace standalone `getLimiter()` and the silent 60-repo `"main"` overflow default in `systemAdmin.ts` (`F-18`).
+  5. Harden post-push D1 `updatedAt` and KV/Cache invalidation in `git.ts` / `streamReceivePack.ts` (`F-19`).
+- **Scope Lock Check:** No auth logic, React styling tokens, or deploy script edits allowed.
 
 ---
 
-## Phase 04: SSR Error Boundary Shell Context, 500 Sanitization & Blob Activity Parity
+### Phase 03 — Real Repo Metadata, Web Git Completeness & Raw Link Guard
+- **Findings:** `F-11`, `F-12`, `F-16`
+- **Why Third:** Builds real repository data and web write capabilities on top of the stabilized Git/DO engine.
+- **Exact Steps:**
+  1. Remove regex-based language guessing and hardcoded `TypeScript`/`Python` filter fallbacks in `home-repos.tsx`; derive real server metadata; replace `"Vib Tools"` production defaults in `branding.ts` & `home-repos.tsx` (`F-11`).
+  2. Add tree delete, rename/move, binary upload, and branch/tag UI management wired cleanly to DO/commit APIs; support configurable user commit email instead of `${slug}@local.dev` (`F-12`).
+  3. Update `raw.ts` hotlink protection to handle `Sec-Fetch-Site` and forwarded host headers cleanly (`F-16`).
+- **Scope Lock Check:** No global CSS/token refactor or PWA changes yet (handled holistically in Phase 04).
 
-### 1. Objective
+---
 
-Preserve custom site branding and signed-in `viewer` navigation state across all repository 400/404/500 error pages (`BUG-NEW-08`), sanitize and log 500 error responses in `handleError`, `handleRefsApi`, and `routes/admin.ts` (`BUG-NEW-08`, `BUG-NEW-09`), and load the active repository status banner (`loadUiRepoActivity`) on direct `GET /:owner/:repo/blob` requests (`BUG-NEW-11`).
+### Phase 04 — Global Component-Only UI System, Global Toast & PWA
+- **Findings:** `F-13`, `F-14`, `F-15`
+- **Why Fourth:** Applies visual design consistency, global Toast notifications, and PWA support across all completed pages and islands in one unified pass.
+- **Exact Steps:**
+  1. Implement global `<ToastProvider />` & unified notification helper; replace silent clipboard `catch {}` blocks and abrupt `window.location.reload()` timers (`F-13`).
+  2. Enforce global UI rules in `src/client/styles/app.css` & `src/client/components/ui/*` (`--radius: 0rem`, exact Segoe/Helvetica font stack, no shadows, 1 border token, 2 accent tokens) and refactor islands to consume shared `ui/*` primitives cleanly (`F-15`).
+  3. Add PWA `public/manifest.webmanifest`, app icons, offline navigation `public/sw.js`, and `<Document>`/`shell.ts` registration (`F-14`).
+- **Scope Lock Check:** Zero backend API contract or Git engine modifications.
 
-### 2. Strict Scope Lock
+---
 
-- **Bugs Locked**: `BUG-NEW-08`, `BUG-NEW-09`, `BUG-NEW-11`
-- **Files Allowed to Edit**:
-  - `src/client/server/error.ts`
-  - `src/worker/routes/ui/helpers.ts`
-  - `src/worker/routes/ui/tree.ts`
-  - `src/worker/routes/ui/blob.ts`
-  - `src/worker/routes/ui/commits.ts`
-  - `src/worker/routes/ui/overview.ts`
-  - `src/worker/routes/ui/refsApi.ts`
-  - `src/worker/routes/admin.ts`
-  - `test/phase04-logic.node-test.ts` (for regression tests)
-- **Zero Impact Outside Scope**: No changes to D1 DALs, Git receive/fetch pipelines, or React islands.
-
-### 3. Step-by-Step Implementation Plan
-
-1. Update `handleError` in `src/client/server/error.ts:95-138` to load `loadSiteBranding(env)` and sanitize 500 messages to `"Internal Server Error"` when `env.LOG_LEVEL !== "debug"`.
-2. Update `badRequest` in `src/worker/routes/ui/helpers.ts:48-55` to accept `viewer?: ViewerIdentity | null`, and pass `viewer: access.viewer` in `blob.ts`, `tree.ts`, `commits.ts`, and `overview.ts`.
-3. Update `tree.ts:106-118` to use `renderUiDocumentResponse` with `viewer: access.viewer` and `status: 404`.
-4. Update `handleRefsApi` (`src/worker/routes/ui/refsApi.ts:32-40`) and the 5 remaining catch blocks in `src/worker/routes/admin.ts` (`lines 70, 85, 198, 215, 246`) to log warnings and return sanitized `"Internal Server Error"` with `Cache-Control: no-store`.
-5. Update `handleBlob` (`src/worker/routes/ui/blob.ts:241-251`) to call `const progress = await loadUiRepoActivity(env, access)` and pass `progress` to `renderBlobDocumentResponse`.
-
-### 4. Phase 04 & Final Release Verification Gates
-
-- `npm run build`
-- `npm run typecheck`
-- `npx tsc --noEmit`
-- `npx --yes tsx --test test/phase04-logic.node-test.ts`
-- `npm run test`
-- `npx vitest run --config vitest.config.ts test/github-feel.worker.test.ts`
-- `npm run format:check`
+### Phase 05 — Auto-Deploy Secret Hygiene, Bundle Cleanup & Formatting
+- **Findings:** `F-20`, `F-21`
+- **Why Last:** Finalizes CI/CD deployment hygiene, secret lifecycle, and formatting once runtime & static assets (`public/`) are in final shape.
+- **Exact Steps:**
+  1. Remove unused `CREDENTIAL_SECRET` & `ADMIN_BOOTSTRAP_SECRET` from `scripts/cf-auto-deploy-lib.mjs` (updating `test/cf-auto-deploy.node-test.ts`), and move secret reconciliation prior to initial `wrangler deploy` (`F-20`).
+  2. Delete the 22 unreferenced files under `public/assets/aistudio/` so they are omitted from `dist/client`, format `wrangler.paid.jsonc`, and enforce passing `npm run format:check` (`F-21`).
+- **Final Release Verification:** Run `npm run typecheck && npm run format:check && npm run test && node --test test/cf-auto-deploy.node-test.ts && npm run build && npm run test:workers`.
