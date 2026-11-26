@@ -18,6 +18,7 @@ import { isValidRefName } from "@/worker/git/operations/validation";
 import { buildPackV2 } from "@/worker/git/pack/build";
 import { resolveDeltasAndWriteIdx, scanPack } from "@/worker/git/pack/indexer";
 import { doPrefix, packIndexKey, packRefsKey, r2PackKey } from "@/worker/keys";
+import { deleteRepoBranchCacheRecord } from "@/worker/repositories/routeCache";
 
 const textEncoder = new TextEncoder();
 
@@ -130,6 +131,56 @@ function sanitizeIdentPart(raw: string, fallback: string): string {
   return cleaned.length > 0 ? cleaned : fallback;
 }
 
+export type UpsertTreeEntryPlan =
+  | {
+      ok: true;
+      mode: "100644" | "100755" | "40000";
+      existingSubtreeOid: string | null;
+    }
+  | {
+      ok: false;
+      reason: "invalid-path";
+      detail: string;
+    };
+
+export function resolveUpsertTreeEntryPlan(
+  existingEntries: readonly TreeEntry[],
+  segment: string,
+  isLeaf: boolean
+): UpsertTreeEntryPlan {
+  const existing = existingEntries.find((entry) => entry.name === segment);
+  if (isLeaf) {
+    if (existing && existing.mode !== "100644" && existing.mode !== "100755") {
+      return {
+        ok: false,
+        reason: "invalid-path",
+        detail: `Cannot overwrite non-regular file entry '${segment}' (mode ${existing.mode}).`,
+      };
+    }
+    return {
+      ok: true,
+      mode: existing?.mode === "100755" ? "100755" : "100644",
+      existingSubtreeOid: null,
+    };
+  }
+
+  if (existing && !existing.mode.startsWith("40000")) {
+    return {
+      ok: false,
+      reason: "invalid-path",
+      detail: `Path segment '${segment}' already exists as a non-directory entry (mode ${existing.mode}).`,
+    };
+  }
+  return {
+    ok: true,
+    mode: "40000",
+    existingSubtreeOid: existing ? existing.oid : null,
+  };
+}
+
+type UpsertTreePathResult =
+  { ok: true; treeOid: string } | { ok: false; reason: "invalid-path"; detail: string };
+
 async function upsertTreePath(args: {
   env: Env;
   doName: string;
@@ -139,7 +190,7 @@ async function upsertTreePath(args: {
   depth: number;
   blobOid: string;
   objectsByOid: Map<string, PackObjectInput>;
-}): Promise<string> {
+}): Promise<UpsertTreePathResult> {
   const segment = args.parts[args.depth]!;
   const isLeaf = args.depth === args.parts.length - 1;
 
@@ -147,32 +198,34 @@ async function upsertTreePath(args: {
     ? await readTree(args.env, args.doName, args.currentTreeOid, args.cacheCtx)
     : [];
 
-  let nextChildOid: string;
-  let nextChildMode: string;
+  const plan = resolveUpsertTreeEntryPlan(existingEntries, segment, isLeaf);
+  if (!plan.ok) {
+    return plan;
+  }
 
+  let nextChildOid: string;
   if (isLeaf) {
     nextChildOid = args.blobOid;
-    nextChildMode = "100644";
   } else {
-    const existingSubtree = existingEntries.find(
-      (entry) => entry.name === segment && entry.mode.startsWith("40000")
-    );
-    nextChildOid = await upsertTreePath({
+    const childResult = await upsertTreePath({
       env: args.env,
       doName: args.doName,
       cacheCtx: args.cacheCtx,
-      currentTreeOid: existingSubtree ? existingSubtree.oid : null,
+      currentTreeOid: plan.existingSubtreeOid,
       parts: args.parts,
       depth: args.depth + 1,
       blobOid: args.blobOid,
       objectsByOid: args.objectsByOid,
     });
-    nextChildMode = "40000";
+    if (!childResult.ok) {
+      return childResult;
+    }
+    nextChildOid = childResult.treeOid;
   }
 
   const nextEntries = existingEntries.filter((entry) => entry.name !== segment);
   nextEntries.push({
-    mode: nextChildMode,
+    mode: plan.mode,
     name: segment,
     oid: nextChildOid,
   });
@@ -182,7 +235,7 @@ async function upsertTreePath(args: {
   if (!args.objectsByOid.has(oid)) {
     args.objectsByOid.set(oid, { type: "tree", payload });
   }
-  return oid;
+  return { ok: true, treeOid: oid };
 }
 
 /**
@@ -239,7 +292,7 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
   const { oid: blobOid } = await createGitObject("blob", blobPayload);
   objectsByOid.set(blobOid, { type: "blob", payload: blobPayload });
 
-  const newTreeOid = await upsertTreePath({
+  const treeResult = await upsertTreePath({
     env: input.env,
     doName: input.doName,
     cacheCtx: freshCacheCtx,
@@ -249,6 +302,15 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
     blobOid,
     objectsByOid,
   });
+  if (!treeResult.ok) {
+    input.log.warn("web-commit:invalid-tree-path", {
+      repositoryId: input.repositoryId,
+      path: parts.join("/"),
+      detail: treeResult.detail,
+    });
+    return treeResult;
+  }
+  const newTreeOid = treeResult.treeOid;
 
   if (parentTreeOid && newTreeOid === parentTreeOid) {
     input.log.info("web-commit:unchanged", {
@@ -352,15 +414,36 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
       };
     }
 
+    if (finalized.shouldQueueCompaction && input.env.REPO_TASKS_QUEUE) {
+      const enqueueTask = input.env.REPO_TASKS_QUEUE.send({
+        kind: "compaction",
+        doId: stub.id.toString(),
+        repoId: input.doName,
+      }).catch((error) => {
+        input.log.warn("web-commit:compaction-enqueue-failed", {
+          repositoryId: input.repositoryId,
+          error: String(error),
+        });
+      });
+      if (input.cacheCtx.ctx) {
+        input.cacheCtx.ctx.waitUntil(enqueueTask);
+      } else {
+        await enqueueTask;
+      }
+    }
+
     const prevRepo = await findRepositoryById(input.db, input.repositoryId);
     const prevVersion = prevRepo ? String(prevRepo.updatedAt) : undefined;
     const nextUpdatedAt = prevRepo ? Math.max(now, prevRepo.updatedAt + 1) : now;
     await touchRepositoryUpdatedAt(input.db, input.repositoryId, nextUpdatedAt);
+    await deleteRepoBranchCacheRecord(input.env, input.repositoryId).catch(() => {});
 
     const shortBranch = shortRefName(branchRef);
     const parentDir = parts.slice(0, -1).join("/");
     const versionsToPurge = Array.from(new Set<string | undefined>([prevVersion, undefined]));
-    const refVariants = Array.from(new Set([shortBranch, branchRef]));
+    const refVariants = Array.from(
+      new Set([shortBranch, branchRef, ...(hasParentCommit ? [oldOid] : []), commitOid])
+    );
     const cacheDeletions: Promise<void>[] = [];
     for (const v of versionsToPurge) {
       cacheDeletions.push(

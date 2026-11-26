@@ -43,6 +43,7 @@ export async function handleCommits(c: AppContext<"/:owner/:repo/commits">) {
       owner,
       repo,
       refEnc: encodeURIComponent(ref),
+      viewer: access.viewer,
     });
   }
   const pageRaw = u.searchParams.get("page") || "";
@@ -142,6 +143,7 @@ export async function handleCommits(c: AppContext<"/:owner/:repo/commits">) {
       owner,
       repo,
       refEnc: encodeURIComponent(ref),
+      viewer: access.viewer,
     });
   }
 }
@@ -283,6 +285,7 @@ export async function handleCommit(c: AppContext<"/:owner/:repo/commit/:oid">) {
       owner,
       repo,
       refEnc: encodeURIComponent(oid),
+      viewer: access.viewer,
     });
   }
   const repoId = route.doName;
@@ -349,6 +352,7 @@ export async function handleCommit(c: AppContext<"/:owner/:repo/commit/:oid">) {
       repo,
       refEnc: encodeURIComponent(oid),
       path: "",
+      viewer: access.viewer,
     });
   }
 }

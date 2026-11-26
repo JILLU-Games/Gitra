@@ -48,14 +48,33 @@ export async function insertMembershipIfMissing(
   await db.insert(namespaceMemberships).values(row).onConflictDoNothing();
 }
 
-// Namespaces a user is a member of, ordered by slug for stable rendering.
+// Prioritize the user's own personal namespace (`createdBy === userId`) first
+// so `namespaces[0]?.slug` always resolves the user's true primary handle even
+// when an admin is added as an owner of alphabetically earlier namespaces.
+export function sortNamespacesForUser<T extends Pick<NamespaceRow, "slug" | "createdBy">>(
+  rows: readonly T[],
+  userId: string
+): T[] {
+  return [...rows].sort((a, b) => {
+    const aOwned = a.createdBy === userId ? 0 : 1;
+    const bOwned = b.createdBy === userId ? 0 : 1;
+    if (aOwned !== bOwned) return aOwned - bOwned;
+    return a.slug.localeCompare(b.slug);
+  });
+}
+
+// Namespaces a user is a member of, ordered with the user's owned namespace
+// first and remaining memberships ordered alphabetically by slug.
 export async function listNamespacesForUser(db: Db, userId: string): Promise<NamespaceRow[]> {
   const rows = await db
     .select({ ns: namespaces })
     .from(namespaceMemberships)
     .innerJoin(namespaces, eq(namespaceMemberships.namespaceId, namespaces.id))
     .where(eq(namespaceMemberships.userId, userId));
-  return rows.map((row) => row.ns).sort((a, b) => a.slug.localeCompare(b.slug));
+  return sortNamespacesForUser(
+    rows.map((row) => row.ns),
+    userId
+  );
 }
 
 export async function findMembership(

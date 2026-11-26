@@ -61,3 +61,16 @@ export async function deleteRouteCacheRecord(
   const log = createLogger(env.LOG_LEVEL, { service: "RouteCache" });
   log.debug("routes:delete-ok", { namespaceSlug, repoSlug });
 }
+
+export function repoBranchCacheKey(repositoryId: string): string {
+  return `repo-branch:${repositoryId}`;
+}
+
+export async function deleteRepoBranchCacheRecord(
+  env: Pick<Env, "ROUTES" | "LOG_LEVEL">,
+  repositoryId: string
+): Promise<void> {
+  await env.ROUTES.delete(repoBranchCacheKey(repositoryId));
+  const log = createLogger(env.LOG_LEVEL, { service: "RouteCache" });
+  log.debug("routes:delete-repo-branch-ok", { repositoryId });
+}

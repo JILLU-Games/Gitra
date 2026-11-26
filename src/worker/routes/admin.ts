@@ -1,5 +1,9 @@
 import { getRepoStub, isValidOid, json } from "@/worker/common";
+import { buildCacheKeyFrom, cacheDeleteJSON } from "@/worker/cache";
 import { sameOriginViolation } from "@/worker/auth/origin";
+import { findRepositoryById, touchRepositoryUpdatedAt } from "@/worker/db/d1/dal";
+import { type RepositoryRoute } from "@/worker/repositories/route";
+import { deleteRepoBranchCacheRecord } from "@/worker/repositories/routeCache";
 import { safeParseJsonRequest } from "@/shared/web";
 import type { RepositoryDeleteMessage } from "@/worker/tasks/queue";
 import { resolveAdminApiRepoAccess, type AdminRepoAccess } from "./ui/helpers";
@@ -23,6 +27,23 @@ async function requireRepoAdmin(c: AppContext): Promise<AdminRepoAccess> {
     return { kind: "response", response: violation };
   }
   return await resolveAdminApiRepoAccess(c);
+}
+
+async function invalidateRepoRefsAndBranchCache(
+  c: AppContext,
+  route: RepositoryRoute
+): Promise<void> {
+  const prevRepo = await findRepositoryById(c.var.db, route.repositoryId);
+  const prevVersion = prevRepo ? String(prevRepo.updatedAt) : undefined;
+  const nextUpdatedAt = prevRepo ? Math.max(Date.now(), prevRepo.updatedAt + 1) : Date.now();
+  await touchRepositoryUpdatedAt(c.var.db, route.repositoryId, nextUpdatedAt);
+  await deleteRepoBranchCacheRecord(c.env, route.repositoryId);
+  const versionsToPurge = Array.from(new Set<string | undefined>([prevVersion, undefined]));
+  await Promise.all(
+    versionsToPurge.map((v) =>
+      cacheDeleteJSON(buildCacheKeyFrom(c.req.raw, "/_cache/refs", { repo: route.doName, v }))
+    )
+  );
 }
 
 export function registerAdminRoutes(router: AppRouter) {
@@ -67,7 +88,8 @@ export function registerAdminRoutes(router: AppRouter) {
       const status = dryRun || res.status !== "queued" ? 200 : 202;
       return json(res, status, { "Cache-Control": "no-cache" });
     } catch (e) {
-      return json({ error: String(e) }, 500);
+      log.warn("admin:compaction-post-failed", { dryRun, error: String(e) });
+      return json({ error: "Failed to process compaction request" }, 500);
     }
   }
 
@@ -75,6 +97,7 @@ export function registerAdminRoutes(router: AppRouter) {
     const gate = await requireRepoAdmin(c);
     if (gate.kind === "response") return gate.response;
     const { route, limiter } = gate;
+    const log = c.var.logFor({ service: "AdminRoutes", repoId: route.doName });
     const stub = getRepoStub(c.env, route.doName);
     try {
       const res = await limiter.run("do:admin-clear-compaction", () =>
@@ -82,7 +105,8 @@ export function registerAdminRoutes(router: AppRouter) {
       );
       return json({ ok: true, ...res }, 200, { "Cache-Control": "no-cache" });
     } catch (e) {
-      return json({ ok: false, error: String(e) }, 500);
+      log.warn("admin:compaction-clear-failed", { error: String(e) });
+      return json({ ok: false, error: "Failed to clear compaction request" }, 500);
     }
   }
 
@@ -123,6 +147,9 @@ export function registerAdminRoutes(router: AppRouter) {
     }
     try {
       await limiter.run("do:admin-set-refs", () => stub.setRefs(refs.data));
+      await invalidateRepoRefsAndBranchCache(c, route).catch((error) => {
+        log.warn("admin:invalidate-refs-cache-failed", { error: String(error) });
+      });
       return new Response("OK\n");
     } catch (e) {
       log.error("admin:set-refs-failed", { error: String(e) });
@@ -158,6 +185,9 @@ export function registerAdminRoutes(router: AppRouter) {
     }
     try {
       await limiter.run("do:admin-set-head", () => stub.setHead(head.data));
+      await invalidateRepoRefsAndBranchCache(c, route).catch((error) => {
+        log.warn("admin:invalidate-head-cache-failed", { error: String(error) });
+      });
       return new Response("OK\n");
     } catch (e) {
       log.error("admin:set-head-failed", { error: String(e) });
@@ -188,6 +218,7 @@ export function registerAdminRoutes(router: AppRouter) {
     if (!isValidOid(commit)) {
       return new Response("Invalid commit\n", { status: 400 });
     }
+    const log = c.var.logFor({ service: "AdminRoutes", repoId: route.doName });
     const stub = getRepoStub(c.env, route.doName);
     try {
       const result = await limiter.run("do:admin-debug-commit", () =>
@@ -195,7 +226,8 @@ export function registerAdminRoutes(router: AppRouter) {
       );
       return json(result);
     } catch (e) {
-      return json({ error: String(e) }, 500);
+      log.warn("admin:debug-commit-failed", { commit, error: String(e) });
+      return json({ error: "Failed to inspect repository commit" }, 500);
     }
   });
 
@@ -207,12 +239,14 @@ export function registerAdminRoutes(router: AppRouter) {
     if (!isValidOid(oid)) {
       return new Response("Invalid OID\n", { status: 400 });
     }
+    const log = c.var.logFor({ service: "AdminRoutes", repoId: route.doName });
     const stub = getRepoStub(c.env, route.doName);
     try {
       const result = await limiter.run("do:admin-debug-oid", () => stub.debugCheckOid(oid));
       return json(result);
     } catch (e) {
-      return json({ error: String(e) }, 500);
+      log.warn("admin:debug-oid-failed", { oid, error: String(e) });
+      return json({ error: "Failed to inspect repository object" }, 500);
     }
   });
 
@@ -224,6 +258,7 @@ export function registerAdminRoutes(router: AppRouter) {
     if (!packKey) {
       return json({ error: "Pack key is required" }, 400);
     }
+    const log = c.var.logFor({ service: "AdminRoutes", repoId: route.doName });
     const stub = getRepoStub(c.env, route.doName);
     try {
       const result = await limiter.run("do:admin-remove-pack", () => stub.removePack(packKey));
@@ -243,7 +278,8 @@ export function registerAdminRoutes(router: AppRouter) {
       }
       return json({ ok: result.removed, ...result });
     } catch (e) {
-      return json({ ok: false, error: String(e) }, 500);
+      log.warn("admin:remove-pack-failed", { packKey, error: String(e) });
+      return json({ ok: false, error: "Failed to remove pack" }, 500);
     }
   });
 

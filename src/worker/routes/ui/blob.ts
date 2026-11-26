@@ -15,6 +15,7 @@ import {
   badRequest,
   canViewerManageRepo,
   isRequestPrivate,
+  loadUiRepoActivity,
   markRequestPrivate,
   resolveUiRepoAccess,
   type UiRepoAccess,
@@ -228,6 +229,7 @@ export async function handleBlob(c: AppContext<"/:owner/:repo/blob">) {
       repo,
       refEnc: encodeURIComponent(ref),
       path,
+      viewer: access.viewer,
     });
   }
   if (path && !isValidPath(path)) {
@@ -236,11 +238,13 @@ export async function handleBlob(c: AppContext<"/:owner/:repo/blob">) {
       repo,
       refEnc: encodeURIComponent(ref),
       path,
+      viewer: access.viewer,
     });
   }
   try {
     const result = await readPath(env, repoId, ref, path, cacheCtx);
     if (result.type !== "blob") return new Response("Not a blob\n", { status: 400 });
+    const progress = await loadUiRepoActivity(env, access);
     return await renderBlobDocumentResponse(c, {
       access,
       owner,
@@ -248,6 +252,7 @@ export async function handleBlob(c: AppContext<"/:owner/:repo/blob">) {
       ref,
       path,
       result,
+      progress,
     });
   } catch (e) {
     return handleError(env, e, `Error · ${owner}/${repo}`, {
@@ -255,6 +260,7 @@ export async function handleBlob(c: AppContext<"/:owner/:repo/blob">) {
       repo,
       refEnc: encodeURIComponent(ref),
       path,
+      viewer: access.viewer,
     });
   }
 }

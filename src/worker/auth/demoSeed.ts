@@ -11,8 +11,7 @@ import {
   insertMembershipIfMissing,
   insertRepositoryIfNew,
   insertUserIfNew,
-  listRepositoriesForNamespace,
-  listRepositoriesForUser,
+  listRepositoriesInNamespace,
   upsertNamespaceDirectoryMeta,
   upsertNamespaceProfileMeta,
   upsertRepositoryMeta,
@@ -30,7 +29,7 @@ import { createGitObject } from "@/worker/git/core/objects";
 import { buildPackV2 } from "@/worker/git/pack/build";
 import { resolveDeltasAndWriteIdx, scanPack } from "@/worker/git/pack/indexer";
 import { doPrefix, r2PackKey } from "@/worker/keys";
-import { putRouteCacheRecord } from "@/worker/repositories/routeCache";
+import { deleteRouteCacheRecord, putRouteCacheRecord } from "@/worker/repositories/routeCache";
 
 /**
  * Seeds starter Git repositories and a Dev Mode test user (`@alex-dev`) with
@@ -911,12 +910,16 @@ async function seedSingleDemoRepository(args: {
     });
   }
 
-  await putRouteCacheRecord(args.env, args.namespaceSlug, args.spec.slug, {
-    repositoryId: inserted.id,
-    namespaceId: args.namespaceId,
-    doName: inserted.doName,
-    updatedAt: args.now,
-  });
+  if (args.spec.visibility === "public") {
+    await putRouteCacheRecord(args.env, args.namespaceSlug, args.spec.slug, {
+      repositoryId: inserted.id,
+      namespaceId: args.namespaceId,
+      doName: inserted.doName,
+      updatedAt: args.now,
+    });
+  } else {
+    await deleteRouteCacheRecord(args.env, args.namespaceSlug, args.spec.slug);
+  }
 
   const stub = getRepoStub(args.env, inserted.doName);
   const leaseResult = await args.limiter.run(
@@ -1008,7 +1011,7 @@ export async function ensureDemoRepositoriesSeeded(args: {
   namespaceSlug: string;
   now: number;
 }): Promise<void> {
-  const existing = await listRepositoriesForUser(args.db, args.userId);
+  const existing = await listRepositoriesInNamespace(args.db, args.namespaceId);
   if (existing.length > 0) return;
 
   for (const spec of DEMO_REPOSITORIES) {
@@ -1096,7 +1099,7 @@ export async function ensureDemoTestUserSeeded(args: {
     createdAt: now,
   });
 
-  const existingRepos = await listRepositoriesForNamespace(args.db, namespace.id, null);
+  const existingRepos = await listRepositoriesInNamespace(args.db, namespace.id);
   if (existingRepos.length === 0) {
     for (const spec of DEMO_TEST_USER_REPOSITORIES) {
       await seedSingleDemoRepository({

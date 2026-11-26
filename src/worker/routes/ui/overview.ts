@@ -15,7 +15,11 @@ import {
   findPrimaryAdminNamespace,
 } from "@/worker/db/d1/dal/adminDirectory";
 import { findNamespaceBySlug } from "@/worker/db/d1/dal/namespaces";
-import { findRepositoryById, listRepositoriesForNamespace } from "@/worker/db/d1/dal/repositories";
+import {
+  findRepositoryById,
+  listRepositoriesForNamespace,
+  listRepositoriesInNamespace,
+} from "@/worker/db/d1/dal/repositories";
 import {
   getNamespaceProfileMeta,
   getRepositoryMeta,
@@ -92,7 +96,10 @@ export async function handleOwnerOverview(c: AppContext<"/:owner" | "/profile/:o
   const env = c.env;
   const owner = c.req.param("owner");
   if (!isValidOwnerRepo(owner)) {
-    return badRequest(env, "Invalid owner", "Owner contains invalid characters or length");
+    return badRequest(env, "Invalid owner", "Owner contains invalid characters or length", {
+      owner,
+      viewer: await loadViewer(c),
+    });
   }
   const db = c.var.db;
   const namespace = await findNamespaceBySlug(db, owner);
@@ -101,9 +108,12 @@ export async function handleOwnerOverview(c: AppContext<"/:owner" | "/profile/:o
     return await notFound(c);
   }
   const viewer = await loadViewer(c);
+  const isSiteAdmin = Boolean(viewer && canAccessAdminPanel(viewer.role));
   const adminSubject = buildLocalAccountSubject(resolveAdminAuthConfig(env).username);
   const [repos, directoryAccount, isMember, profileMeta, primaryAdminNs] = await Promise.all([
-    listRepositoriesForNamespace(db, namespace.id, viewer?.userId ?? null),
+    isSiteAdmin
+      ? listRepositoriesInNamespace(db, namespace.id)
+      : listRepositoriesForNamespace(db, namespace.id, viewer?.userId ?? null),
     findDirectoryAccountBySlug(env.DB, db, owner),
     viewer ? viewerIsNamespaceMember(db, viewer.userId, namespace.id) : Promise.resolve(false),
     getNamespaceProfileMeta(env.DB, namespace.id),
@@ -114,8 +124,9 @@ export async function handleOwnerOverview(c: AppContext<"/:owner" | "/profile/:o
     repos.map((row) => row.id)
   );
 
-  const canManageProfile = Boolean(viewer && canWriteRepositories(viewer.role) && isMember);
-  const isSiteAdmin = Boolean(viewer && canAccessAdminPanel(viewer.role));
+  const canManageProfile = Boolean(
+    viewer && canWriteRepositories(viewer.role) && (isMember || isSiteAdmin)
+  );
   const canPinRepos = canManageProfile || isSiteAdmin;
   const canFeatureHomepage = isSiteAdmin;
   const exposeRoleToViewer = isSiteAdmin;

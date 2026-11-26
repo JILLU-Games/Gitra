@@ -1,6 +1,5 @@
 import { readPath, type ReadPathResult } from "@/worker/git";
 import { isValidRef, isValidPath, OID_RE } from "@/shared/web";
-import { renderUiView } from "@/client/server/render";
 import { getErrorMessage, handleError, isGitReadMissError } from "@/client/server/error";
 import { buildCacheKeyFrom, cacheOrLoadJSONForRequestWithTTL } from "@/worker/cache";
 import { findRepositoryById } from "@/worker/db/d1/dal/repositories";
@@ -42,6 +41,7 @@ export async function handleTree(c: AppContext<"/:owner/:repo/tree">) {
       repo,
       refEnc: encodeURIComponent(ref),
       path,
+      viewer: access.viewer,
     });
   }
   if (path && !isValidPath(path)) {
@@ -50,6 +50,7 @@ export async function handleTree(c: AppContext<"/:owner/:repo/tree">) {
       repo,
       refEnc: encodeURIComponent(ref),
       path,
+      viewer: access.viewer,
     });
   }
 
@@ -102,37 +103,25 @@ export async function handleTree(c: AppContext<"/:owner/:repo/tree">) {
     // existing repo). Repo-not-found is already handled by `resolveUiRepoAccess`
     // upstream.
     if (!result) {
-      try {
-        const errHtml = await renderUiView(
-          env,
-          "error",
-          {
-            title: `${owner}/${repo} · Tree`,
-            message: "Not found",
-            owner,
-            repo,
-            refEnc: encodeURIComponent(ref),
-            path,
-          },
-          { viewer: access.viewer }
-        );
-        if (errHtml) {
-          return new Response(errHtml, {
-            status: 404,
-            headers: {
-              "Content-Type": "text/html; charset=utf-8",
-              "Cache-Control": isPrivate ? "no-store" : "no-store, no-cache, must-revalidate",
-            },
-          });
-        }
-      } catch (renderError) {
-        treeLog.warn("tree:not-found-render-failed", {
-          ref,
+      return await renderUiDocumentResponse(
+        env,
+        "error",
+        {
+          title: `${owner}/${repo} · Tree`,
+          message: "Not found",
+          owner,
+          repo,
+          refEnc: encodeURIComponent(ref),
           path,
-          error: getErrorMessage(renderError),
-        });
-      }
-      return new Response("Not found\n", { status: 404 });
+        },
+        {
+          status: 404,
+          cacheControl: isPrivate ? "no-store" : "no-store, no-cache, must-revalidate",
+          failureBody: "Not found\n",
+          failureStatus: 404,
+          viewer: access.viewer,
+        }
+      );
     }
     if (result.type === "tree") {
       const entries: UiTreeEntry[] = result.entries
@@ -217,6 +206,7 @@ export async function handleTree(c: AppContext<"/:owner/:repo/tree">) {
       repo,
       refEnc: encodeURIComponent(ref),
       path,
+      viewer: access.viewer,
     });
   }
 }

@@ -3,7 +3,7 @@ import type { DebugPackState, DebugStateSnapshot } from "@/worker/do/repo/debug"
 import type { HeadInfo, Ref, TreeEntry } from "@/worker/git";
 import type { PackRefIndexStatus } from "@/shared/git/types";
 import type { Viewer } from "@/client/server/viewer";
-import { canWriteRepositories } from "@/shared/admin/panel";
+import { canAccessAdminPanel, canWriteRepositories } from "@/shared/admin/panel";
 import { getHeadAndRefs, isSymlinkMode, isTreeMode } from "@/worker/git";
 import { shortRefName } from "@/shared/git/ref-display";
 import {
@@ -49,7 +49,13 @@ export async function badRequest(
   env: Env,
   title: string,
   message: string,
-  extra?: { owner?: string; repo?: string; refEnc?: string; path?: string }
+  extra?: {
+    owner?: string;
+    repo?: string;
+    refEnc?: string;
+    path?: string;
+    viewer?: Viewer | null;
+  }
 ): Promise<Response> {
   return handleError(env, new HttpError(400, message, { expose: true }), title, extra);
 }
@@ -240,12 +246,15 @@ export async function resolveUiRepoAccess(
       return { kind: "ok", route, cacheCtx, viewer, showActivityBanner: false };
     }
     const membership = await loadSessionMembership(c, route.namespaceId);
-    const showActivityBanner = membership.kind === "member";
+    const activeViewer = membership.kind === "anonymous" ? viewer : membership.viewer;
+    const showActivityBanner =
+      membership.kind === "member" ||
+      (membership.kind === "signed-in-non-member" && canAccessAdminPanel(activeViewer.role));
     return {
       kind: "ok",
       route,
       cacheCtx,
-      viewer: membership.kind === "anonymous" ? viewer : membership.viewer,
+      viewer: activeViewer,
       showActivityBanner,
     };
   }
@@ -257,11 +266,13 @@ export async function resolveUiRepoAccess(
       response: options.responseShape === "json" ? notFoundJson() : await notFound(c),
     };
   }
-  // Private: gate on session membership. PAT credentials are never honored
-  // for UI/data routes (PATs are git-only).
+  // Private: gate on session membership or Site Admin role. PAT credentials are
+  // never honored for UI/data routes (PATs are git-only).
   const membership = await loadSessionMembership(c, route.namespaceId);
   const log = c.var.logFor({ service: "UiAcl", repoId: route.doName });
-  if (membership.kind !== "member") {
+  const isSiteAdmin =
+    membership.kind === "signed-in-non-member" && canAccessAdminPanel(membership.viewer.role);
+  if (membership.kind !== "member" && !isSiteAdmin) {
     log.debug("ui-acl:private-non-member-404", { kind: membership.kind });
     // `loadSessionMembership` returns the viewer for signed-in-non-member
     // results; reuse it so the 404 page renders the correct shell without a
@@ -305,24 +316,24 @@ function adminForbidden(): Response {
 
 // Browser admin access is session-only. Public repositories may disclose
 // their existence, but private repositories return 404 to anonymous users
-// and signed-in non-members so the admin surface does not become a
-// membership oracle.
+// and signed-in non-members (except Site Admins) so the admin surface does
+// not become a membership oracle.
 export async function resolveAdminPageRepoAccess(
   c: AppContext,
   owner: string,
   repo: string
 ): Promise<AdminRepoAccess> {
+  const viewerForResolution = await loadViewer(c);
   if (!isValidOwnerRepo(owner) || !isValidOwnerRepo(repo)) {
     return {
       kind: "response",
       response: await badRequest(c.env, "Invalid owner/repo", "Owner or repo invalid", {
         owner,
         repo,
+        viewer: viewerForResolution,
       }),
     };
   }
-
-  const viewerForResolution = await loadViewer(c);
   const route = await resolveRepositoryRoute(c.env, owner, repo, {
     mode: viewerForResolution ? "allow-d1-fallback" : "route-cache-only",
     db: c.var.db,
@@ -340,9 +351,9 @@ export async function resolveAdminPageRepoAccess(
       response: c.redirect(`/auth?next=${encodeURIComponent(`/${owner}/${repo}/admin`)}`, 302),
     };
   }
-  if (membership.kind === "signed-in-non-member") {
+  if (membership.kind === "signed-in-non-member" && !canAccessAdminPanel(membership.viewer.role)) {
     if (route.visibility === "private") {
-      return { kind: "response", response: await notFound(c) };
+      return { kind: "response", response: await notFound(c, undefined, membership.viewer) };
     }
     return { kind: "response", response: adminForbidden() };
   }
@@ -367,7 +378,7 @@ function adminJsonError(message: string, status: number): Response {
 
 // JSON admin endpoints keep the same disclosure model as the admin page,
 // but public anonymous callers receive 401 instead of the sign-in redirect
-// and public signed-in non-members receive 403.
+// and public signed-in non-members (except Site Admins) receive 403.
 export async function resolveAdminApiRepoAccess(c: AppContext): Promise<AdminRepoAccess> {
   const owner = c.req.param("owner");
   const repo = c.req.param("repo");
@@ -390,7 +401,7 @@ export async function resolveAdminApiRepoAccess(c: AppContext): Promise<AdminRep
     }
     return { kind: "response", response: adminJsonError("Unauthorized", 401) };
   }
-  if (membership.kind === "signed-in-non-member") {
+  if (membership.kind === "signed-in-non-member" && !canAccessAdminPanel(membership.viewer.role)) {
     if (route.visibility === "private") {
       return { kind: "response", response: adminJsonError("Not found", 404) };
     }

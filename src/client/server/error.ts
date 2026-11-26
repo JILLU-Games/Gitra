@@ -1,7 +1,7 @@
-import { renderUiView } from "@/client/server/render";
 import type { Viewer } from "@/client/server/viewer";
 import { escapeHtml } from "@/shared/web/format";
 import { isHttpError } from "@/shared/web/http";
+import { loadSiteBranding } from "@/worker/branding";
 
 function isRecordWithProperty<Key extends string>(
   value: unknown,
@@ -56,6 +56,12 @@ export function resolveErrorStatus(error: unknown): number {
   return /not found/i.test(getErrorMessage(error)) ? 404 : 500;
 }
 
+export function resolvePublicErrorMessage(error: unknown, status: number, debug: boolean): string {
+  const rawMessage = getErrorMessage(error);
+  const exposeMessage = debug || status < 500 || (isHttpError(error) && error.expose);
+  return exposeMessage ? rawMessage : "Internal Server Error";
+}
+
 export function isGitReadMissError(error: unknown): boolean {
   const message = getErrorMessage(error);
   return /(ref not found|object not found|path not found|path not a directory|not a blob|not a tree|unsupported object)/i.test(
@@ -98,10 +104,12 @@ export async function handleError(
 ): Promise<Response> {
   const debug = String(env.LOG_LEVEL || "").toLowerCase() === "debug";
   const status = resolveErrorStatus(error);
-  const message = getErrorMessage(error);
+  const message = resolvePublicErrorMessage(error, status, debug);
   const stack = debug ? getErrorStack(error) : undefined;
+  const branding = await loadSiteBranding(env).catch(() => undefined);
 
   try {
+    const { renderUiView } = await import("@/client/server/render");
     const html = await renderUiView(
       env,
       "error",
@@ -114,7 +122,7 @@ export async function handleError(
         path: extra?.path,
         stack,
       },
-      { viewer: extra?.viewer ?? null }
+      { viewer: extra?.viewer ?? null, branding }
     );
     if (html) {
       return new Response(html, {

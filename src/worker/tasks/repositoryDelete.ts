@@ -2,7 +2,10 @@ import { type RepoQueueMessageHandle, type RepositoryDeleteMessage } from "./typ
 
 import { getRepoStub } from "@/worker/common";
 import { deleteRepositoryById } from "@/worker/db/d1/dal";
-import { deleteRouteCacheRecord } from "@/worker/repositories/routeCache";
+import {
+  deleteRepoBranchCacheRecord,
+  deleteRouteCacheRecord,
+} from "@/worker/repositories/routeCache";
 import { countSubrequest } from "@/worker/git/operations/limits";
 import { doPrefix } from "@/worker/keys";
 import { createQueueTaskContext, retryQueueMessage } from "./context";
@@ -61,12 +64,12 @@ export async function handleRepositoryDeleteMessage(
     return;
   }
 
-  // Step 2: ROUTES KV cleanup at the captured key. The route-cache-sync
-  // consumer is the canonical converger but a repo-delete message captured
-  // these slugs at enqueue time, so dropping them here is safe and avoids
-  // an extra D1 read.
+  // Step 2: ROUTES KV cleanup at the captured key and cached default branch.
+  // The route-cache-sync consumer is the canonical converger for route cache
+  // entries, and dropping both keys here avoids leaving orphaned KV entries.
   try {
     await deleteRouteCacheRecord(env, body.namespaceSlug, body.repoSlug);
+    await deleteRepoBranchCacheRecord(env, body.repositoryId);
     log.info("repo-delete:routes-deleted");
   } catch (error) {
     log.warn("repo-delete:retry", { step: "routes", error: String(error) });

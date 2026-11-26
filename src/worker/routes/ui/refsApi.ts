@@ -1,4 +1,5 @@
 import type { Ref } from "@/worker/git";
+import { getErrorMessage } from "@/client/server/error";
 import { classifyRef, formatRefOption } from "@/shared/git/ref-display";
 import { findRepositoryById } from "@/worker/db/d1/dal/repositories";
 import { isRequestPrivate, loadHeadAndRefsCached, resolveUiRepoAccess } from "./helpers";
@@ -30,11 +31,21 @@ export async function handleRefsApi(c: AppContext<"/:owner/:repo/api/refs">) {
       },
     });
   } catch (e) {
+    const log = c.var.logFor({ service: "UiRefsApi", repoId: route.doName });
+    log.warn("refs-api:load-failed", { error: getErrorMessage(e) });
+    const debug = String(env.LOG_LEVEL || "").toLowerCase() === "debug";
     return new Response(
-      JSON.stringify({ branches: [], tags: [], error: e instanceof Error ? e.message : String(e) }),
+      JSON.stringify({
+        branches: [],
+        tags: [],
+        error: debug ? getErrorMessage(e) : "Failed to load repository refs",
+      }),
       {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
       }
     );
   }

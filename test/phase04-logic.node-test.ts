@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
+import { resolvePublicErrorMessage } from "@/client/server/error";
 import { resolveActiveSidebarItem } from "@/shared/admin/panel";
 import {
   DEFAULT_SITE_BRANDING,
@@ -9,6 +10,7 @@ import {
   sanitizeBrandingUrl,
   sanitizeSupportEmail,
 } from "@/shared/branding";
+import { HttpError } from "@/shared/web/http";
 import { isAllowedOrigin } from "@/worker/auth/origin";
 import {
   AUTH_RATE_LIMIT_MAX_FAILURES,
@@ -17,6 +19,9 @@ import {
   evaluateAuthRateLimit,
   recordAuthRateLimitFailure,
 } from "@/worker/auth/rateLimit";
+import { sortNamespacesForUser } from "@/worker/db/d1/dal/namespaces";
+import { resolveUpsertTreeEntryPlan } from "@/worker/git/commitFile";
+import { repoBranchCacheKey, routeCacheKey } from "@/worker/repositories/routeCache";
 
 describe("phase 04 pure domain logic", () => {
   it("enforces strict protocol and host validation on same-origin checks", () => {
@@ -100,5 +105,87 @@ describe("phase 04 pure domain logic", () => {
     assert.equal(resolveActiveSidebarItem("system-admin-tokens"), "admin");
     assert.equal(resolveActiveSidebarItem("system-admin-settings"), "admin");
     assert.equal(resolveActiveSidebarItem("system-admin-security"), "admin");
+  });
+
+  it("prioritizes the user-owned namespace ahead of alphabetically earlier joined namespaces (BUG-NEW-01)", () => {
+    const sorted = sortNamespacesForUser(
+      [
+        { slug: "vibtools", createdBy: "usr_vibtools" },
+        { slug: "aaron", createdBy: "usr_aaron" },
+        { slug: "admin", createdBy: "usr_admin" },
+        { slug: "alex-dev", createdBy: "usr_alex" },
+      ],
+      "usr_admin"
+    );
+    assert.deepEqual(
+      sorted.map((ns) => ns.slug),
+      ["admin", "aaron", "alex-dev", "vibtools"]
+    );
+  });
+
+  it("preserves executable file mode (100755) and rejects file-vs-directory path conflicts (BUG-NEW-10)", () => {
+    const entries = [
+      { mode: "100644", name: "README.md", oid: "1".repeat(40) },
+      { mode: "100755", name: "deploy.sh", oid: "2".repeat(40) },
+      { mode: "40000", name: "src", oid: "3".repeat(40) },
+      { mode: "120000", name: "latest-link", oid: "4".repeat(40) },
+    ];
+
+    assert.deepEqual(resolveUpsertTreeEntryPlan(entries, "new.txt", true), {
+      ok: true,
+      mode: "100644",
+      existingSubtreeOid: null,
+    });
+    assert.deepEqual(resolveUpsertTreeEntryPlan(entries, "deploy.sh", true), {
+      ok: true,
+      mode: "100755",
+      existingSubtreeOid: null,
+    });
+    assert.deepEqual(resolveUpsertTreeEntryPlan(entries, "src", false), {
+      ok: true,
+      mode: "40000",
+      existingSubtreeOid: "3".repeat(40),
+    });
+
+    const overwriteDirAsFile = resolveUpsertTreeEntryPlan(entries, "src", true);
+    assert.equal(overwriteDirAsFile.ok, false);
+
+    const overwriteSymlinkAsFile = resolveUpsertTreeEntryPlan(entries, "latest-link", true);
+    assert.equal(overwriteSymlinkAsFile.ok, false);
+
+    const traverseFileAsDir = resolveUpsertTreeEntryPlan(entries, "README.md", false);
+    assert.equal(traverseFileAsDir.ok, false);
+  });
+
+  it("constructs canonical ROUTES KV keys for public route hints and cached default branches (BUG-NEW-05, BUG-NEW-06, BUG-NEW-12)", () => {
+    assert.equal(routeCacheKey("vibtools", "edge-kit"), "repo-route:v1:vibtools/edge-kit");
+    assert.equal(repoBranchCacheKey("repo_01HXYZ"), "repo-branch:repo_01HXYZ");
+  });
+
+  it("masks 500 error messages in non-debug mode while preserving exposed 4xx messages (BUG-NEW-08)", () => {
+    assert.equal(
+      resolvePublicErrorMessage(new Error("R2 SQLite internal failure"), 500, false),
+      "Internal Server Error"
+    );
+    assert.equal(
+      resolvePublicErrorMessage(new Error("R2 SQLite internal failure"), 500, true),
+      "R2 SQLite internal failure"
+    );
+    assert.equal(
+      resolvePublicErrorMessage(
+        new HttpError(400, "Ref format not allowed", { expose: true }),
+        400,
+        false
+      ),
+      "Ref format not allowed"
+    );
+    assert.equal(
+      resolvePublicErrorMessage(
+        new HttpError(503, "Repository busy", { expose: true }),
+        503,
+        false
+      ),
+      "Repository busy"
+    );
   });
 });

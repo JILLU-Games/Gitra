@@ -383,7 +383,10 @@ export function registerAuthRepositoryRoutes(router: AppRouter) {
     if (repo.slug !== PROFILE_REPO_SLUG) {
       return json({ ok: false, reason: "not-profile-repo" } as const, 400);
     }
-    if (!(await viewerIsNamespaceMember(db, viewer.userId, repo.namespaceId))) {
+    if (
+      !canAccessAdminPanel(viewer.role) &&
+      !(await viewerIsNamespaceMember(db, viewer.userId, repo.namespaceId))
+    ) {
       log.warn("profile-readme:not-member", {
         userId: viewer.userId,
         repositoryId,
@@ -454,7 +457,10 @@ export function registerAuthRepositoryRoutes(router: AppRouter) {
     if (!repo) {
       return json({ ok: false, reason: "not-found" } as const, 404);
     }
-    if (!(await viewerIsNamespaceMember(db, viewer.userId, repo.namespaceId))) {
+    if (
+      !canAccessAdminPanel(viewer.role) &&
+      !(await viewerIsNamespaceMember(db, viewer.userId, repo.namespaceId))
+    ) {
       log.warn("web-file:not-member", {
         userId: viewer.userId,
         repositoryId,

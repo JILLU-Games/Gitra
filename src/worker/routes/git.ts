@@ -17,6 +17,7 @@ import { buildCacheKeyFrom, cacheDeleteJSON, cacheOrLoadJSONForRequest } from "@
 import { markRequestPrivate, responseCacheControl } from "@/worker/cache/policy";
 import { isValidOwnerRepo } from "@/shared/web";
 import { resolveRepositoryRoute, type RepositoryRoute } from "@/worker/repositories/route";
+import { deleteRepoBranchCacheRecord } from "@/worker/repositories/routeCache";
 import {
   authenticateGitRequest,
   getBasicCredentials,
@@ -225,6 +226,7 @@ async function handleReceivePackPOST(
         const prevVersion = prevRepo ? String(prevRepo.updatedAt) : undefined;
         const nextUpdatedAt = prevRepo ? Math.max(Date.now(), prevRepo.updatedAt + 1) : Date.now();
         await touchRepositoryUpdatedAt(db, route.repositoryId, nextUpdatedAt);
+        await deleteRepoBranchCacheRecord(env, route.repositoryId);
         const versionsToPurge = Array.from(new Set<string | undefined>([prevVersion, undefined]));
         await Promise.all(
           versionsToPurge.map((v) =>
