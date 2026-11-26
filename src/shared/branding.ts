@@ -1,6 +1,19 @@
+export type SiteBrandingAssetSlot = "logo" | "favicon" | "og-image";
+
+export type SiteBrandingAssetContentType =
+  "image/png" | "image/jpeg" | "image/webp" | "image/x-icon";
+
 export type SiteBrandingConfig = {
   siteName: string;
   shortName: string;
+  siteTitle: string;
+  metaTitle: string;
+  metaDescription: string;
+  metaKeywords: string;
+  logoUrl: string;
+  faviconUrl: string;
+  ogImageUrl: string;
+  allowIndexing: boolean;
   tagline: string;
   heroTitle: string;
   heroDescription: string;
@@ -15,6 +28,15 @@ export type SiteBrandingConfig = {
 export const DEFAULT_SITE_BRANDING: SiteBrandingConfig = {
   siteName: "git-on-cloudflare",
   shortName: "Vib Git",
+  siteTitle: "Vib Git · Open-Source Git Forge",
+  metaTitle: "Vib Tools Open-Source Repositories",
+  metaDescription:
+    "Practical software for real developer workflows. Browse public source code, edge-native starter kits, SDKs, and production tools maintained by Vib Tools.",
+  metaKeywords: "",
+  logoUrl: "",
+  faviconUrl: "",
+  ogImageUrl: "",
+  allowIndexing: true,
   tagline: "Vib Tools · Open-Source Forge",
   heroTitle: "Vib Tools Open-Source Repositories",
   heroDescription:
@@ -26,6 +48,19 @@ export const DEFAULT_SITE_BRANDING: SiteBrandingConfig = {
   supportEmail: "support@vibtools.io",
   footerText: "© 2026 Vib Tools · Open-Source Git Forge",
 };
+
+const INTERNAL_SITE_ASSET_PATH_RE =
+  /^\/api\/site-assets\/(logo|favicon|og-image)(?:\?v=[0-9]{1,20})?$/;
+
+export const MAX_BRANDING_ASSET_BYTES: Record<SiteBrandingAssetSlot, number> = {
+  logo: 512 * 1024,
+  favicon: 512 * 1024,
+  "og-image": 2 * 1024 * 1024,
+};
+
+export function isSiteBrandingAssetSlot(value: string): value is SiteBrandingAssetSlot {
+  return value === "logo" || value === "favicon" || value === "og-image";
+}
 
 function cleanPlainText(raw: unknown, fallback: string, maxLength: number): string {
   if (typeof raw !== "string") return fallback;
@@ -54,6 +89,16 @@ export function sanitizeBrandingUrl(raw: unknown): string {
   }
 }
 
+export function sanitizeBrandingAssetUrl(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (INTERNAL_SITE_ASSET_PATH_RE.test(trimmed)) {
+    return trimmed;
+  }
+  return sanitizeBrandingUrl(trimmed);
+}
+
 export function sanitizeSupportEmail(raw: unknown): string {
   if (typeof raw !== "string") return "";
   const trimmed = raw.trim().slice(0, 120);
@@ -77,6 +122,116 @@ export function extractHostLabel(origin?: string, fallbackUrl?: string): string 
   return "git";
 }
 
+export type ValidateBrandingAssetResult =
+  | { ok: true; contentType: SiteBrandingAssetContentType }
+  | { ok: false; reason: "empty" | "too-large" | "unsupported-format" };
+
+function detectImageMagicType(bytes: Uint8Array): SiteBrandingAssetContentType | null {
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x00 &&
+    bytes[1] === 0x00 &&
+    bytes[2] === 0x01 &&
+    bytes[3] === 0x00
+  ) {
+    return "image/x-icon";
+  }
+  return null;
+}
+
+/**
+ * Validates uploaded site branding assets using actual file magic bytes and
+ * slot byte caps. SVG/HTML payloads are intentionally rejected to eliminate
+ * stored XSS risks on public asset routes.
+ */
+export function validateBrandingAssetBytes(
+  slot: SiteBrandingAssetSlot,
+  bytes: Uint8Array
+): ValidateBrandingAssetResult {
+  if (bytes.byteLength === 0) {
+    return { ok: false, reason: "empty" };
+  }
+  if (bytes.byteLength > MAX_BRANDING_ASSET_BYTES[slot]) {
+    return { ok: false, reason: "too-large" };
+  }
+  const detected = detectImageMagicType(bytes);
+  if (!detected) {
+    return { ok: false, reason: "unsupported-format" };
+  }
+  if (detected === "image/x-icon" && slot !== "favicon") {
+    return { ok: false, reason: "unsupported-format" };
+  }
+  return { ok: true, contentType: detected };
+}
+
+export function resolveAbsoluteBrandingUrl(url: string, origin?: string): string {
+  const safe = sanitizeBrandingAssetUrl(url);
+  if (!safe) return "";
+  if (safe.startsWith("/")) {
+    if (!origin) return safe;
+    try {
+      const base = new URL(origin);
+      return `${base.origin}${safe}`;
+    } catch {
+      return safe;
+    }
+  }
+  return safe;
+}
+
+export function resolveDocumentTitle(
+  pageTitle: string | undefined,
+  branding?: SiteBrandingConfig,
+  viewName?: string
+): string {
+  const resolved = branding ?? DEFAULT_SITE_BRANDING;
+  const suffix = resolved.siteTitle || resolved.siteName || DEFAULT_SITE_BRANDING.siteTitle;
+  const homeTitle = resolved.metaTitle || suffix;
+
+  if (viewName === "home" && (!pageTitle || pageTitle === "Repositories · git-on-cloudflare")) {
+    return homeTitle;
+  }
+  if (!pageTitle || pageTitle === "git-on-cloudflare") {
+    return homeTitle;
+  }
+  if (pageTitle.endsWith(" · git-on-cloudflare")) {
+    return `${pageTitle.slice(0, -" · git-on-cloudflare".length)} · ${suffix}`;
+  }
+  if (pageTitle.includes(suffix) || (resolved.siteName && pageTitle.includes(resolved.siteName))) {
+    return pageTitle;
+  }
+  return `${pageTitle} · ${suffix}`;
+}
+
 export function mergeAndSanitizeSiteBranding(
   base: SiteBrandingConfig,
   patch: Partial<Record<keyof SiteBrandingConfig, unknown>>
@@ -89,6 +244,30 @@ export function mergeAndSanitizeSiteBranding(
     patch.shortName !== undefined
       ? cleanPlainText(patch.shortName, base.shortName, 40) || base.shortName
       : base.shortName;
+  const siteTitle =
+    patch.siteTitle !== undefined
+      ? cleanPlainText(patch.siteTitle, base.siteTitle, 100) || base.siteTitle
+      : base.siteTitle;
+  const metaTitle =
+    patch.metaTitle !== undefined
+      ? cleanPlainText(patch.metaTitle, base.metaTitle, 120) || base.metaTitle
+      : base.metaTitle;
+  const metaDescription =
+    patch.metaDescription !== undefined
+      ? cleanPlainText(patch.metaDescription, base.metaDescription, 320)
+      : base.metaDescription;
+  const metaKeywords =
+    patch.metaKeywords !== undefined
+      ? cleanPlainText(patch.metaKeywords, base.metaKeywords, 240)
+      : base.metaKeywords;
+  const logoUrl =
+    patch.logoUrl !== undefined ? sanitizeBrandingAssetUrl(patch.logoUrl) : base.logoUrl;
+  const faviconUrl =
+    patch.faviconUrl !== undefined ? sanitizeBrandingAssetUrl(patch.faviconUrl) : base.faviconUrl;
+  const ogImageUrl =
+    patch.ogImageUrl !== undefined ? sanitizeBrandingAssetUrl(patch.ogImageUrl) : base.ogImageUrl;
+  const allowIndexing =
+    typeof patch.allowIndexing === "boolean" ? patch.allowIndexing : base.allowIndexing;
   const tagline =
     patch.tagline !== undefined ? cleanPlainText(patch.tagline, base.tagline, 100) : base.tagline;
   const heroTitle =
@@ -120,6 +299,14 @@ export function mergeAndSanitizeSiteBranding(
   return {
     siteName,
     shortName,
+    siteTitle,
+    metaTitle,
+    metaDescription,
+    metaKeywords,
+    logoUrl,
+    faviconUrl,
+    ogImageUrl,
+    allowIndexing,
     tagline,
     heroTitle,
     heroDescription,

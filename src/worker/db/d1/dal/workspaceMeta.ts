@@ -5,7 +5,13 @@ import {
   sanitizeProfileWebsite,
   sanitizeRepoDescription,
 } from "@/shared/admin/panel";
+import {
+  sortNamespaceDirectoryItems,
+  type PublicNamespaceDirectoryItem,
+} from "@/shared/namespaces";
 import { PROFILE_REPO_SLUG } from "@/shared/slugs";
+import type { Db } from "@/worker/db/d1/client";
+import { namespaces } from "@/worker/db/d1/schema/namespaces";
 import type { RepositoryListing } from "./repositories";
 
 export type NamespaceProfileMeta = {
@@ -276,4 +282,96 @@ export async function listPublicNamespaceSummaries(
   return summaries.sort(
     (a, b) => b.projectRepoCount - a.projectRepoCount || a.slug.localeCompare(b.slug)
   );
+}
+
+/**
+ * Lists every active namespace on the instance (including namespaces that
+ * currently have 0 public repositories) along with its public and open-source
+ * project repository counts and public profile metadata.
+ */
+export async function listAllPublicNamespaceDirectory(
+  d1: D1Database,
+  db: Db,
+  publicRows: readonly RepositoryListing[],
+  primaryAdminSlug?: string
+): Promise<PublicNamespaceDirectoryItem[]> {
+  const [allNamespaces, dirResult, profResult] = await Promise.all([
+    db.select().from(namespaces),
+    d1
+      .prepare(
+        `SELECT namespace_id, display_name, status
+         FROM namespace_directory_meta`
+      )
+      .all<{ namespace_id: string; display_name: string; status: string }>(),
+    d1
+      .prepare(
+        `SELECT namespace_id, bio, location, website
+         FROM namespace_profile_meta`
+      )
+      .all<{ namespace_id: string; bio: string; location: string; website: string }>(),
+  ]);
+
+  if (allNamespaces.length === 0) return [];
+
+  const countsByNamespaceId = new Map<
+    string,
+    { publicRepoCount: number; projectRepoCount: number }
+  >();
+  for (const row of publicRows) {
+    const existing = countsByNamespaceId.get(row.namespace.id);
+    const isProjectRepo = row.repository.slug !== PROFILE_REPO_SLUG;
+    if (existing) {
+      existing.publicRepoCount += 1;
+      if (isProjectRepo) existing.projectRepoCount += 1;
+    } else {
+      countsByNamespaceId.set(row.namespace.id, {
+        publicRepoCount: 1,
+        projectRepoCount: isProjectRepo ? 1 : 0,
+      });
+    }
+  }
+
+  const directoryById = new Map<string, { displayName: string; status: string }>();
+  for (const row of dirResult.results ?? []) {
+    directoryById.set(row.namespace_id, {
+      displayName: row.display_name ?? "",
+      status: row.status ?? "active",
+    });
+  }
+
+  const profileById = new Map<string, { bio: string; location: string; website: string }>();
+  for (const row of profResult.results ?? []) {
+    profileById.set(row.namespace_id, {
+      bio: row.bio ?? "",
+      location: row.location ?? "",
+      website: row.website ?? "",
+    });
+  }
+
+  const items: PublicNamespaceDirectoryItem[] = [];
+  for (const ns of allNamespaces) {
+    const dir = directoryById.get(ns.id);
+    const prof = profileById.get(ns.id);
+    const isPrimaryAdmin = Boolean(primaryAdminSlug && ns.slug === primaryAdminSlug);
+    if (!isPrimaryAdmin && dir?.status === "disabled") {
+      continue;
+    }
+    const fallbackName = isPrimaryAdmin ? "Administrator" : ns.slug;
+    const displayName = dir?.displayName
+      ? sanitizeDisplayName(dir.displayName, fallbackName)
+      : fallbackName;
+    const counts = countsByNamespaceId.get(ns.id);
+
+    items.push({
+      slug: ns.slug,
+      displayName,
+      bio: prof?.bio ?? "",
+      location: prof?.location ?? "",
+      website: prof?.website ?? "",
+      publicRepoCount: counts?.publicRepoCount ?? 0,
+      projectRepoCount: counts?.projectRepoCount ?? 0,
+    });
+  }
+
+  return sortNamespaceDirectoryItems(items);
 }

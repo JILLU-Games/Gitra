@@ -8,6 +8,9 @@ import { clientEntrypoints } from "./src/client/entrypoints";
 
 export default defineConfig({
   plugins: [tailwindcss(), react(), cloudflare()],
+  server: {
+    allowedHosts: true,
+  },
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),

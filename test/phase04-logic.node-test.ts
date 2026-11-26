@@ -7,8 +7,12 @@ import {
   DEFAULT_SITE_BRANDING,
   extractHostLabel,
   mergeAndSanitizeSiteBranding,
+  resolveAbsoluteBrandingUrl,
+  resolveDocumentTitle,
+  sanitizeBrandingAssetUrl,
   sanitizeBrandingUrl,
   sanitizeSupportEmail,
+  validateBrandingAssetBytes,
 } from "@/shared/branding";
 import { HttpError } from "@/shared/web/http";
 import { isAllowedOrigin } from "@/worker/auth/origin";
@@ -51,6 +55,43 @@ describe("phase 04 pure domain logic", () => {
       isAllowedOrigin("https://evil.com@preview.run.app", "http://localhost:3000/auth/login", {
         forwardedHost: "evil.com@preview.run.app",
         forwardedProto: "https",
+      }),
+      false
+    );
+    assert.equal(
+      isAllowedOrigin("https://preview.run.app", "http://localhost:3000/auth/login", {
+        forwardedHost: "preview.run.app",
+      }),
+      true
+    );
+    assert.equal(
+      isAllowedOrigin("https://preview.run.app", "http://localhost:3000/auth/login", {
+        host: "preview.run.app",
+        forwardedProto: "http",
+      }),
+      true
+    );
+    assert.equal(
+      isAllowedOrigin("https://preview.run.app", "http://localhost:3000/auth/login", {
+        host: "localhost:3000",
+        secFetchSite: "same-origin",
+        referer: "https://preview.run.app/auth",
+      }),
+      true
+    );
+    assert.equal(
+      isAllowedOrigin("https://attacker.example", "http://localhost:3000/auth/login", {
+        host: "localhost:3000",
+        secFetchSite: "cross-site",
+        referer: "https://attacker.example/",
+      }),
+      false
+    );
+    assert.equal(
+      isAllowedOrigin("https://preview.run.app", "http://localhost:3000/auth/login", {
+        host: "localhost:3000",
+        secFetchSite: "same-origin",
+        referer: "https://attacker.example/auth",
       }),
       false
     );
@@ -186,6 +227,90 @@ describe("phase 04 pure domain logic", () => {
         false
       ),
       "Repository busy"
+    );
+  });
+
+  it("sanitizes branding asset URLs and resolves absolute URLs safely (Phase S1 & S2)", () => {
+    assert.equal(
+      sanitizeBrandingAssetUrl("/api/site-assets/logo?v=1700000000"),
+      "/api/site-assets/logo?v=1700000000"
+    );
+    assert.equal(
+      sanitizeBrandingAssetUrl("https://cdn.example.com/brand/logo.png"),
+      "https://cdn.example.com/brand/logo.png"
+    );
+    assert.equal(sanitizeBrandingAssetUrl("javascript:alert(1)"), "");
+    assert.equal(sanitizeBrandingAssetUrl("data:image/svg+xml,<svg/>"), "");
+    assert.equal(sanitizeBrandingAssetUrl("/api/site-assets/../secret"), "");
+    assert.equal(sanitizeBrandingAssetUrl(""), "");
+
+    assert.equal(
+      resolveAbsoluteBrandingUrl("/api/site-assets/og-image?v=1", "https://git.example.com"),
+      "https://git.example.com/api/site-assets/og-image?v=1"
+    );
+    assert.equal(
+      resolveAbsoluteBrandingUrl("https://cdn.example.com/og.png", "https://git.example.com"),
+      "https://cdn.example.com/og.png"
+    );
+    assert.equal(resolveAbsoluteBrandingUrl("", "https://git.example.com"), "");
+  });
+
+  it("validates branding asset magic bytes and rejects unsafe formats like SVG (Phase S1)", () => {
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+    const icoBytes = new Uint8Array([0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10]);
+    const svgBytes = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+
+    assert.deepEqual(validateBrandingAssetBytes("logo", pngBytes), {
+      ok: true,
+      contentType: "image/png",
+    });
+    assert.deepEqual(validateBrandingAssetBytes("favicon", icoBytes), {
+      ok: true,
+      contentType: "image/x-icon",
+    });
+
+    const icoOnLogo = validateBrandingAssetBytes("logo", icoBytes);
+    assert.equal(icoOnLogo.ok, false);
+
+    const svgOnLogo = validateBrandingAssetBytes("logo", svgBytes);
+    assert.equal(svgOnLogo.ok, false);
+
+    const emptyPayload = validateBrandingAssetBytes("favicon", new Uint8Array());
+    assert.equal(emptyPayload.ok, false);
+  });
+
+  it("merges SEO/branding fields and resolves document titles with custom siteTitle and metaTitle (Phase S1 & S2)", () => {
+    const merged = mergeAndSanitizeSiteBranding(DEFAULT_SITE_BRANDING, {
+      siteTitle: "Acme Git",
+      metaTitle: "Acme Git — Private Engineering Forge",
+      metaDescription: "Fast Git hosting for Acme teams.",
+      metaKeywords: "acme, git, hosting",
+      logoUrl: "/api/site-assets/logo?v=42",
+      faviconUrl: "/api/site-assets/favicon?v=42",
+      ogImageUrl: "https://cdn.acme.test/og.png",
+      allowIndexing: false,
+    });
+
+    assert.equal(merged.siteTitle, "Acme Git");
+    assert.equal(merged.metaTitle, "Acme Git — Private Engineering Forge");
+    assert.equal(merged.metaDescription, "Fast Git hosting for Acme teams.");
+    assert.equal(merged.metaKeywords, "acme, git, hosting");
+    assert.equal(merged.logoUrl, "/api/site-assets/logo?v=42");
+    assert.equal(merged.faviconUrl, "/api/site-assets/favicon?v=42");
+    assert.equal(merged.ogImageUrl, "https://cdn.acme.test/og.png");
+    assert.equal(merged.allowIndexing, false);
+
+    assert.equal(
+      resolveDocumentTitle("Repositories · git-on-cloudflare", merged, "home"),
+      "Acme Git — Private Engineering Forge"
+    );
+    assert.equal(
+      resolveDocumentTitle("Explore · git-on-cloudflare", merged, "explore"),
+      "Explore · Acme Git"
+    );
+    assert.equal(
+      resolveDocumentTitle("acme/core · git-on-cloudflare", merged, "repo"),
+      "acme/core · Acme Git"
     );
   });
 });

@@ -9,6 +9,7 @@ import { CommitPage, type CommitPageProps } from "@/client/pages/CommitPage";
 import { CommitsPage, type CommitsPageProps } from "@/client/pages/CommitsPage";
 import { ErrorPage, type ErrorPageProps } from "@/client/pages/ErrorPage";
 import { HomePage, type HomePageProps } from "@/client/pages/HomePage";
+import { NamespacesPage, type NamespacesPageProps } from "@/client/pages/NamespacesPage";
 import { NotFoundPage } from "@/client/pages/NotFoundPage";
 import { OverviewPage, type OverviewPageProps } from "@/client/pages/OverviewPage";
 import { OwnerPage, type OwnerPageProps } from "@/client/pages/OwnerPage";
@@ -43,6 +44,12 @@ const views: Record<string, ViewDefinition> = {
     title: "Explore · git-on-cloudflare",
     clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.homePage],
     render: renderWithProps((props: HomePageProps) => <HomePage {...props} />),
+  },
+  namespaces: {
+    kind: "document",
+    title: "Namespaces · git-on-cloudflare",
+    clientEntrypoints: [clientEntrypoints.shell],
+    render: renderWithProps((props: NamespacesPageProps) => <NamespacesPage {...props} />),
   },
   "404": {
     kind: "document",

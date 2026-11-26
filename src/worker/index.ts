@@ -20,12 +20,17 @@ import { createDb } from "./db/d1/client";
 import {
   findNamespaceBySlug,
   findPrimaryAdminNamespace,
+  listAllPublicNamespaceDirectory,
   listNamespacesForUser,
   listPublicNamespaceSummaries,
   listPublicRepositoriesWithNamespaces,
   listRepositoriesForUser,
   listRepositoryMetaMap,
 } from "./db/d1/dal";
+import {
+  computeNamespaceDirectoryTotals,
+  filterNamespaceDirectoryItems,
+} from "@/shared/namespaces";
 import {
   buildEscapedErrorHtmlDocument,
   getErrorMessage,
@@ -207,6 +212,43 @@ app.get("/explore", async (c) => {
       publicNamespaces,
       repositories: [],
       publicRepositories,
+    },
+    { failureBody: "Failed to render page\n", viewer, branding, origin }
+  );
+});
+
+app.get("/namespaces", async (c) => {
+  await ensureDemoWorkspaceOnPublicEntry(c);
+  const [viewer, branding] = await Promise.all([loadViewer(c), loadSiteBranding(c.env)]);
+  const origin = resolveRequestOrigin(c);
+  const query = (c.req.query("q") ?? "").trim().slice(0, 80);
+
+  const [publicRows, primaryAdminNs] = await Promise.all([
+    listPublicRepositoriesWithNamespaces(c.var.db),
+    findPrimaryAdminNamespace(
+      c.var.db,
+      buildLocalAccountSubject(resolveAdminAuthConfig(c.env).username)
+    ),
+  ]);
+  const primaryAdminSlug = primaryAdminNs?.slug ?? resolveInitialAdminNamespaceSlug(c.env);
+  const allNamespaces = await listAllPublicNamespaceDirectory(
+    c.env.DB,
+    c.var.db,
+    publicRows,
+    primaryAdminSlug
+  );
+  const totals = computeNamespaceDirectoryTotals(allNamespaces);
+  const filteredNamespaces = filterNamespaceDirectoryItems(allNamespaces, query);
+
+  return renderUiDocumentResponse(
+    c.env,
+    "namespaces",
+    {
+      namespaces: filteredNamespaces,
+      totalNamespacesCount: totals.totalNamespaces,
+      totalPublicReposCount: totals.totalPublicRepos,
+      totalOpenSourceReposCount: totals.totalOpenSourceRepos,
+      query,
     },
     { failureBody: "Failed to render page\n", viewer, branding, origin }
   );

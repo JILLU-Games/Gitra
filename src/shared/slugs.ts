@@ -26,6 +26,7 @@ export const RESERVED_SLUGS: readonly string[] = [
   "user",
   "profile",
   "explore",
+  "namespaces",
   "repo",
   "sign-in",
   "sign-out",

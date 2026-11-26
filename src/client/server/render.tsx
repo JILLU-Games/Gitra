@@ -45,6 +45,9 @@ export async function renderUiView(
   const element = (
     <Document
       title={(data.title as string | undefined) || definition.title}
+      viewName={name}
+      branding={options.branding}
+      origin={options.origin}
       assets={assets}
       needsHighlight={needsHighlightTheme(name, data)}
     >

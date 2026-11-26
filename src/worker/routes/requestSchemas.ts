@@ -254,11 +254,24 @@ const OptionalStringSchema = z.preprocess(
   z.string().optional()
 );
 
+const OptionalBooleanSchema = z.preprocess(
+  (value) => (typeof value === "boolean" ? value : undefined),
+  z.boolean().optional()
+);
+
 export const AdminSettingsUpdateRequestSchema = z.preprocess(
   objectOrEmpty,
   z.object({
     siteName: OptionalStringSchema,
     shortName: OptionalStringSchema,
+    siteTitle: OptionalStringSchema,
+    metaTitle: OptionalStringSchema,
+    metaDescription: OptionalStringSchema,
+    metaKeywords: OptionalStringSchema,
+    logoUrl: OptionalStringSchema,
+    faviconUrl: OptionalStringSchema,
+    ogImageUrl: OptionalStringSchema,
+    allowIndexing: OptionalBooleanSchema,
     tagline: OptionalStringSchema,
     heroTitle: OptionalStringSchema,
     heroDescription: OptionalStringSchema,

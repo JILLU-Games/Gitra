@@ -1,14 +1,24 @@
 import {
   DEFAULT_SITE_BRANDING,
   mergeAndSanitizeSiteBranding,
+  type SiteBrandingAssetContentType,
+  type SiteBrandingAssetSlot,
   type SiteBrandingConfig,
 } from "@/shared/branding";
+import type { Limiter } from "@/worker/git/operations/limits";
 
 export const SITE_BRANDING_KV_KEY = "site:branding:v1";
 
 export type BrandingEnvVars = {
   SITE_NAME?: string;
   SITE_SHORT_NAME?: string;
+  SITE_TITLE?: string;
+  SITE_META_TITLE?: string;
+  SITE_META_DESCRIPTION?: string;
+  SITE_META_KEYWORDS?: string;
+  SITE_LOGO_URL?: string;
+  SITE_FAVICON_URL?: string;
+  SITE_OG_IMAGE_URL?: string;
   SITE_TAGLINE?: string;
   SITE_HERO_TITLE?: string;
   SITE_HERO_DESCRIPTION?: string;
@@ -20,10 +30,25 @@ export type BrandingEnvVars = {
   SITE_FOOTER_TEXT?: string;
 };
 
+export function siteBrandingAssetR2Key(slot: SiteBrandingAssetSlot): string {
+  return `site-assets/${slot}`;
+}
+
+export function siteBrandingAssetUrl(slot: SiteBrandingAssetSlot, version: number): string {
+  return `/api/site-assets/${slot}?v=${version}`;
+}
+
 export function resolveBrandingFromEnv(env: Partial<Env> & BrandingEnvVars): SiteBrandingConfig {
   return mergeAndSanitizeSiteBranding(DEFAULT_SITE_BRANDING, {
     siteName: env.SITE_NAME,
     shortName: env.SITE_SHORT_NAME,
+    siteTitle: env.SITE_TITLE,
+    metaTitle: env.SITE_META_TITLE,
+    metaDescription: env.SITE_META_DESCRIPTION,
+    metaKeywords: env.SITE_META_KEYWORDS,
+    logoUrl: env.SITE_LOGO_URL,
+    faviconUrl: env.SITE_FAVICON_URL,
+    ogImageUrl: env.SITE_OG_IMAGE_URL,
     tagline: env.SITE_TAGLINE,
     heroTitle: env.SITE_HERO_TITLE,
     heroDescription: env.SITE_HERO_DESCRIPTION,
@@ -71,4 +96,41 @@ export async function saveSiteBranding(
     await kv.put(SITE_BRANDING_KV_KEY, JSON.stringify(next));
   }
   return next;
+}
+
+export async function putSiteBrandingAsset(
+  env: Pick<Env, "REPO_BUCKET">,
+  limiter: Limiter,
+  slot: SiteBrandingAssetSlot,
+  bytes: Uint8Array,
+  contentType: SiteBrandingAssetContentType
+): Promise<void> {
+  await limiter.run("r2:put-site-asset", () =>
+    env.REPO_BUCKET.put(siteBrandingAssetR2Key(slot), bytes, {
+      httpMetadata: {
+        contentType,
+        cacheControl: "public, max-age=3600",
+      },
+    })
+  );
+}
+
+export async function getSiteBrandingAsset(
+  env: Pick<Env, "REPO_BUCKET">,
+  limiter: Limiter,
+  slot: SiteBrandingAssetSlot
+): Promise<R2ObjectBody | null> {
+  return await limiter.run("r2:get-site-asset", () =>
+    env.REPO_BUCKET.get(siteBrandingAssetR2Key(slot))
+  );
+}
+
+export async function deleteSiteBrandingAsset(
+  env: Pick<Env, "REPO_BUCKET">,
+  limiter: Limiter,
+  slot: SiteBrandingAssetSlot
+): Promise<void> {
+  await limiter.run("r2:delete-site-asset", () =>
+    env.REPO_BUCKET.delete(siteBrandingAssetR2Key(slot))
+  );
 }

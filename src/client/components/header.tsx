@@ -29,7 +29,7 @@ export function Header({ currentView, viewer, branding, origin }: HeaderProps) {
     currentView === "commits" ||
     currentView === "admin";
   const isRepositoriesUnderline = (Boolean(viewer) && isHomeActive) || isRepoView;
-  const isTeamsUnderline = currentView === "owner";
+  const isNamespacesUnderline = currentView === "namespaces" || currentView === "owner";
   const isExploreUnderline = isExploreActive || (!viewer && isHomeActive);
   const isSignInActive = currentView === "auth-signin";
 
@@ -38,15 +38,23 @@ export function Header({ currentView, viewer, branding, origin }: HeaderProps) {
       <div className="max-w-[1160px] h-full mx-auto px-5 flex items-center justify-between gap-4">
         <div className="flex items-center gap-6">
           <a href="/" className="flex items-center gap-2 text-fg no-underline hover:text-fg">
-            <svg
-              className="w-4 h-4 text-fg shrink-0"
-              viewBox="0 0 16 16"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm6.25 7.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM8.5 7.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm-4.25 4.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
-              <path d="M4.25 4.75v6a.75.75 0 0 1-1.5 0v-6a.75.75 0 0 1 1.5 0Zm7 1.75v2.75a.75.75 0 0 1-1.5 0V6.5a1 1 0 0 0-1-1H6.5a.75.75 0 0 1 0-1.5h2.25a2.5 2.5 0 0 1 2.5 2.5Z" />
-            </svg>
+            {resolvedBranding.logoUrl ? (
+              <img
+                src={resolvedBranding.logoUrl}
+                alt={resolvedBranding.shortName}
+                className="h-5 w-auto max-w-[120px] shrink-0 rounded-sm object-contain"
+              />
+            ) : (
+              <svg
+                className="w-4 h-4 text-fg shrink-0"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm6.25 7.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM8.5 7.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm-4.25 4.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+                <path d="M4.25 4.75v6a.75.75 0 0 1-1.5 0v-6a.75.75 0 0 1 1.5 0Zm7 1.75v2.75a.75.75 0 0 1-1.5 0V6.5a1 1 0 0 0-1-1H6.5a.75.75 0 0 1 0-1.5h2.25a2.5 2.5 0 0 1 2.5 2.5Z" />
+              </svg>
+            )}
             <span className="font-semibold text-[14px] tracking-tight">
               {resolvedBranding.shortName}
             </span>
@@ -82,15 +90,15 @@ export function Header({ currentView, viewer, branding, origin }: HeaderProps) {
               Repositories
             </a>
             <a
-              href={viewer ? "/explore#teams" : "/#teams"}
-              aria-current={isTeamsUnderline ? "page" : undefined}
+              href="/namespaces"
+              aria-current={isNamespacesUnderline ? "page" : undefined}
               className={
-                isTeamsUnderline
+                isNamespacesUnderline
                   ? "h-full inline-flex items-center text-fg font-medium border-b-2 border-fg no-underline"
                   : "h-full inline-flex items-center text-fgMuted hover:text-fg transition-colors no-underline"
               }
             >
-              Teams
+              Namespaces
             </a>
             {resolvedBranding.docsUrl ? (
               <a

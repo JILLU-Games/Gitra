@@ -14,6 +14,12 @@ import {
   type DirectoryStatus,
 } from "@/shared/admin/panel";
 import { shortRefName } from "@/shared/git/ref-display";
+import {
+  isSiteBrandingAssetSlot,
+  MAX_BRANDING_ASSET_BYTES,
+  validateBrandingAssetBytes,
+  type SiteBrandingAssetSlot,
+} from "@/shared/branding";
 import { safeParseJsonRequest } from "@/shared/web";
 import type { Viewer } from "@/client/server/viewer";
 import {
@@ -26,7 +32,14 @@ import { hashPassword } from "@/worker/auth/passwords";
 import { viewerIsNamespaceMember } from "@/worker/auth/pat";
 import { loadViewer } from "@/worker/auth/session";
 import { getRepoStub, json, newPrefixedId } from "@/worker/common";
-import { loadSiteBranding, saveSiteBranding } from "@/worker/branding";
+import {
+  deleteSiteBrandingAsset,
+  getSiteBrandingAsset,
+  loadSiteBranding,
+  putSiteBrandingAsset,
+  saveSiteBranding,
+  siteBrandingAssetUrl,
+} from "@/worker/branding";
 import {
   claimNamespace,
   deleteNamespaceEntry,
@@ -910,6 +923,159 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       shortName: branding.shortName,
     });
     return json({ ok: true, branding } as const);
+  });
+
+  function brandingFieldForSlot(
+    slot: SiteBrandingAssetSlot
+  ): "logoUrl" | "faviconUrl" | "ogImageUrl" {
+    if (slot === "logo") return "logoUrl";
+    if (slot === "favicon") return "faviconUrl";
+    return "ogImageUrl";
+  }
+
+  router.post(`/admin/api/settings/asset/:slot`, async (c) => {
+    const log = c.var.logFor({ service: "SystemAdmin" });
+    const violation = sameOriginViolation(c);
+    if (violation) {
+      log.warn("system-admin:settings-asset-same-origin-violation");
+      return violation;
+    }
+    const auth = await requireAdminApiViewer(c);
+    if (!auth.ok) return auth.response;
+
+    const rawSlot = c.req.param("slot");
+    if (!isSiteBrandingAssetSlot(rawSlot)) {
+      return json({ ok: false, reason: "invalid-slot" } as const, 400);
+    }
+
+    const contentLengthHeader = c.req.header("content-length");
+    if (contentLengthHeader) {
+      const declaredBytes = Number(contentLengthHeader);
+      if (Number.isFinite(declaredBytes) && declaredBytes > MAX_BRANDING_ASSET_BYTES[rawSlot]) {
+        return json({ ok: false, reason: "too-large" } as const, 413);
+      }
+    }
+
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    const validation = validateBrandingAssetBytes(rawSlot, bytes);
+    if (!validation.ok) {
+      const status = validation.reason === "too-large" ? 413 : 400;
+      return json({ ok: false, reason: validation.reason } as const, status);
+    }
+
+    try {
+      await putSiteBrandingAsset(c.env, c.var.limiter, rawSlot, bytes, validation.contentType);
+      const url = siteBrandingAssetUrl(rawSlot, Date.now());
+      const field = brandingFieldForSlot(rawSlot);
+      const branding = await saveSiteBranding(c.env, { [field]: url });
+      log.info("system-admin:settings-asset-uploaded", {
+        actor: auth.viewer.userId,
+        slot: rawSlot,
+        bytes: bytes.byteLength,
+        contentType: validation.contentType,
+      });
+      return json({ ok: true, slot: rawSlot, url, branding } as const);
+    } catch (error) {
+      log.warn("system-admin:settings-asset-upload-failed", {
+        slot: rawSlot,
+        error: String(error),
+      });
+      return json({ ok: false, error: "Failed to upload brand asset" } as const, 500);
+    }
+  });
+
+  router.delete(`/admin/api/settings/asset/:slot`, async (c) => {
+    const log = c.var.logFor({ service: "SystemAdmin" });
+    const violation = sameOriginViolation(c);
+    if (violation) {
+      log.warn("system-admin:settings-asset-delete-same-origin-violation");
+      return violation;
+    }
+    const auth = await requireAdminApiViewer(c);
+    if (!auth.ok) return auth.response;
+
+    const rawSlot = c.req.param("slot");
+    if (!isSiteBrandingAssetSlot(rawSlot)) {
+      return json({ ok: false, reason: "invalid-slot" } as const, 400);
+    }
+
+    try {
+      await deleteSiteBrandingAsset(c.env, c.var.limiter, rawSlot);
+      const field = brandingFieldForSlot(rawSlot);
+      const branding = await saveSiteBranding(c.env, { [field]: "" });
+      log.info("system-admin:settings-asset-deleted", {
+        actor: auth.viewer.userId,
+        slot: rawSlot,
+      });
+      return json({ ok: true, slot: rawSlot, branding } as const);
+    } catch (error) {
+      log.warn("system-admin:settings-asset-delete-failed", {
+        slot: rawSlot,
+        error: String(error),
+      });
+      return json({ ok: false, error: "Failed to delete brand asset" } as const, 500);
+    }
+  });
+
+  router.get(`/api/site-assets/:slot`, async (c) => {
+    const rawSlot = c.req.param("slot");
+    if (!isSiteBrandingAssetSlot(rawSlot)) {
+      return new Response("Not found\n", { status: 404 });
+    }
+    const obj = await getSiteBrandingAsset(c.env, c.var.limiter, rawSlot);
+    if (!obj) {
+      return new Response("Not found\n", {
+        status: 404,
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+    const contentType = obj.httpMetadata?.contentType || "application/octet-stream";
+    return new Response(obj.body, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  });
+
+  router.get(`/favicon.ico`, async (c) => {
+    const branding = await loadSiteBranding(c.env);
+    if (branding.faviconUrl.startsWith("/api/site-assets/favicon")) {
+      const obj = await getSiteBrandingAsset(c.env, c.var.limiter, "favicon");
+      if (obj) {
+        return new Response(obj.body, {
+          status: 200,
+          headers: {
+            "Content-Type": obj.httpMetadata?.contentType || "image/x-icon",
+            "Cache-Control": "public, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+      }
+    }
+    if (branding.faviconUrl.startsWith("https://") || branding.faviconUrl.startsWith("http://")) {
+      return c.redirect(branding.faviconUrl, 302);
+    }
+    return new Response(null, {
+      status: 204,
+      headers: { "Cache-Control": "public, max-age=300" },
+    });
+  });
+
+  router.get(`/robots.txt`, async (c) => {
+    const branding = await loadSiteBranding(c.env);
+    const body = branding.allowIndexing
+      ? "User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /auth/\n"
+      : "User-agent: *\nDisallow: /\n";
+    return new Response(body, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "public, max-age=300",
+      },
+    });
   });
 
   router.delete(`/admin/api/tokens/:patId`, async (c) => {
