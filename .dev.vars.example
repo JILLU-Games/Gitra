@@ -1,6 +1,11 @@
 # Local development values used by `wrangler types`.
 # Copy this file to `.dev.vars` and replace placeholders as needed.
 
+# Cloudflare deployment plan tier: free | paid
+# - free: skips automatic background pack compaction after push/commit (Free 10ms CPU friendly)
+# - paid: enables automatic background compaction (use with wrangler.paid.jsonc)
+CLOUDFLARE_TIER=free
+
 # Repo Durable Object idle cleanup threshold in minutes.
 REPO_DO_IDLE_MINUTES=30
 

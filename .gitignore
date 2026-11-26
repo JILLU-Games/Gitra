@@ -1,5 +1,8 @@
 node_modules/
 .wrangler/
 .dev.vars
+.env.deploy
+.env.deploy.*
+!.env.deploy.example
 dist/
 worker-configuration.d.ts

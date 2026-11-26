@@ -22,6 +22,7 @@ import {
 } from "@/worker/git/receive/r2Upload";
 import { doPrefix, packIndexKey, packRefsKey, r2PackKey } from "@/worker/keys";
 import { createQueueTaskContext, logSoftBudgetExhausted, retryQueueMessage } from "./context";
+import { sendOptionalMaintenanceTask } from "./dispatch";
 
 const COMPACTION_SUBREQUEST_BUDGET = 7_500;
 const COMPACTION_RETRY_DELAY_SECONDS = 30;
@@ -323,10 +324,14 @@ export async function handleCompactionMessage(
     leaseToken = undefined;
     if (commit.shouldRequeue) {
       ctx.waitUntil(
-        env.REPO_TASKS_QUEUE.send({
-          kind: "compaction",
-          doId: body.doId,
-          repoId: body.repoId,
+        sendOptionalMaintenanceTask({
+          env,
+          message: {
+            kind: "compaction",
+            doId: body.doId,
+            repoId: body.repoId,
+          },
+          log,
         }).catch((error) => {
           log.warn("compaction:follow-up-enqueue-failed", { error: String(error) });
         })
@@ -335,15 +340,17 @@ export async function handleCompactionMessage(
 
     if (commit.supersededPackKeys.length > 0) {
       ctx.waitUntil(
-        env.REPO_TASKS_QUEUE.send(
-          {
+        sendOptionalMaintenanceTask({
+          env,
+          message: {
             kind: "compaction-delete",
             doId: body.doId,
             repoId: body.repoId,
             packKeys: commit.supersededPackKeys,
           },
-          { delaySeconds: COMPACTION_DELETE_DELAY_SECONDS }
-        ).catch((error) => {
+          delaySeconds: COMPACTION_DELETE_DELAY_SECONDS,
+          log,
+        }).catch((error) => {
           log.warn("compaction:delete-enqueue-failed", { error: String(error) });
         })
       );

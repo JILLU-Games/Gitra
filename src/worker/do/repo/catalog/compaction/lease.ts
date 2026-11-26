@@ -6,6 +6,7 @@
  * worker code, and then atomically commits the result via `commitCompactionState`.
  */
 import type { Logger } from "@/worker/common/logger";
+import { shouldAutoQueueBackgroundCompaction } from "@/worker/common/tier";
 import type { PackCatalogRow } from "../../db/schema";
 import type { RepoLease, RepoStateSchema } from "../../repoState";
 
@@ -282,6 +283,11 @@ export async function rearmCompactionQueueFromAlarm(args: {
   if (activeLeaseOrUndefined(await store.get("compactLease"), now)) return false;
 
   const doId = args.ctx.id.toString();
+  if (!shouldAutoQueueBackgroundCompaction(args.env)) {
+    args.logger?.debug("compaction:alarm-rearm-skipped-tier", { doId });
+    return false;
+  }
+
   try {
     await args.env.REPO_TASKS_QUEUE.send({
       kind: "compaction",

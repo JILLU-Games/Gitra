@@ -3,6 +3,9 @@
 // Miniflare values take precedence over wrangler.jsonc.
 
 export const BASE_TEST_BINDINGS = {
+  // Run worker integration tests with full Paid-tier compaction enabled.
+  CLOUDFLARE_TIER: "paid",
+
   // Repo DO idle cleanup threshold (minutes)
   REPO_DO_IDLE_MINUTES: "30",
 

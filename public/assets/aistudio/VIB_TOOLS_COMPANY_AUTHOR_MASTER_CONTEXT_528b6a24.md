@@ -792,18 +792,18 @@ Do not manufacture testimonials, review scores, client lists, years of experienc
 
 When deciding where to send someone:
 
-| Request Type            | Preferred Channel                                                          |
-| ----------------------- | -------------------------------------------------------------------------- |
-| General company inquiry | hello@vibtools.io                                                          |
-| Partnership             | hello@vibtools.io                                                          |
-| Press/media             | hello@vibtools.io                                                          |
-| Product support         | support@vibtools.io                                                        |
-| Public project support  | support@vibtools.io or repository issue, depending on sensitivity          |
-| Bug report              | Project repository issue if appropriate                                    |
-| Feature request         | Project repository issue/discussion if available                           |
-| Code contribution       | Project pull request workflow                                              |
-| Security vulnerability  | Follow repository SECURITY.md; use private support channel when instructed |
-| Phone/WhatsApp          | +880 1795-470603                                                           |
+| Request Type | Preferred Channel |
+|---|---|
+| General company inquiry | hello@vibtools.io |
+| Partnership | hello@vibtools.io |
+| Press/media | hello@vibtools.io |
+| Product support | support@vibtools.io |
+| Public project support | support@vibtools.io or repository issue, depending on sensitivity |
+| Bug report | Project repository issue if appropriate |
+| Feature request | Project repository issue/discussion if available |
+| Code contribution | Project pull request workflow |
+| Security vulnerability | Follow repository SECURITY.md; use private support channel when instructed |
+| Phone/WhatsApp | +880 1795-470603 |
 
 ---
 

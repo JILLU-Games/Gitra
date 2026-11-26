@@ -7,7 +7,13 @@ import { defineConfig } from "vite";
 import { clientEntrypoints } from "./src/client/entrypoints";
 
 export default defineConfig({
-  plugins: [tailwindcss(), react(), cloudflare()],
+  plugins: [
+    tailwindcss(),
+    react(),
+    cloudflare({
+      configPath: process.env.WRANGLER_CONFIG || "./wrangler.jsonc",
+    }),
+  ],
   server: {
     allowedHosts: true,
   },

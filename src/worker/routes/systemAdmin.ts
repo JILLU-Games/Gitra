@@ -62,10 +62,11 @@ import {
 } from "@/worker/db/d1/dal";
 import { getLimiter, type Limiter } from "@/worker/git/operations/limits";
 import { deleteRouteCacheRecord } from "@/worker/repositories/routeCache";
+import { dispatchRepositoryDelete } from "@/worker/tasks/dispatch";
 import { handleRepositoryPatch } from "./authRepositories";
 import { enqueueRouteCacheSync, safeRedirect, summarizeTokens } from "./authShared";
 import type { RepositoryDeleteMessage } from "@/worker/tasks/queue";
-import type { AppContext, AppRouter } from "./hono";
+import { workerExecutionContext, type AppContext, type AppRouter } from "./hono";
 import {
   AdminNamespaceCreateRequestSchema,
   AdminNamespacePatchRequestSchema,
@@ -649,7 +650,12 @@ async function handleDeleteDirectoryUser(c: AppContext, namespaceId: string): Pr
           actor: viewer.userId,
           requestedAt,
         };
-        await c.env.REPO_TASKS_QUEUE.send(message);
+        await dispatchRepositoryDelete({
+          env: c.env,
+          ctx: workerExecutionContext(c),
+          message,
+          log,
+        });
       }
     } catch (error) {
       log.error("system-admin:namespace-delete-enqueue-failed", {
@@ -1185,7 +1191,8 @@ export function registerSystemAdminRoutes(router: AppRouter) {
     }
 
     // Queue consumer owns D1 delete + ROUTES KV + R2 objects + DO storage cleanup
-    // so a queue-send outage returns 503 without partial state mutations.
+    // when REPO_TASKS_QUEUE is bound; minimal Free deployments without Queues
+    // run the same cleanup inline.
     const message: RepositoryDeleteMessage = {
       kind: "repository-delete",
       repositoryId,
@@ -1196,25 +1203,33 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       actor: viewer.userId,
       requestedAt: Date.now(),
     };
+    let queued = true;
     try {
-      await c.env.REPO_TASKS_QUEUE.send(message);
+      const dispatched = await dispatchRepositoryDelete({
+        env: c.env,
+        ctx: workerExecutionContext(c),
+        message,
+        log,
+      });
+      queued = dispatched.queued;
     } catch (error) {
-      log.error("system-admin:repo-delete-enqueue-failed", {
+      log.error("system-admin:repo-delete-dispatch-failed", {
         actor: viewer.userId,
         repositoryId,
         error: String(error),
       });
-      return json({ ok: false, error: "Failed to enqueue delete; please retry" } as const, 503);
+      return json({ ok: false, error: "Failed to delete repository; please retry" } as const, 503);
     }
 
-    log.info("system-admin:repo-delete-enqueued", {
+    log.info(queued ? "system-admin:repo-delete-enqueued" : "system-admin:repo-delete-completed", {
       actor: viewer.userId,
       repositoryId,
       namespaceSlug: namespace.slug,
       slug: repo.slug,
       requestedAt: message.requestedAt,
+      queued,
     });
 
-    return json({ ok: true, id: repositoryId, queued: true } as const, 202);
+    return json({ ok: true, id: repositoryId, queued } as const, queued ? 202 : 200);
   });
 }

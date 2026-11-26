@@ -12,3 +12,4 @@ export * from "./progress";
 export * from "./heap";
 export * from "./webtypes";
 export * from "./ids";
+export * from "./tier";

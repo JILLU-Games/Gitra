@@ -1,25 +1,24 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  // Default configuration: Cloudflare Workers Free Plan friendly.
+  // - Uses SQLite-backed Durable Objects, D1, KV, R2, and Queues (all available on Free tier).
+  // - Omits Paid-only `limits.cpu_ms` so `npm run deploy` succeeds on Free accounts.
+  // - For Workers Paid ($5/mo+) with 5-minute CPU limits and automatic compaction,
+  //   deploy with `npm run deploy:paid` (uses `wrangler.paid.jsonc`).
   "name": "git-on-cloudflare",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-05-13",
   "compatibility_flags": [
     "nodejs_als"
   ],
-  "workers_dev": false,
-  "routes": [
-    {
-      "pattern": "git-on-cloudflare.com",
-      "custom_domain": true
-    },
-    {
-      "pattern": "git.vibtools.io",
-      "custom_domain": true
-    }
-  ],
-  "limits": {
-    "cpu_ms": 300000
-  },
+  "workers_dev": true,
+  // Optional custom domain routes (uncomment and replace with a zone in your Cloudflare account):
+  // "routes": [
+  //   {
+  //     "pattern": "git.yourdomain.com",
+  //     "custom_domain": true
+  //   }
+  // ],
   "durable_objects": {
     "bindings": [
       {
@@ -48,36 +47,42 @@
       ]
     }
   ],
+  // Clean local-dev & template bindings (no production IDs or domains committed).
+  // Real Cloudflare IDs, bucket/queue names, and optional APP_DOMAIN routes are
+  // resolved dynamically at deploy time via `npm run cf:auto-deploy`.
   "kv_namespaces": [
     {
       "binding": "ROUTES",
-      "id": "4e471bad6c5e44ceb91c4adf5559cb44"
+      "id": "local-routes-kv"
     }
   ],
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "git-on-cloudflare",
-      "database_id": "1fd98d8b-92b8-4a12-852a-e218ce362149",
+      "database_name": "local-git-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "drizzle/d1"
     }
   ],
   "r2_buckets": [
     {
       "binding": "REPO_BUCKET",
-      "bucket_name": "git-repos"
+      "bucket_name": "local-git-repos"
     }
   ],
+  // Cloudflare Queues is included on Free tier (10,000 ops/day).
+  // Set USE_QUEUES=false (or --no-queues) during `npm run cf:auto-deploy` to
+  // omit Queues and use automatic inline execution for repo delete & route sync.
   "queues": {
     "producers": [
       {
         "binding": "REPO_TASKS_QUEUE",
-        "queue": "git-on-cloudflare-repo-maint"
+        "queue": "local-repo-maint"
       }
     ],
     "consumers": [
       {
-        "queue": "git-on-cloudflare-repo-maint",
+        "queue": "local-repo-maint",
         "max_batch_size": 1,
         "max_batch_timeout": 1
       }
@@ -93,6 +98,8 @@
   },
   // Environment variables (text/JSON)
   "vars": {
+    // Deployment plan tier: "free" (default) | "paid"
+    "CLOUDFLARE_TIER": "free",
     // Repo DO idle cleanup threshold (minutes)
     "REPO_DO_IDLE_MINUTES": "30",
     // Logging level: debug|info|warn|error

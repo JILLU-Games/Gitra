@@ -6,7 +6,13 @@ import type { Limiter } from "@/worker/git/operations/limits";
 import type { TreeEntry } from "@/worker/git/operations/read/types";
 import type { Head, Ref } from "@/worker/do/repo/repoState";
 
-import { getRepoStub, hexToBytes, zeroOid } from "@/worker/common";
+import {
+  getRepoStub,
+  hexToBytes,
+  shouldAutoQueueBackgroundCompaction,
+  zeroOid,
+} from "@/worker/common";
+import { sendOptionalMaintenanceTask } from "@/worker/tasks/dispatch";
 import { shortRefName } from "@/shared/git/ref-display";
 import { OID_RE } from "@/shared/web";
 import { findRepositoryById, touchRepositoryUpdatedAt } from "@/worker/db/d1/dal";
@@ -414,11 +420,15 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
       };
     }
 
-    if (finalized.shouldQueueCompaction && input.env.REPO_TASKS_QUEUE) {
-      const enqueueTask = input.env.REPO_TASKS_QUEUE.send({
-        kind: "compaction",
-        doId: stub.id.toString(),
-        repoId: input.doName,
+    if (finalized.shouldQueueCompaction && shouldAutoQueueBackgroundCompaction(input.env)) {
+      const enqueueTask = sendOptionalMaintenanceTask({
+        env: input.env,
+        message: {
+          kind: "compaction",
+          doId: stub.id.toString(),
+          repoId: input.doName,
+        },
+        log: input.log,
       }).catch((error) => {
         input.log.warn("web-commit:compaction-enqueue-failed", {
           repositoryId: input.repositoryId,

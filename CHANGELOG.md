@@ -1,48 +1,52 @@
 # Changelog
 
-All notable changes to **`git-on-cloudflare`** are documented in this file.
+All notable changes to **Gitra** ([gitra.co](https://gitra.co/)) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.2.0] — 2026-11-26
+
+### Added
+
+- **Zero-Touch, Idempotent Cloudflare Auto-Deploy (`npm run cf:auto-deploy`):**
+  - Added `scripts/cf-auto-deploy.mjs` and pure tested helpers (`scripts/cf-auto-deploy-lib.mjs`) authenticated strictly via `CLOUDFLARE_API_TOKEN` with automatic Account ID detection.
+  - Automatically discovers or provisions D1, KV, R2, and optional Queues by deterministic resource names, generates an ephemeral git-ignored Wrangler config under `.wrangler/`, applies remote D1 migrations, builds Vite assets, deploys the Worker, and binds `APP_DOMAIN` (`custom_domain: true`).
+  - Added non-destructive Worker secret reconciliation so existing remote secrets (`SESSION_SECRET`, `CREDENTIAL_SECRET`, `ADMIN_BOOTSTRAP_SECRET`) are preserved across unlimited rebuilds/redeploys without credential mismatch.
+  - Sanitized committed `wrangler.jsonc` and `wrangler.paid.jsonc` into clean account-agnostic templates with zero hardcoded production IDs or domains.
+  - Added `.env.deploy.example`, GitHub Actions auto-deploy workflow (`.github/workflows/deploy-cloudflare.yml`), and `test/cf-auto-deploy.node-test.ts`.
+- **Cloudflare Free & Paid Plan Support (`CLOUDFLARE_TIER`):**
+  - Made the default deployment Cloudflare Workers Free Plan compatible (`CLOUDFLARE_TIER=free`, omitted Paid-only `limits.cpu_ms`, `workers_dev: true`, automatic Free-tier compaction deferral via `src/worker/common/tier.ts`).
+  - Added Paid Plan support (`wrangler.paid.jsonc`, `CLOUDFLARE_TIER=paid`, `limits.cpu_ms: 300000`, full automatic background compaction).
+  - Added `src/worker/tasks/dispatch.ts` with automatic inline fallback for `route-cache-sync` and `repository-delete` when running without Cloudflare Queues (`USE_QUEUES=false` / `--no-queues`).
+  - Added `test/cloudflare-tier.node-test.ts`.
+- **Site Branding, SEO Meta & Asset Studio (`/admin/settings`):**
+  - Added full live configuration of Site Name, Short Name, Site Title, Meta Title, Meta Description, Meta Keywords, Search Indexing (`robots`), Hero Title & Description, Workspace Name, Website/Docs/Support links, and Footer Attribution Text.
+  - Added R2-backed Logo, Favicon, and OpenGraph (`og:image`) upload/preview/reset endpoints (`/api/site-assets/:slot`) synced live across SSR `<head>`, Header, and Footer.
+- **Public Namespaces Directory (`/namespaces`):**
+  - Replaced top-nav `Teams` with `Namespaces` and added a compact SSR `/namespaces` directory listing every active namespace with public/open-source repository counts, live filtering, and direct profile links.
+- **Structured Global Site Footer (`src/client/components/footer.tsx`):**
+  - Redesigned the global footer with a 12-column editorial layout, dynamic `/admin/settings` brand lockup, Forge / Account / Resources navigation columns, and dark/light theme parity.
+- **Global All-Namespaces Admin Personal Access Tokens:**
+  - Added explicit `All namespaces` PAT scope (`pat_global_grants`) exclusively for active `admin` accounts with live active-admin verification on every Git request.
+- **Gitra Open-Source GitHub Documentation Suite:**
+  - Published SEO-structured documentation under the **Gitra** (`gitra.co`) brand with verified **[Vib Tools](https://vib.tools/)** maintainer and contact details.
+
+### Fixed
+
+- **Reverse-Proxy & Preview Login CSRF (`403 Forbidden`):** Updated `src/worker/auth/origin.ts` to evaluate `X-Forwarded-Host` / `X-Forwarded-Proto` safely alongside `Host` and enabled Vite `server.allowedHosts: true`.
+
+---
+
 ## [0.1.0] — 2026-11-22
 
-### Production UI, RBAC, Profile & Error-Handling Upgrade (`Phase-01` → `Phase-06`)
-
-#### Added
-
-- **Design System Foundation (`Phase-01`):**
-  - Integrated **`Hanken Grotesk`** (`400;500;600;700`) and **`JetBrains Mono`** (`400;500`) web fonts in `src/client/server/document.tsx` and `src/client/styles/app.css`.
-  - Calibrated cool-slate dark theme tokens (`#0d1117` canvas, `#161b22` elevated surface, `#010409` header, `#30363d` border), crisp light-mode tokens (`#ffffff` / `#f6f8fa` / `#d0d7de`), and Forge Blue (`#1f6feb` / `#388bfd` / `#58a6ff`) accents.
-  - Standardized UI primitives (`Button`, `Card`, `Input`, `Badge`, `PageHeader`, code blocks, diff containers) to unified `rounded-md` (`6px`) geometry.
-- **GitHub-Style Repository Navigation & RBAC Gate (`Phase-02`):**
-  - Redesigned `RepoNav.tsx` into a two-tier repository header with full-width bottom-bordered underline tabs (`<> Code`, `Commits`, and conditional `Settings`).
-  - Added canonical `canViewerManageRepo()` helper in `src/worker/routes/ui/helpers.ts` and threaded `canManageRepo` across `overview.ts`, `tree.ts`, `blob.ts`, `commits.ts`, and `adminPage.ts` so `Settings` (`/:owner/:repo/admin`) is hidden from anonymous visitors and non-owner viewers.
-  - Updated directory folder icons to cool Forge Blue and tightened `#010409` top header contrast.
-- **Public Profile (`/:owner`) Two-Tab Workspace & Privacy Hardening (`Phase-03`):**
-  - Restructured `OwnerPage.tsx` and `OwnerReposIsland` (`src/client/islands/owner-profile.tsx`) into a clean `Overview` vs `Repositories (N)` two-tab layout.
-  - Placed `.vibtools/profile/README.md` and the 2-column `Pinned` repositories grid exclusively inside the `Overview` tab, and dedicated the `Repositories` tab to the searchable/filterable (`All | Public | Private`) repository directory.
-  - Hidden internal RBAC role pills (`MEMBER` / `VIEWER`) from anonymous public profile visitors.
-- **Users Panel (`/user/*`) Navigation Purity (`Phase-04`):**
-  - Removed leaked `Site Administration` (`/admin`) CTA from `AccountPage.tsx`, deduplicated `Public profile ↗` links between `AccountPage.tsx` and `profile-settings.tsx`, removed redundant `Back to Repositories` sidebar footer CTA from `UserSettingsLayout.tsx`, and removed cross-panel `/admin/users` links from `change-password.tsx`.
-  - Verified `<640px` mobile slide-over drawer navigation on both `/user/*` and `/admin/*`.
-- **Error Handling Hardening & Secondary Pages Alignment (`Phase-05`):**
-  - Upgraded `app.onError` in `src/worker/index.ts` with structured `"worker:unhandled-error"` logging and `wantsJsonErrorResponse()` content negotiation (returning JSON `{ error }` for API/Git/fragment requests and styled SSR `ErrorPage` HTML for browser navigations).
-  - Refactored `src/client/server/error.ts` to eliminate all `as any` casts via typed helpers (`getErrorMessage`, `getErrorStack`, `resolveErrorStatus`, `isGitReadMissError`) and added `buildEscapedErrorHtmlDocument()` XSS-safe standalone HTML fallback.
-  - Replaced silent `catch {}` blocks in `overview.ts`, `tree.ts`, `helpers.ts`, and `raw.ts` with structured `debug`/`warn` logging distinguishing expected `404` path misses from unexpected DO/R2 errors.
-  - Added inline HTTP `401` session-expiry prompts (`"Session expired — please sign in again."` with `/auth` link) and clipboard unavailability alerts across client islands.
-  - Aligned `HomePage.tsx`, `AuthSignInPage.tsx`, `ErrorPage.tsx`, `NotFoundPage.tsx`, `AdminSettingsLayout.tsx`, `AdminSettingsPage.tsx`, and `AdminSecurityPage.tsx` to `Phase-01` typography and `rounded-md` geometry.
-  - Added unit test suite `test/error-handling.test.ts` and worker integration suite `test/error-boundary.worker.test.ts`.
-- **Dev Seeded Test User & Mock Repository Workspace:**
-  - Added automatic local dev/preview seeding (`src/worker/auth/demoSeed.ts`) for `@alex-dev` (`devuser123`) with `.vibtools/profile/README.md` and `alex-dev/cloud-forge-kit` (full mock starter project structure with `.github/workflows/ci.yml`, `docs/ARCHITECTURE.md`, `src/`, `test/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, and `LICENSE`).
-
-### Core Platform & Git Engine Foundation
+### Core Platform, UI, RBAC & Error-Handling Foundation
 
 - **Git Smart HTTP v2 Server on Cloudflare Workers:**
-  - `ls-refs` and streaming `fetch` (`git-upload-pack`) with R2 range-read pack assembly, per-request pack discovery coalescing, and `Limiter` subrequest budget enforcement.
-  - Streaming `git-receive-pack` with single-writer Durable Object receive lease (`503 Retry-After: 10`), direct R2 pack staging, connectivity validation, and atomic ref commits.
+  - `ls-refs` and streaming `fetch` (`git-upload-pack`) with pack-first R2 range reads and `Limiter` subrequest budget enforcement.
+  - Streaming `git-receive-pack` with single-writer `RepoDurableObject` receive leases (`503 Retry-After: 10`), incremental SHA-1 digesting, connectivity checks, and atomic ref commits.
 - **Storage & Queue Architecture:**
-  - `RepoDurableObject` SQLite metadata store via Drizzle ORM (`drizzle-orm/durable-sqlite`).
-  - Cloudflare D1 directory for users, namespaces, repositories, 3-tier RBAC (`admin`, `member`, `viewer`), and `SHA-256` hashed Personal Access Tokens (`goc_...`) with D1 session bookmark consistency.
-  - Cloudflare Queues background consumer (`compaction`, `route-cache-sync`, `repository-delete`).
+  - `RepoDurableObject` SQLite metadata store via Drizzle ORM (`drizzle-orm/durable-sqlite`), Cloudflare D1 directory with session bookmark consistency, R2 pack storage, KV route cache, and Queue background consumer.
+- **Web Forge UI, Profiles & Administration:**
+  - Two-tier `RepoNav` (`<> Code`, `Commits`, RBAC-gated `Settings`), file tree explorer, syntax-highlighted `BlobPage`, in-browser `BlobEditorIsland`, commit diffs with `MergeExpanderIsland`, two-tab `/:owner` profiles with `.vibtools/profile/README.md`, dedicated `/user/*` User Settings Panel, `/admin/*` Site Administration Control Panel, hardened SSR/JSON error boundaries, and Local Dev Demo Mode seeding.

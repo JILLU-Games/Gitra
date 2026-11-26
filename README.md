@@ -1,41 +1,50 @@
-# git-on-cloudflare — Edge-Native Self-Hosted Git Smart HTTP v2 Server & Code Forge on Cloudflare Workers
+# Gitra — Open-Source Serverless Git Forge on Cloudflare Workers
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/vibtools/vibtools.github.io/main/public/brand/vibtools-icon.png" alt="Vib Tools Logo" width="64" height="64" />
+  <img src="https://raw.githubusercontent.com/vibtools/vibtools.github.io/main/public/brand/vibtools-icon.png" alt="Gitra by Vib Tools" width="64" height="64" />
 </p>
 
-<h3 align="center">Practical, Self-Hosted Git Infrastructure at the Edge — Zero VMs, Zero Containers</h3>
+<h3 align="center">Fast, self-hosted Git hosting at the edge — zero VMs, zero Docker, Free &amp; Paid Cloudflare ready.</h3>
 
 <p align="center">
-  <strong>Full Git Smart HTTP v2 Protocol · Durable Objects SQLite · Cloudflare R2 Pack Storage · D1 RBAC & PAT Auth · React 19 SSR Code Forge UI</strong>
+  <strong>Git Smart HTTP v2 · Durable Objects SQLite · Cloudflare R2 Pack Storage · D1 RBAC &amp; PAT Auth · Zero-Touch Auto-Deploy · React 19 SSR UI</strong>
 </p>
 
 <p align="center">
-  <a href="https://vibtools.io/">Official Website</a> ·
-  <a href="https://github.com/vibtoolshq">Vib Tools GitHub</a> ·
-  <a href="#quick-start-local-development--demo-mode">Quick Start</a> ·
+  <a href="https://gitra.co/">Website (gitra.co)</a> ·
+  <a href="https://vib.tools/">Vib Tools</a> ·
+  <a href="#quick-start-local-development">Quick Start</a> ·
+  <a href="#zero-touch-deploy-to-cloudflare-free--paid">Zero-Touch Deploy</a> ·
   <a href="#a-to-z-feature-guide">A–Z Features</a> ·
   <a href="#system-architecture">Architecture</a> ·
-  <a href="#deploy-to-cloudflare-workers">Deploy</a> ·
+  <a href="#frequently-asked-questions-faq">FAQ</a> ·
   <a href="./CONTRIBUTING.md">Contributing</a> ·
   <a href="./SECURITY.md">Security</a>
 </p>
 
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License" /></a>
+  <img src="https://img.shields.io/badge/Runtime-Cloudflare%20Workers-F38020?logo=cloudflare&amp;logoColor=white" alt="Cloudflare Workers" />
+  <img src="https://img.shields.io/badge/Protocol-Git%20Smart%20HTTP%20v2-F05032?logo=git&amp;logoColor=white" alt="Git Smart HTTP v2" />
+  <img src="https://img.shields.io/badge/Cloudflare%20Tier-Free%20%26%20Paid-16A34A" alt="Cloudflare Free and Paid Plans" />
+  <img src="https://img.shields.io/badge/UI-React%2019%20SSR%20%2B%20Tailwind%20v4-38BDF8" alt="React 19 SSR and Tailwind v4" />
+</p>
+
 ---
 
-## Overview
+## What Is Gitra?
 
-**`git-on-cloudflare`** is a production-grade, self-hosted **Git Smart HTTP v2 server and web code forge** engineered to run 100% natively on **Cloudflare Workers**. Instead of running persistent Linux virtual machines, Docker containers, or heavy background daemons, `git-on-cloudflare` combines **Cloudflare Durable Objects (SQLite)**, **Cloudflare R2**, **Cloudflare D1**, **Cloudflare KV**, and **Cloudflare Queues** to host public and private Git repositories at the edge with linearizable ref consistency and sub-50ms cached response times worldwide.
+**Gitra** ([gitra.co](https://gitra.co/)) is an **open-source, self-hosted Git forge and Git Smart HTTP v2 server** built to run natively on **Cloudflare Workers**. Designed as a lightweight, serverless alternative to traditional VPS-hosted Git servers like Gitea or Forgejo, Gitra eliminates persistent Linux servers, Docker containers, and background daemons by combining **Cloudflare Durable Objects (SQLite)**, **Cloudflare R2**, **Cloudflare D1**, **Cloudflare KV**, and optional **Cloudflare Queues**.
 
-Developed and maintained by **[Vib Tools](https://vibtools.io/)** (_Practical software for real workflows_), `git-on-cloudflare` gives solo developers, technical teams, and self-hosters complete operational control over their source code repositories through standard `git clone`, `git fetch`, and `git push` CLI workflows paired with a fast, GitHub/Forgejo-inspired **React 19 Server-Side Rendered (SSR) Web UI**.
+Built and maintained by **[Vib Tools](https://vib.tools/)** (_Practical software for real workflows_), Gitra gives solo developers, open-source maintainers, and small teams full ownership over public and private Git repositories through standard `git clone`, `git fetch`, and `git push` CLI workflows paired with a fast, compact **React 19 SSR web interface**, customizable site branding & SEO controls, and **one-command zero-touch Cloudflare deployment** on both Free ($0/mo) and Paid ($5/mo+) accounts.
 
-### Why `git-on-cloudflare`?
+### Why Developers Choose Gitra
 
-- **True Serverless Git Engine:** Implements the Git Smart HTTP v2 wire protocol (`ls-refs`, `fetch`, `side-band-64k`, `ofs-delta`, and streaming `git-receive-pack`) directly inside Cloudflare Workers.
-- **Linearizable Ref Authority:** Each repository is backed by an isolated `RepoDurableObject` with embedded SQLite (`drizzle-orm/durable-sqlite`), preventing split-brain ref updates and concurrent push corruption via single-writer receive leases.
-- **Pack-First R2 Object Storage:** Streams Git packfiles (`.pack`, `.idx`, `.refs`) directly to and from Cloudflare R2 using byte-range reads and incremental SHA-1 `crypto.DigestStream` verification.
-- **Complete Identity, RBAC & PAT Security:** Built-in Cloudflare D1 user directory, namespace ownership, 3-tier Role-Based Access Control (`admin`, `member`, `viewer`), HMAC-signed session cookies, and granular `goc_...` Personal Access Tokens (`pull` / `push`).
-- **Clean, Compact Developer UI:** Dark-first cool-slate aesthetic (`#0d1117` / `#161b22` / `#010409`) with light-mode toggle, `Hanken Grotesk` + `JetBrains Mono` typography, repository file explorer, syntax-highlighted code viewer, in-browser file & README editor, interactive merge commit explorer, `.vibtools` developer profile READMEs, User Settings panel (`/user/*`), and Site Administration Control Panel (`/admin/*`).
+- **Zero-VPS Serverless Git Hosting:** Run a real Git Smart HTTP v2 server (`ls-refs`, `fetch`, `side-band-64k`, `ofs-delta`, streaming `git-receive-pack`) globally on Cloudflare's edge network.
+- **Runs on Cloudflare Free & Paid Plans:** Works out of the box on the **Cloudflare Workers Free Plan** (automatic Free-tier CPU safeguards + optional Queue-less inline fallback) and scales seamlessly to **Cloudflare Workers Paid ($5/mo+)** with a 5-minute CPU ceiling and automatic background pack compaction.
+- **One-Command Zero-Touch Auto-Deploy:** Provide `CLOUDFLARE_API_TOKEN` and optional `APP_DOMAIN=gitra.co` in environment variables; Gitra auto-provisions D1, KV, R2, and Queues on first install, keeps `wrangler.jsonc` completely clean of production IDs/domains, and **never overwrites existing Worker secrets** on rebuilds or redeploys.
+- **Linearizable Ref Consistency:** Each repository is governed by an isolated `RepoDurableObject` backed by embedded SQLite (`drizzle-orm/durable-sqlite`), preventing split-brain updates and concurrent push corruption through single-writer receive leases.
+- **Complete Self-Hosted Forge Experience:** Includes repository browsing, syntax-highlighted code viewer, in-browser file & README editor, commit diffs with merge side-branch inspection, `/namespaces` public directory, `.vibtools` developer profile READMEs, granular & global Personal Access Tokens (`goc_...`), User Settings (`/user/*`), and Site Administration with live Branding/SEO/Logo/Favicon uploads (`/admin/settings`).
 
 ---
 
@@ -43,26 +52,29 @@ Developed and maintained by **[Vib Tools](https://vibtools.io/)** (_Practical so
 
 1. [A-to-Z Feature Guide](#a-to-z-feature-guide)
    - [1. Git Smart HTTP v2 Protocol & Streaming Engine](#1-git-smart-http-v2-protocol--streaming-engine)
-   - [2. Hybrid Edge Storage & Background Queue Compaction](#2-hybrid-edge-storage--background-queue-compaction)
-   - [3. Edge Caching, Coalescing & Subrequest Budget Limiter](#3-edge-caching-coalescing--subrequest-budget-limiter)
-   - [4. Authentication, 3-Tier RBAC & Personal Access Tokens (PATs)](#4-authentication-3-tier-rbac--personal-access-tokens-pats)
-   - [5. Repository Web Forge UI (`/:owner/:repo`)](#5-repository-web-forge-ui-ownerrepo)
-   - [6. Public Developer Profiles (`/:owner`) & `.vibtools` Profile README](#6-public-developer-profiles-owner--vibtools-profile-readme)
-   - [7. Dedicated User Settings Panel (`/user/*`)](#7-dedicated-user-settings-panel-user)
-   - [8. Site Administration Control Panel (`/admin/*`) & Repo Admin](#8-site-administration-control-panel-admin--repo-admin)
-   - [9. Hardened Error Boundaries, Security & Observability](#9-hardened-error-boundaries-security--observability)
+   - [2. Hybrid Edge Storage & Optional Queue Compaction](#2-hybrid-edge-storage--optional-queue-compaction)
+   - [3. Cloudflare Free & Paid Plan Support](#3-cloudflare-free--paid-plan-support)
+   - [4. Zero-Touch, Idempotent Auto-Deploy System](#4-zero-touch-idempotent-auto-deploy-system)
+   - [5. Edge Caching, Coalescing & Subrequest Budget Limiter](#5-edge-caching-coalescing--subrequest-budget-limiter)
+   - [6. Authentication, 3-Tier RBAC & Personal Access Tokens (PATs)](#6-authentication-3-tier-rbac--personal-access-tokens-pats)
+   - [7. Repository Web Forge UI (`/:owner/:repo`)](#7-repository-web-forge-ui-ownerrepo)
+   - [8. Public Namespaces Directory (`/namespaces`) & Developer Profiles (`/:owner`)](#8-public-namespaces-directory-namespaces--developer-profiles-owner)
+   - [9. Site Branding, SEO Meta & Asset Studio (`/admin/settings`)](#9-site-branding-seo-meta--asset-studio-adminsettings)
+   - [10. Dedicated User Settings (`/user/*`) & Site Administration (`/admin/*`)](#10-dedicated-user-settings-user--site-administration-admin)
+   - [11. Hardened Error Boundaries, Security & Observability](#11-hardened-error-boundaries-security--observability)
 2. [System Architecture](#system-architecture)
-3. [Quick Start (Local Development & Demo Mode)](#quick-start-local-development--demo-mode)
-4. [Using Git CLI (`clone`, `fetch`, `push`)](#using-git-cli-clone-fetch-push)
-5. [Deploy to Cloudflare Workers](#deploy-to-cloudflare-workers)
+3. [Quick Start (Local Development)](#quick-start-local-development)
+4. [Zero-Touch Deploy to Cloudflare (Free & Paid)](#zero-touch-deploy-to-cloudflare-free--paid)
+5. [Using Git CLI (`clone`, `fetch`, `push`)](#using-git-cli-clone-fetch-push)
 6. [Configuration & Cloudflare Bindings](#configuration--cloudflare-bindings)
 7. [HTTP Routes & API Reference](#http-routes--api-reference)
-8. [Project Directory Structure](#project-directory-structure)
+8. [Project Structure](#project-structure)
 9. [Development, Testing & Validation Commands](#development-testing--validation-commands)
 10. [Known Platform Constraints](#known-platform-constraints)
-11. [Documentation Index](#documentation-index)
-12. [Author, Maintainer & Official Contact Information](#author-maintainer--official-contact-information)
-13. [License](#license)
+11. [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
+12. [Documentation Index](#documentation-index)
+13. [Author, Maintainer & Official Contact Information](#author-maintainer--official-contact-information)
+14. [License](#license)
 
 ---
 
@@ -71,136 +83,108 @@ Developed and maintained by **[Vib Tools](https://vibtools.io/)** (_Practical so
 ### 1. Git Smart HTTP v2 Protocol & Streaming Engine
 
 - **Service Discovery (`GET /:owner/:repo/info/refs`):**
-  - Supports `service=git-upload-pack` and `service=git-receive-pack` over Git protocol v2 (`version 2` capability advertisement).
-  - Enforces non-disclosure access control: private repositories return `401 Unauthorized` (with `WWW-Authenticate: Basic realm="git"`) or `404 Not Found` to unauthenticated clients so private repository existence is never leaked.
+  - Advertises Git protocol v2 capabilities for `service=git-upload-pack` and `service=git-receive-pack`.
+  - Enforces non-disclosure access rules so unauthenticated clients cannot enumerate private repositories (`401` with `WWW-Authenticate: Basic realm="git"` or `404 Not Found`).
 - **Streaming Clone & Fetch (`POST /:owner/:repo/git-upload-pack`):**
-  - Full protocol v2 command support for `ls-refs` (with `peel`, `symrefs`, and `ref-prefix` filtering) and `fetch` (`want`, `have`, `done`, `ofs-delta`, `side-band-64k`, `include-tag`).
-  - **Pack-First Streaming Assembly:** Resolves object closure from active `.idx` and `.refs` metadata and streams pack data directly from Cloudflare R2 using range reads—avoiding whole-pack memory buffering when serving selective fetches.
-  - Supports `gzip` request body decompression (`Content-Encoding: gzip`).
+  - Implements Git v2 `ls-refs` (`peel`, `symrefs`, `ref-prefix`) and `fetch` (`want`, `have`, `done`, `ofs-delta`, `side-band-64k`, `include-tag`).
+  - **Pack-First Streaming Assembly:** Resolves object closure from active `.idx` and `.refs` sidecars and streams pack data directly from Cloudflare R2 via byte-range reads without buffering entire packs in memory.
+  - Supports `gzip`-compressed Git request payloads (`Content-Encoding: gzip`).
 - **Streaming Push & Single-Writer Receive Lease (`POST /:owner/:repo/git-receive-pack`):**
-  - Acquires an exclusive, time-bounded receive lease on the target `RepoDurableObject` via `beginReceive()`. Concurrent pushes during an active receive lease cleanly receive `HTTP 503 Service Unavailable` with `Retry-After: 10`.
-  - Streams incoming packfile bytes directly to a staged R2 key while computing incremental SHA-1 checksums via `crypto.DigestStream`.
-  - Indexes incoming objects (base objects, `OFS_DELTA`, and `REF_DELTA`), validates commit/tree/tag connectivity against existing repository objects, and atomically commits ref updates (`refs/heads/*`, `refs/tags/*`) via `finalizeReceive()`.
+  - Acquires an exclusive, time-bounded receive lease on the repository's `RepoDurableObject` via `beginReceive()`. Concurrent pushes receive `HTTP 503 Service Unavailable` with `Retry-After: 10`.
+  - Streams incoming pack bytes directly to staged R2 storage while computing incremental SHA-1 digests using `crypto.DigestStream`.
+  - Indexes incoming objects (base objects, `OFS_DELTA`, `REF_DELTA`), validates commit/tree/tag connectivity against existing packs, and commits ref updates (`refs/heads/*`, `refs/tags/*`) atomically via `finalizeReceive()`.
 
-### 2. Hybrid Edge Storage & Background Queue Compaction
+### 2. Hybrid Edge Storage & Optional Queue Compaction
 
 - **Repository Durable Object (`RepoDurableObject`):**
-  - Single source of truth for per-repository `refs`, `HEAD`, active pack catalog, receive leases, and compaction scheduling.
-  - Uses embedded SQLite managed through Drizzle ORM (`src/worker/do/repo/db/dal.ts` and `schema.ts`).
-  - Automatic idle cleanup alarm (`REPO_DO_IDLE_MINUTES`, default `30` minutes) to keep storage footprint clean when a repository is empty or idle.
+  - Single transactional source of truth for per-repository `refs`, `HEAD`, active pack catalog, receive leases, and compaction scheduling.
+  - Backed by embedded SQLite accessed strictly through Drizzle ORM (`src/worker/do/repo/db/dal.ts`).
+  - Automatic idle cleanup alarm (`REPO_DO_IDLE_MINUTES`, default `30` minutes).
 - **Cloudflare R2 Pack Store (`REPO_BUCKET`):**
-  - Stores immutable packfiles (`*.pack`), pack index files (`*.idx`), and ref-index sidecar files (`*.refs`).
-  - Eliminates loose-object dependence on the read path for high-throughput multi-pack union reads.
+  - Stores immutable `.pack`, `.idx`, and `.refs` sidecars along with uploaded site branding assets (logo, favicon, OpenGraph image).
 - **Cloudflare D1 Global Directory (`DB`):**
-  - Stores user accounts, password hashes, namespaces, repository registry metadata (visibility, description, pinned status, default branch, update timestamps), and Personal Access Tokens.
-  - Uses **D1 Session Bookmark Consistency** (`first-primary` for writes/auth, `first-unconstrained` with bookmark cookie anchoring for reads) to prevent stale replica reads after mutations.
-- **Cloudflare Queues Background Tasks (`REPO_TASKS_QUEUE`):**
-  - Asynchronous queue consumer (`src/worker/tasks/queue.ts`) processes:
-    - **`compaction`:** Merges multiple small receive packs into compacted packs in the background without blocking `git push` or `git fetch`.
-    - **`route-cache-sync`:** Synchronizes repository route ownership and visibility flags into Cloudflare KV (`ROUTES`).
-    - **`repository-delete`:** Safely purges R2 pack assets and DO storage after repository deletion.
+  - Stores user accounts, salted password hashes, namespaces, repository metadata (visibility, description, pinned state, default branch, updated timestamps), Personal Access Tokens (including global admin grants), and instance branding/SEO settings.
+  - Uses **D1 Session Bookmark Consistency** (`first-primary` for writes/auth, `first-unconstrained` with bookmark anchoring for reads) so users immediately see their own writes across global read replicas.
+- **Cloudflare Queues with Inline Fallback (`REPO_TASKS_QUEUE`):**
+  - When bound, processes `compaction`, `compaction-delete`, `pack-ref-backfill`, `route-cache-sync`, and `repository-delete` asynchronously.
+  - When omitted (e.g., `USE_QUEUES=false` / `--no-queues` on Free tier), `route-cache-sync` and `repository-delete` automatically fall back to safe inline execution (`src/worker/tasks/dispatch.ts`) without errors.
 
-### 3. Edge Caching, Coalescing & Subrequest Budget Limiter
+### 3. Cloudflare Free & Paid Plan Support
 
-- **Two-Tier Edge Cache (`src/worker/cache/`):**
-  - Immutable Git objects and pack reads are cached at the edge with long TTLs.
-  - Public UI SSR pages utilize smart cache policies while authenticated or RBAC-sensitive responses automatically call `markRequestPrivate()` and emit `Cache-Control: private, no-store` with `Vary: Cookie, Authorization`.
-- **Platform Subrequest & Concurrency Limiter (`src/worker/git/operations/limits.ts`):**
-  - Every request-scoped R2 call and outbound Durable Object RPC passes through `Limiter` (`limiter.run(label, fn)`).
-  - Enforces Cloudflare Workers' 6-concurrent-connection limit and tracks the per-request subrequest budget (`DEFAULT_SUBREQUEST_BUDGET = 900`, `RECEIVE_SUBREQUEST_BUDGET`) to prevent hard platform ceiling failures on large repositories.
+Gitra adapts its runtime behavior automatically via the `CLOUDFLARE_TIER` environment variable (`src/worker/common/tier.ts`):
 
-### 4. Authentication, 3-Tier RBAC & Personal Access Tokens (PATs)
+| Capability                               | Free Plan (`CLOUDFLARE_TIER=free`, default)                                | Paid Plan (`CLOUDFLARE_TIER=paid`) |
+| :--------------------------------------- | :------------------------------------------------------------------------- | :--------------------------------- |
+| **Worker CPU Limit**                     | Free 10ms (`limits.cpu_ms` omitted)                                        | `300000` ms (5 minutes)            |
+| **SQLite Durable Objects, D1, KV, R2**   | Included on Free quotas                                                    | Included                           |
+| **Cloudflare Queues**                    | Optional (Free 10k ops/day, or `USE_QUEUES=false` inline fallback)         | Enabled                            |
+| **Automatic Background Compaction**      | Automatically skipped after push/web-commit to stay inside Free CPU limits | Enabled automatically              |
+| **Manual Compaction & All Git/UI Flows** | Supported                                                                  | Supported                          |
+
+### 4. Zero-Touch, Idempotent Auto-Deploy System
+
+Gitra ships with a zero-dependency, API-token-driven deployment engine (`scripts/cf-auto-deploy.mjs` + `scripts/cf-auto-deploy-lib.mjs`):
+
+- **Clean Repository Config:** Committed `wrangler.jsonc` and `wrangler.paid.jsonc` contain **no** hardcoded production database UUIDs, KV IDs, bucket names, or custom domains. Deploy-time configuration is generated ephemerally in git-ignored `.wrangler/deploy.generated.jsonc`.
+- **First Install = Full Auto-Provisioning:** Authenticates purely via `CLOUDFLARE_API_TOKEN` (no interactive browser login), auto-detects `CLOUDFLARE_ACCOUNT_ID`, creates missing D1/KV/R2/Queue resources deterministically, runs remote D1 SQL migrations, builds Vite assets, deploys the Worker, and binds `APP_DOMAIN` as a Cloudflare Custom Domain (automatic DNS + TLS).
+- **Zero Credential Mismatch Across Unlimited Redeploys:** Queries Cloudflare's Worker Secrets metadata API before uploading secrets. Existing remote secrets (`SESSION_SECRET`, `CREDENTIAL_SECRET`, `ADMIN_BOOTSTRAP_SECRET`) are **never overwritten** on rebuilds or redeploys unless `FORCE_ROTATE_SECRETS=true` is explicitly specified.
+- **CI/CD Ready:** Includes `.github/workflows/deploy-cloudflare.yml` for one-click GitHub Actions deployments and `--dry-run` preview mode.
+
+### 5. Edge Caching, Coalescing & Subrequest Budget Limiter
+
+- **Two-Tier Edge Cache (`src/worker/cache/`):** Caches immutable Git objects and public responses while automatically enforcing `Cache-Control: private, no-store` and `Vary: Cookie, Authorization` on authenticated or RBAC-sensitive SSR pages.
+- **Subrequest & Concurrency Limiter (`src/worker/git/operations/limits.ts`):** Routes request-scoped R2 and Durable Object calls through `Limiter`, enforcing Cloudflare's 6-concurrent-connection cap and `DEFAULT_SUBREQUEST_BUDGET = 900`.
+
+### 6. Authentication, 3-Tier RBAC & Personal Access Tokens (PATs)
 
 - **Browser Session Authentication (`/auth`):**
-  - Sign in with username or `@handle` and password.
-  - Passwords hashed using `PBKDF2-SHA256` with per-user cryptographic salts (`src/worker/auth/passwords.ts`).
-  - Stateless HMAC-SHA256 signed session cookies sealed with `SESSION_SECRET` using `HttpOnly; Secure; Partitioned; SameSite=None` flags for iframe and cross-context compatibility.
-  - Immediate session revocation when a user account is disabled or deleted in D1.
+  - Sign in with username or `@handle` and password (`PBKDF2-SHA256` with per-user salts).
+  - Stateless `HMAC-SHA256` signed session cookies (`HttpOnly; Secure; Partitioned; SameSite=None`) with reverse-proxy-aware same-origin CSRF verification (`src/worker/auth/origin.ts`).
+  - Immediate session and PAT invalidation when a user is disabled or deleted.
 - **3-Tier Role-Based Access Control (RBAC):**
-  - **`admin`:** Full access to repository creation/push, personal settings, per-repo administration, and the global Site Administration Control Panel (`/admin/*`).
-  - **`member`:** Standard developer role; can create and manage repositories in owned namespaces, edit files in the web UI, manage `.vibtools` profile READMEs, and issue `pull` or `push` PATs.
-  - **`viewer`:** Read-only directory role; can browse accessible repositories and issue `pull`-only PATs, with repository creation and `push` token scopes disabled in both UI and API.
-- **Granular Personal Access Tokens (`goc_...`):**
-  - Format: `goc_<id>_<secret>`, stored as `SHA-256` hashes in D1 (`src/worker/auth/pat.ts`).
-  - Supports **Namespace-wide** (`/@handle/*`) or **Single-Repository** (`/@handle/repo`) scoping.
-  - Supports **`pull`** (read/clone) or **`push`** (read + write) access levels and optional expiration windows (`7d`, `30d`, `90d`, `365d`, or `never`).
-  - Automatically tracks `lastUsedAt` timestamps on Git Smart HTTP requests.
-- **Dev & Preview Seeded Demo Workspace:**
-  - When `ADMIN_PASSWORD` is unset in local development or preview environments, the server enables quick-test demo accounts and idempotently seeds a complete showcase workspace (`src/worker/auth/demoSeed.ts`):
-    - **`@admin` (`admin` / `admin123`):** Primary Site Administrator.
-    - **`@alex-dev` (`alex-dev` / `devuser123`):** Seeded developer account with `.vibtools` (`profile/README.md`) and `alex-dev/cloud-forge-kit` (a complete multi-directory TypeScript Worker starter kit repository with `.github/workflows/ci.yml`, `docs/ARCHITECTURE.md`, `src/`, `test/`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `LICENSE`, `package.json`, `tsconfig.json`, and `wrangler.jsonc`).
+  - **`admin`:** Full repository, user directory, global token, site branding/SEO, and instance management access.
+  - **`member`:** Standard developer role; create/manage repositories in owned namespaces, edit files in the browser, customize `.vibtools` profiles, and create `pull`/`push` PATs.
+  - **`viewer`:** Read-only role; browse accessible repositories and issue `pull`-only PATs.
+- **Granular & Global Personal Access Tokens (`goc_...`):**
+  - Stored exclusively as `SHA-256` digests in D1 with last-used tracking and optional expiration (`7d`, `30d`, `90d`, `365d`, `never`).
+  - Supports **Single Repository** (`/@handle/repo`), **Namespace-wide** (`/@handle/*`), and **All-Namespaces Global Admin PATs** (`pat_global_grants`, exclusively for active `admin` accounts with live active-admin re-verification on every Git request).
 
-### 5. Repository Web Forge UI (`/:owner/:repo`)
+### 7. Repository Web Forge UI (`/:owner/:repo`)
 
-- **GitHub/Gitea-Style Two-Tier Repository Header (`RepoNav`):**
-  - Tier 1 displays the owner/repository breadcrumb (`alex-dev / cloud-forge-kit`), `Public`/`Private` visibility badge, and branch/tag selector (`RefPickerIsland`).
-  - Tier 2 provides full-width horizontal underline tabs:
-    - **`<> Code`** (`/:owner/:repo`)
-    - **`Commits`** (`/:owner/:repo/commits`)
-    - **`Settings`** (`/:owner/:repo/admin`) — **strictly gated by `canViewerManageRepo`** so anonymous visitors and read-only viewers never see admin navigation links.
-- **Repository Overview (`OverviewPage`):**
-  - Displays branch/tag summary, clone URL popover (`<> Code` button with one-click copy and clipboard fallback feedback), root file/directory table with latest commit OIDs, automatic `README.md` rendering (with GFM tables, task lists, relative link/image resolution, and XSS-safe HTML sanitization), plus an **About** and **Branches** sidebar.
-- **Directory Tree & Syntax-Highlighted Blob Viewer (`TreePage` & `BlobPage`):**
-  - Navigate nested directories (`/:owner/:repo/tree?ref=...&path=...`) with breadcrumb path segments.
-  - View source files (`/:owner/:repo/blob?ref=...&path=...`) with line numbers, syntax highlighting (`highlight.js`), markdown preview toggle, raw file link, and file size/line metrics.
-- **In-Browser Web File Creation & Blob Editor:**
-  - Authorized repo owners can create new files directly from the repository overview or edit existing text files in the browser (`BlobEditorIsland`) with custom commit messages and target branch selection—committing directly to the repository pack/object store without needing a local checkout.
-- **Commit History, Merge Side-Branch Explorer & Diff Viewer (`CommitsPage` & `CommitPage`):**
-  - Paginated commit log with author, timestamp, commit title, and short SHA links.
-  - **Interactive Merge Commit Expander (`MergeExpanderIsland`):** Expand merge commits inline to inspect side-branch commit history fetched on demand (`/:owner/:repo/commits/fragments/:oid`).
-  - **Commit Diff View (`/:owner/:repo/commit/:oid`):** Full commit metadata, parent links, changed-file stats, and unified diff patches with lazy-loaded diff expansion (`CommitDiffExpanderIsland`).
-- **Safe Raw Content Streaming (`/raw` & `/rawpath`):**
-  - `GET /:owner/:repo/raw?oid=...` serves blob content as safe `text/plain; charset=utf-8` with `X-Content-Type-Options: nosniff`.
-  - `GET /:owner/:repo/rawpath?ref=...&path=...` streams inline media/assets for README rendering while enforcing a strict same-origin `Referer` check (`403 Forbidden` on cross-site hotlinks).
+- **Two-Tier Repository Navigation (`RepoNav`):** Owner/repo breadcrumb, visibility badge, branch/tag selector (`RefPickerIsland`), and underline tabs (`<> Code`, `Commits`, and RBAC-gated `Settings`).
+- **Code Explorer & Syntax-Highlighted Viewer:** Root overview with clone URL popover + copy fallback, nested directory tree (`TreePage`), line-numbered syntax-highlighted code viewer (`BlobPage`, `highlight.js`), and XSS-sanitized GFM Markdown README rendering.
+- **In-Browser Web File Creation & Editing:** Create new files or edit existing text files directly in the browser (`BlobEditorIsland`) with custom commit messages and branch selection.
+- **Commit Log, Merge Explorer & Diffs:** Paginated commit history (`CommitsPage`), on-demand merge side-branch expansion (`MergeExpanderIsland`), and unified diff patches (`CommitPage` + `CommitDiffExpanderIsland`).
+- **Safe Raw Asset Endpoints:** `/:owner/:repo/raw` serves blobs as `text/plain; charset=utf-8` with `X-Content-Type-Options: nosniff`; `/:owner/:repo/rawpath` enforces same-origin `Referer` checks (`403 Forbidden` on external hotlinks).
 
-### 6. Public Developer Profiles (`/:owner`) & `.vibtools` Profile README
+### 8. Public Namespaces Directory (`/namespaces`) & Developer Profiles (`/:owner`)
 
-- **Clean Public Profile Header (`OwnerPage`):**
-  - Displays avatar badge, display name, `@handle`, bio, repository counts (`N repositories · M public`), location, and website link.
-  - Privacy-hardened: internal RBAC role pills (`MEMBER` / `VIEWER`) and internal dotfile shortcuts are hidden from anonymous public visitors.
-- **Two-Tab Profile Workspace (`OwnerReposIsland`):**
-  - **`Overview` Tab:**
-    - Automatically renders `profile/README.md` from the user's `/{owner}/.vibtools` repository (complete with an in-browser **Edit README** / `.vibtools` initializer modal for the profile owner).
-    - Displays up to 6 **Pinned repositories** (or popular repositories fallback) in a clean 2-column card grid without duplicating the full searchable directory underneath.
-  - **`Repositories (N)` Tab:**
-    - Dedicated searchable and filterable (`All | Public | Private`) repository directory with one-click **Pin / Unpin** controls and **New repository** creation modal for the owner.
+- **Compact Namespaces Directory (`/namespaces`):**
+  - Linked directly from the top navigation bar (**Namespaces**).
+  - Displays every active namespace with display name, `@handle`, bio, location/website metadata, public & open-source repository counts, live search filter, and one-click navigation into each namespace's public profile.
+- **Two-Tab Developer Profiles (`/:owner`):**
+  - **`Overview` Tab:** Automatically renders `profile/README.md` from `/:owner/.vibtools` (with an inline editor/initializer for the owner) alongside up to 6 **Pinned repositories**.
+  - **`Repositories` Tab:** Searchable, filterable (`All | Public | Private`) repository catalog with owner Pin/Unpin and New Repository modals.
 
-### 7. Dedicated User Settings Panel (`/user/*`)
+### 9. Site Branding, SEO Meta & Asset Studio (`/admin/settings`)
 
-- **Clean Separation from Site Administration:**
-  - Dedicated left-sidebar layout (`UserSettingsLayout`) with desktop persistent navigation and a `<640px` mobile slide-over drawer (`#user-sidebar-drawer`)—completely free of leaked admin CTAs or redundant navigation clutter.
-- **Five Focused Sections:**
-  - **`/user/profile` (`Profile`):** Identity summary (`@handle`, display name, role, account ID), public profile metadata editor (Display Name, Location, Website URL, Bio), and single `Public profile ↗` link.
-  - **`/user/account` (`Account & Repos`):** Owned namespaces and repository management table (create repositories, toggle `Public`/`Private` visibility, edit descriptions, pin/unpin, or delete repositories).
-  - **`/user/settings` (`Settings`):** Consolidated account preferences, profile details, and security controls.
-  - **`/user/settings/security` (`Password & Security`):** Self-service password change form (`ChangePasswordIsland`) with current-password verification.
-  - **`/user/settings/tokens` (`Access Tokens`):** Issue, copy, inspect, and revoke namespace-scoped or repository-scoped Personal Access Tokens (`TokensIsland`).
+Administrators can customize the entire Gitra instance live without redeploying code:
 
-### 8. Site Administration Control Panel (`/admin/*`) & Repo Admin
+- **Identity & Copy:** Site Name, Short Name, Tagline, Workspace Name, Hero Title & Description, Website URL & Label, Documentation URL, Support Email, and Footer Attribution Text.
+- **SEO & Search Controls:** Browser `<title>`, Meta Title, Meta Description, Meta Keywords, OpenGraph (`og:title`, `og:description`, `og:image`), Twitter cards, and search engine indexing toggle (`index, follow` vs `noindex, nofollow`).
+- **R2-Backed Brand Assets:** Upload, preview, or reset custom **Logo**, **Favicon**, and **OpenGraph Social Card (`og:image`)** stored in R2 and served cleanly via `/api/site-assets/:slot`, automatically syncing across `<head>`, the Header, and the Global Footer.
 
-- **Global Site Administration (`/admin/*` — Admin Role Only):**
-  - Accessible via the top-right `@admin` user menu (`Control Panel`), backed by a responsive sidebar and `<640px` mobile slide-over drawer (`AdminSettingsLayout`):
-  - **`/admin` (`Dashboard`):** Instance KPIs (Total Repositories, Active Users/Namespaces, Personal Access Tokens), recent repository table, user directory role breakdown, and quick control shortcuts.
-  - **`/admin/users` (`Users & Accounts`):** Searchable user directory (`AdminUsersIsland`) to create users, assign roles (`admin` / `member` / `viewer`), reset passwords, enable/disable accounts, edit profile metadata, or delete non-admin accounts (with primary-admin protection rules).
-  - **`/admin/repositories` (`Repositories`):** Global repository inventory across all namespaces with visibility toggles, description editing, and administrative deletion.
-  - **`/admin/tokens` (`Access Tokens`):** Instance-wide PAT audit table with token prefix, owner, scope, access level, last-used timestamp, and instant administrative revocation.
-  - **`/admin/settings` (`Instance Settings`):** Runtime health, storage binding status (`D1`, `R2`, `Repo DO`, `KV`, `Queues`), idle cleanup thresholds, and authentication mode overview.
-  - **`/admin/security` (`Security & Policies`):** Live RBAC capability matrix, session cookie security posture (`HttpOnly`, `Secure`, `Partitioned`, `SameSite=None`), `PBKDF2-SHA256` password policy, and `SHA-256` PAT verification policies.
-- **Per-Repository Administration (`/:owner/:repo/admin`):**
-  - Inspect and update `HEAD` and branch/tag refs.
-  - View storage metrics, active pack catalog, and compaction status (`RepoAdminIsland`).
-  - Trigger or cancel background pack compaction, remove superseded packfiles, or execute a confirmation-gated full repository purge.
+### 10. Dedicated User Settings (`/user/*`) & Site Administration (`/admin/*`)
 
-### 9. Hardened Error Boundaries, Security & Observability
+- **User Settings Panel (`/user/*`):** Clean sidebar layout (`UserSettingsLayout`) with mobile drawer covering Profile (`/user/profile`), Account & Repos (`/user/account`), Preferences (`/user/settings`), Password & Security (`/user/settings/security`), and Personal Access Tokens (`/user/settings/tokens`).
+- **Site Administration Control Panel (`/admin/*`):** Admin-only workspace covering Dashboard KPIs (`/admin`), Users & Accounts directory (`/admin/users`), Global Repositories (`/admin/repositories`), Global Access Tokens audit & issuance (`/admin/tokens`), Site Branding & Instance Settings (`/admin/settings`), and Security & Policies (`/admin/security`).
+- **Per-Repository Admin (`/:owner/:repo/admin`):** Inspect/edit `HEAD` & refs, view pack catalog and storage stats, trigger or cancel background compaction, prune superseded packs, or purge a repository with confirmation.
+- **Responsive Global Footer:** Dark/light theme-aware structured footer reflecting live `/admin/settings` branding, context-aware Account links, Forge navigation, and external resources.
 
-- **Content-Negotiated Global Error Boundary (`src/worker/index.ts` & `src/client/server/error.ts`):**
-  - Browser HTML navigation requests (`Accept: text/html`) that hit an unhandled exception or invalid parameter (`400`, `404`, `500`) render a styled SSR `ErrorPage` or `NotFoundPage` (with an XSS-escaped standalone HTML fallback document if SSR rendering itself fails).
-  - API routes (`*/api/*`), Git Smart HTTP routes, admin endpoints, and diff fragments deterministically receive structured JSON `{ error }` responses.
-- **Resilient Client Islands UX:**
-  - Explicit HTTP `401` session-expiry detection across form islands displays `"Session expired — please sign in again."` with an inline `/auth` sign-in link.
-  - Graceful clipboard fallback banner (`"Clipboard unavailable — select and copy manually"`) when running inside restricted browser/iframe permission contexts.
-- **Structured JSON Logging (`src/worker/common/logger.ts`):**
-  - Component-scoped structured logs (`receive:finalize-committed`, `overview:markdown-candidate-miss`, `worker:unhandled-error`, etc.) controlled via `LOG_LEVEL` (`debug`, `info`, `warn`, `error`).
+### 11. Hardened Error Boundaries, Security & Observability
+
+- **Content-Negotiated Error Boundaries:** Browser HTML requests receive styled SSR `ErrorPage` / `NotFoundPage` responses (with an XSS-escaped standalone HTML fallback), while API, Git protocol, and fragment endpoints always receive structured JSON `{ error }` responses.
+- **Structured JSON Logging (`src/worker/common/logger.ts`):** Component-scoped kebab-case events controlled via `LOG_LEVEL` (`debug`, `info`, `warn`, `error`).
 
 ---
 
@@ -218,9 +202,9 @@ Developed and maintained by **[Vib Tools](https://vibtools.io/)** (_Practical so
 │  ┌─────────────────────────┐  ┌─────────────────────────┐  ┌─────────────────────┐  │
 │  │   Git Smart HTTP v2     │  │   Auth, RBAC & Admin    │  │  React 19 SSR +     │  │
 │  │  info/refs, upload-pack │  │  Sessions, PATs, CSRF,  │  │  Client Islands UI  │  │
-│  │     & receive-pack      │  │   /auth, /user, /admin  │  │  /:owner/:repo/*    │  │
-│  └───────────┬─────────────┘  └────────────┬────────────┘  └──────────┬──────────┘  │
-│              │                             │                          │             │
+│  │     & receive-pack      │  │   /auth, /user, /admin  │  │  /, /namespaces,    │  │
+│  └───────────┬─────────────┘  └────────────┬────────────┘  │  /:owner/:repo/*    │  │
+│              │                             │               └──────────┬──────────┘  │
 │              └──────────────┬──────────────┴──────────────────────────┘             │
 │                             │  Single-Hop Limiter (Budget & Concurrency Control)    │
 └───────┬─────────────────────┼───────────────────┬───────────────────────┬───────────┘
@@ -228,243 +212,239 @@ Developed and maintained by **[Vib Tools](https://vibtools.io/)** (_Practical so
         ▼                     ▼                   ▼                       ▼
 ┌───────────────┐   ┌───────────────────┐   ┌───────────────┐   ┌─────────────────────┐
 │ Cloudflare D1 │   │ RepoDurableObject │   │ Cloudflare R2 │   │ Cloudflare KV &     │
-│  (Directory,  │   │  (Embedded SQLite │   │ (REPO_BUCKET) │   │ Queues              │
+│  (Directory,  │   │  (Embedded SQLite │   │ (REPO_BUCKET) │   │ Optional Queues     │
 │  Users, RBAC, │   │   Refs, HEAD,     │   │  .pack, .idx, │   │  ROUTES KV Cache &  │
-│  Repos, PATs) │   │   Pack Catalog,   │   │  .refs files  │   │  Compaction / Purge │
-│               │   │   Receive Lease)  │   │               │   │  Background Queue   │
+│  Repos, PATs, │   │   Pack Catalog,   │   │  .refs, site  │   │  Compaction / Purge │
+│  Branding)    │   │   Receive Lease)  │   │  assets)      │   │  (or Inline Fallback│
 └───────────────┘   └───────────────────┘   └───────────────┘   └─────────────────────┘
 ```
 
 ### Architectural Invariants
 
-1. **Single-Hop Runtime Boundaries:** Workers call Durable Objects (`Workers -> DO`), R2 (`Workers -> R2`), or D1 (`Workers -> D1`) directly without chaining transitive multi-hop mutations.
-2. **Transactional Repository Authority:** `RepoDurableObject` owns all transactional mutations to repository refs, HEAD, receive leases, and pack catalogs via typed RPC methods returning tagged unions.
-3. **Strict Data Access Layers (DAL):** All D1 queries go through `src/worker/db/d1/dal/*` and all Durable Object SQLite queries go through `src/worker/do/repo/db/dal.ts`.
+1. **Single-Hop Runtime Boundaries:** Workers call Durable Objects (`Workers -> DO`), R2 (`Workers -> R2`), or D1 (`Workers -> D1`) directly without transitive multi-hop mutations.
+2. **Transactional Repository Authority:** `RepoDurableObject` owns all ref, `HEAD`, receive lease, and pack catalog mutations via typed RPC methods returning tagged unions.
+3. **Strict Data Access Layers (DAL):** All D1 queries live in `src/worker/db/d1/dal/*` and all Repo DO SQLite queries live in `src/worker/do/repo/db/dal.ts`.
 
 ---
 
-## Quick Start (Local Development & Demo Mode)
+## Quick Start (Local Development)
 
 ### Prerequisites
 
-- **Node.js** `20+` (or `22+` recommended)
+- **Node.js** `20+` (`22+` recommended)
 - **npm** (or **Bun**)
-- **Git CLI** (`2.30+` for Git protocol v2)
+- **Git CLI** `2.30+` (for Git protocol v2)
 
-### 1. Clone & Install Dependencies
+### Run Locally in 3 Commands
 
 ```bash
-git clone https://github.com/vibtoolshq/git-on-cloudflare.git
-cd git-on-cloudflare
+# 1. Clone Gitra and install dependencies
+git clone https://github.com/vibtoolshq/gitra.git
+cd gitra
 npm install
-```
 
-### 2. Configure Local Environment Variables
-
-```bash
+# 2. Copy local dev environment template
 cp .dev.vars.example .dev.vars
-```
 
-By default, `.dev.vars.example` leaves `ADMIN_PASSWORD` empty, which automatically enables **Local Demo & Preview Mode** with pre-seeded accounts and a sample repository.
-
-### 3. Start the Development Server
-
-```bash
+# 3. Start Vite + Cloudflare Workers local dev server
 npm run dev
 ```
 
-Open **`http://localhost:3000`** (or the Vite port printed in your terminal) in your browser.
+Open **`http://localhost:3000`** in your browser.
 
-### 4. Explore the Pre-Seeded Demo Accounts & Repositories
+When `ADMIN_PASSWORD` is left blank in `.dev.vars`, Gitra automatically enables **Local Dev Demo Mode** and seeds two test accounts plus a sample workspace (`/auth`):
 
-In local demo mode, visit **`/auth`** to use one-click demo buttons or sign in with:
+| Role                   | Handle / Username        | Password     | Pre-Seeded Workspace                                                                                               |
+| :--------------------- | :----------------------- | :----------- | :----------------------------------------------------------------------------------------------------------------- |
+| **Site Administrator** | `admin` (`@admin`)       | `admin123`   | Full `/admin/*` Control Panel, Site Branding & SEO Studio (`/admin/settings`), User Directory, and Global PATs     |
+| **Developer**          | `alex-dev` (`@alex-dev`) | `devuser123` | `/user/*` settings, public profile `/alex-dev` with `.vibtools/profile/README.md`, and `/alex-dev/cloud-forge-kit` |
 
-| Account Role              | Handle / Username        | Password     | Pre-Seeded Workspace & Capabilities                                                                                                                                                                                                        |
-| :------------------------ | :----------------------- | :----------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Site Administrator**    | `admin` (`@admin`)       | `admin123`   | Full access to Site Administration (`/admin/*`), User Directory (`/admin/users`), Global Repositories (`/admin/repositories`), Tokens (`/admin/tokens`), Instance Settings (`/admin/settings`), and Security Policies (`/admin/security`). |
-| **Developer (Test User)** | `alex-dev` (`@alex-dev`) | `devuser123` | Access to Users Panel (`/user/profile`, `/user/account`, `/user/settings/tokens`), public profile (`/alex-dev`) with `.vibtools/profile/README.md`, and the GitHub-ready mock repository **`/alex-dev/cloud-forge-kit`**.                  |
+---
+
+## Zero-Touch Deploy to Cloudflare (Free & Paid)
+
+You never need to manually edit `wrangler.jsonc` with database UUIDs, KV IDs, or domains.
+
+### One-Time Cloudflare Account Setup
+
+1. **Enable R2 once** in the Cloudflare Dashboard (**R2 Object Storage → Enable R2** — includes 10 GB/month + zero egress on the Free tier).
+2. **Create a Cloudflare API Token** (**My Profile → API Tokens → Create Custom Token**) with:
+   - Account: `Workers Scripts: Edit`, `D1: Edit`, `Workers KV Storage: Edit`, `Workers R2 Storage: Edit`, `Queues: Edit` _(optional if `USE_QUEUES=false`)_, `Account Settings: Read`
+   - Zone _(only if using `APP_DOMAIN`)_: `DNS: Edit`, `Workers Routes: Edit`
+
+### Configure `.env.deploy` & Deploy
+
+```bash
+cp .env.deploy.example .env.deploy
+```
+
+Edit `.env.deploy` (git-ignored):
+
+```dotenv
+CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
+APP_DOMAIN=gitra.co
+APP_NAME=gitra
+CLOUDFLARE_TIER=free
+USE_QUEUES=true
+```
+
+Preview or run the automated installer/deployer:
+
+```bash
+# Dry-run preview (makes zero API calls)
+npm run cf:auto-deploy -- --dry-run
+
+# Deploy on Cloudflare Workers Free Plan (default)
+npm run cf:auto-deploy
+
+# Deploy on Cloudflare Workers Free Plan without Queues (inline fallback)
+npm run cf:auto-deploy -- --no-queues
+
+# Deploy on Cloudflare Workers Paid Plan ($5/mo+, 5-min CPU limit & auto compaction)
+npm run cf:auto-deploy:paid
+```
+
+- **First run:** Auto-creates D1, KV, R2, and Queue, runs D1 SQL migrations, builds, deploys (auto-binding `APP_DOMAIN` Custom Domain + TLS), and seeds missing Worker secrets once.
+- **Every future rebuild/redeploy:** Reuses all existing Cloudflare resource IDs and **preserves existing Worker secrets** (`SESSION_SECRET`, `CREDENTIAL_SECRET`, `ADMIN_BOOTSTRAP_SECRET`) with zero credential mismatch.
+
+For GitHub Actions CI setup and advanced options, see [`docs/CLOUDFLARE_DEPLOY.md`](./docs/CLOUDFLARE_DEPLOY.md).
 
 ---
 
 ## Using Git CLI (`clone`, `fetch`, `push`)
 
-### Cloning a Public Repository
+### Clone a Public Repository
 
 ```bash
-git clone http://localhost:3000/alex-dev/cloud-forge-kit.git
+git clone https://gitra.co/alex-dev/cloud-forge-kit.git
 ```
 
-### Pushing to a Repository with a Personal Access Token (PAT)
+### Push with a Personal Access Token (`goc_...`)
 
-1. Sign in at `/auth` (e.g. as `alex-dev`).
-2. Navigate to **`/user/settings/tokens`** (_User Settings → Access Tokens_).
-3. Create a token with **`push`** access level for namespace `@alex-dev` (or a specific repository) and copy the generated `goc_...` token.
-4. Push from your terminal using your namespace handle as the HTTP Basic username and your `goc_...` PAT as the password:
+1. Sign in at `/auth` and open **`/user/settings/tokens`** (or **`/admin/tokens`** for Global Admin PATs).
+2. Mint a token with **`push`** permission and copy the one-time `goc_...` secret.
+3. Push over HTTPS using your namespace handle as username and your `goc_...` PAT as password:
 
 ```bash
 cd my-project
 git init -b main
 git add .
 git commit -m "Initial commit"
-
-# Push using standard Git HTTP Basic credentials
-git push http://alex-dev:<YOUR_GOC_PAT>@localhost:3000/alex-dev/my-repo.git main
+git remote add origin https://gitra.co/alex-dev/my-project.git
+git push -u origin main
 ```
 
-> **Tip for Local Miniflare / Vite Dev Testing:**
-> If local Miniflare intercepts a `401` challenge before Git prompts interactively, pass the Basic authorization header explicitly on the first push:
+> **Local Dev Tip:** If local Miniflare intercepts the `401` Basic challenge before Git prompts, send the header directly:
 >
 > ```bash
 > AUTH_B64=$(printf "alex-dev:goc_your_token_here" | base64)
 > git -c http.extraHeader="Authorization: Basic ${AUTH_B64}" \
->   push http://localhost:3000/alex-dev/my-repo.git HEAD:refs/heads/main
+>   push http://localhost:3000/alex-dev/my-project.git HEAD:refs/heads/main
 > ```
-
----
-
-## Deploy to Cloudflare Workers
-
-### 1. Authenticate Wrangler
-
-```bash
-npx wrangler login
-```
-
-### 2. Provision Cloudflare Resources (First-Time Setup)
-
-Ensure your `wrangler.jsonc` references your Cloudflare account's **D1 Database** (`DB`), **R2 Bucket** (`REPO_BUCKET`), **KV Namespace** (`ROUTES`), and **Queue** (`REPO_TASKS_QUEUE`):
-
-```bash
-# Create resources if deploying to a fresh Cloudflare account
-npx wrangler d1 create git-on-cloudflare
-npx wrangler r2 bucket create git-repos
-npx wrangler kv namespace create ROUTES
-npx wrangler queues create git-on-cloudflare-repo-maint
-```
-
-Update the `database_id` and KV `id` in `wrangler.jsonc` to match your created resources.
-
-### 3. Set Production Secrets
-
-```bash
-# Required: 32-byte hex secret used to sign browser session cookies
-npx wrangler secret put SESSION_SECRET
-
-# Required for production: disables demo login and sets the primary @admin password
-npx wrangler secret put ADMIN_PASSWORD
-```
-
-### 4. Apply D1 Migrations & Deploy
-
-```bash
-npm run deploy
-```
-
-`npm run deploy` automatically runs remote D1 schema migrations (`wrangler d1 migrations apply git-on-cloudflare --remote`), builds the client & SSR bundles (`vite build`), and deploys the Worker (`wrangler deploy`).
 
 ---
 
 ## Configuration & Cloudflare Bindings
 
-### Environment Variables (`.dev.vars` / Wrangler Secrets & Vars)
+### Runtime Environment Variables & Secrets
 
-| Variable               | Required      | Default          | Description                                                                                             |
-| :--------------------- | :------------ | :--------------- | :------------------------------------------------------------------------------------------------------ |
-| `SESSION_SECRET`       | **Yes**       | —                | Secret key used for HMAC-SHA256 browser session cookie signing.                                         |
-| `ADMIN_USERNAME`       | No            | `admin`          | Primary administrator username/handle bootstrapped into D1.                                             |
-| `ADMIN_PASSWORD`       | Prod: **Yes** | _(empty in dev)_ | Primary administrator password. When unset in local dev, enables Demo Mode (`admin123` / `devuser123`). |
-| `REPO_DO_IDLE_MINUTES` | No            | `30`             | Minutes before an idle `RepoDurableObject` runs its cleanup alarm.                                      |
-| `LOG_LEVEL`            | No            | `info`           | Structured logger verbosity (`debug`, `info`, `warn`, `error`).                                         |
+| Variable                 | Required      | Default                           | Description                                                     |
+| :----------------------- | :------------ | :-------------------------------- | :-------------------------------------------------------------- |
+| `SESSION_SECRET`         | **Yes**       | _(auto-generated on auto-deploy)_ | HMAC-SHA256 secret used to sign browser session cookies.        |
+| `CREDENTIAL_SECRET`      | **Yes**       | _(auto-generated on auto-deploy)_ | Secret used for credential protection.                          |
+| `ADMIN_BOOTSTRAP_SECRET` | **Yes**       | _(auto-generated on auto-deploy)_ | Bootstrap secret for initial admin provisioning.                |
+| `ADMIN_USERNAME`         | No            | `admin`                           | Primary administrator handle bootstrapped into D1.              |
+| `ADMIN_PASSWORD`         | Prod: **Yes** | _(empty in dev)_                  | Primary admin password; setting it disables Local Demo Mode.    |
+| `CLOUDFLARE_TIER`        | No            | `free`                            | Runtime tier policy (`free` or `paid`).                         |
+| `REPO_DO_IDLE_MINUTES`   | No            | `30`                              | Minutes before an idle `RepoDurableObject` runs cleanup.        |
+| `LOG_LEVEL`              | No            | `info`                            | Structured logger verbosity (`debug`, `info`, `warn`, `error`). |
 
-### Platform Bindings (`wrangler.jsonc`)
+### Cloudflare Bindings
 
-| Binding Name       | Cloudflare Service       | Purpose                                                                                         |
-| :----------------- | :----------------------- | :---------------------------------------------------------------------------------------------- |
-| `REPO_DO`          | Durable Objects (SQLite) | `RepoDurableObject` — per-repository refs, HEAD, pack catalog, and receive lease authority.     |
-| `DB`               | Cloudflare D1            | Global SQLite directory for users, namespaces, repository metadata, and Personal Access Tokens. |
-| `REPO_BUCKET`      | Cloudflare R2            | Object storage bucket (`git-repos`) for `.pack`, `.idx`, and `.refs` files.                     |
-| `ROUTES`           | Cloudflare KV            | Edge route cache for fast repository ownership and visibility lookups.                          |
-| `REPO_TASKS_QUEUE` | Cloudflare Queues        | Background queue (`git-on-cloudflare-repo-maint`) for compaction, cache sync, and purge tasks.  |
-| `ASSETS`           | Workers Static Assets    | Serves compiled Vite client island bundles from `dist/client` (`html_handling: "none"`).        |
+| Binding            | Service                        | Purpose                                                                       |
+| :----------------- | :----------------------------- | :---------------------------------------------------------------------------- |
+| `REPO_DO`          | Durable Objects (SQLite)       | `RepoDurableObject` — refs, `HEAD`, pack catalog, receive leases.             |
+| `DB`               | Cloudflare D1                  | Users, namespaces, repositories, RBAC, PATs, site branding/SEO settings.      |
+| `REPO_BUCKET`      | Cloudflare R2                  | Git `.pack`/`.idx`/`.refs` objects and uploaded logo/favicon/OG images.       |
+| `ROUTES`           | Cloudflare KV                  | Edge route cache for fast repository ownership and visibility lookups.        |
+| `REPO_TASKS_QUEUE` | Cloudflare Queues _(optional)_ | Background compaction, route cache sync, and repository purge jobs.           |
+| `ASSETS`           | Workers Static Assets          | Compiled Vite client island bundles (`dist/client`, `html_handling: "none"`). |
 
 ---
 
 ## HTTP Routes & API Reference
 
-### Git Smart HTTP v2 Endpoints
+### Git Smart HTTP v2
 
-| Method | Path                             | Auth                         | Description                                                                 |
-| :----- | :------------------------------- | :--------------------------- | :-------------------------------------------------------------------------- |
-| `GET`  | `/:owner/:repo/info/refs`        | Public or Basic PAT          | Git v2 capability advertisement for `git-upload-pack` & `git-receive-pack`. |
-| `POST` | `/:owner/:repo/git-upload-pack`  | Public or Basic PAT (`pull`) | Git v2 `ls-refs` and streaming `fetch` pack negotiation.                    |
-| `POST` | `/:owner/:repo/git-receive-pack` | Basic PAT (`push`)           | Streaming pack receive, connectivity check, and atomic ref update.          |
+| Method | Path                             | Auth                         | Description                                                              |
+| :----- | :------------------------------- | :--------------------------- | :----------------------------------------------------------------------- |
+| `GET`  | `/:owner/:repo/info/refs`        | Public or Basic PAT          | Git v2 capability advertisement (`git-upload-pack`, `git-receive-pack`). |
+| `POST` | `/:owner/:repo/git-upload-pack`  | Public or Basic PAT (`pull`) | Git v2 `ls-refs` and streaming `fetch`.                                  |
+| `POST` | `/:owner/:repo/git-receive-pack` | Basic PAT (`push`)           | Streaming pack receive, connectivity check, and atomic ref commit.       |
 
-### Web UI & Developer Workspace Routes
+### Web UI & Public Assets
 
-| Method | Path                        | Access              | Description                                                                                    |
-| :----- | :-------------------------- | :------------------ | :--------------------------------------------------------------------------------------------- |
-| `GET`  | `/` and `/explore`          | Public              | Home landing page and searchable public repository directory.                                  |
-| `GET`  | `/:owner`                   | Public              | Owner profile (`Overview` with `.vibtools/profile/README.md` & `Pinned` + `Repositories` tab). |
-| `GET`  | `/:owner/:repo`             | Public / Member     | Repository overview (`<> Code`), file tree table, `README.md`, and clone drawer.               |
-| `GET`  | `/:owner/:repo/tree`        | Public / Member     | Directory browser (`?ref=<branch>&path=<dir>`).                                                |
-| `GET`  | `/:owner/:repo/blob`        | Public / Member     | Syntax-highlighted file viewer & in-browser file editor (`?ref=<branch>&path=<file>`).         |
-| `GET`  | `/:owner/:repo/commits`     | Public / Member     | Commit history log (`?ref=<branch>`) with merge side-branch expansion.                         |
-| `GET`  | `/:owner/:repo/commit/:oid` | Public / Member     | Single commit metadata and unified diff viewer.                                                |
-| `GET`  | `/:owner/:repo/raw`         | Public / Member     | Safe `text/plain` raw blob view by OID (`?oid=<sha>`).                                         |
-| `GET`  | `/:owner/:repo/rawpath`     | Same-Origin Referer | Same-origin protected raw file stream by ref and path (`?ref=...&path=...`).                   |
-| `GET`  | `/:owner/:repo/admin`       | Repo Owner / Admin  | Repository settings, HEAD/ref editor, pack catalog, compaction, and purge controls.            |
+| Method | Path                        | Access              | Description                                                                           |
+| :----- | :-------------------------- | :------------------ | :------------------------------------------------------------------------------------ |
+| `GET`  | `/` and `/explore`          | Public              | Home landing page and searchable public repository directory.                         |
+| `GET`  | `/namespaces`               | Public              | Compact directory of active namespaces with public/open-source repo counts.           |
+| `GET`  | `/:owner`                   | Public              | Developer profile (`Overview` with `.vibtools` README & Pinned + `Repositories` tab). |
+| `GET`  | `/:owner/:repo`             | Public / Member     | Repository overview (`<> Code`), file table, README, clone popover.                   |
+| `GET`  | `/:owner/:repo/tree`        | Public / Member     | Nested directory browser (`?ref=...&path=...`).                                       |
+| `GET`  | `/:owner/:repo/blob`        | Public / Member     | Syntax-highlighted file viewer and in-browser editor (`?ref=...&path=...`).           |
+| `GET`  | `/:owner/:repo/commits`     | Public / Member     | Paginated commit history with merge side-branch expansion.                            |
+| `GET`  | `/:owner/:repo/commit/:oid` | Public / Member     | Single commit metadata and unified diff viewer.                                       |
+| `GET`  | `/:owner/:repo/raw`         | Public / Member     | Safe `text/plain` raw blob stream (`?oid=...`).                                       |
+| `GET`  | `/:owner/:repo/rawpath`     | Same-Origin Referer | Same-origin protected raw file stream (`?ref=...&path=...`).                          |
+| `GET`  | `/:owner/:repo/admin`       | Repo Owner / Admin  | Per-repository refs, `HEAD`, pack catalog, compaction, and purge controls.            |
+| `GET`  | `/api/site-assets/:slot`    | Public              | Serves R2-backed custom `logo`, `favicon`, or `og-image` assets.                      |
 
-### Auth, User Panel & Site Administration Routes
+### Auth, User Panel & Site Administration
 
-| Method | Path                                                                                                   | Access           | Description                                                                 |
-| :----- | :----------------------------------------------------------------------------------------------------- | :--------------- | :-------------------------------------------------------------------------- |
-| `GET`  | `/auth`                                                                                                | Public           | Sign-in page (plus Quick Demo Login & Demo User Panel buttons in dev mode). |
-| `POST` | `/auth/login`, `/auth/logout`, `/auth/demo-login`                                                      | Public / Session | Session authentication and sign-out endpoints.                              |
-| `GET`  | `/user/profile`, `/user/account`, `/user/settings`, `/user/settings/security`, `/user/settings/tokens` | Signed-in User   | Dedicated User Settings Panel (`/user/*`).                                  |
-| `GET`  | `/admin`, `/admin/users`, `/admin/repositories`, `/admin/tokens`, `/admin/settings`, `/admin/security` | `admin` Role     | Global Site Administration Control Panel (`/admin/*`).                      |
+| Method | Path                                                                                                   | Access           | Description                                                                     |
+| :----- | :----------------------------------------------------------------------------------------------------- | :--------------- | :------------------------------------------------------------------------------ |
+| `GET`  | `/auth`                                                                                                | Public           | Sign-in page (plus local Demo Mode quick login when `ADMIN_PASSWORD` is unset). |
+| `POST` | `/auth/login`, `/auth/logout`                                                                          | Public / Session | Session authentication and sign-out endpoints.                                  |
+| `GET`  | `/user/profile`, `/user/account`, `/user/settings`, `/user/settings/security`, `/user/settings/tokens` | Signed-in User   | Dedicated User Settings Panel (`/user/*`).                                      |
+| `GET`  | `/admin`, `/admin/users`, `/admin/repositories`, `/admin/tokens`, `/admin/settings`, `/admin/security` | `admin` Role     | Global Site Administration Control Panel (`/admin/*`).                          |
 
-For full request/response payload schemas, see [`docs/api-endpoints.md`](./docs/api-endpoints.md).
+For full JSON request/response schemas, see [`docs/api-endpoints.md`](./docs/api-endpoints.md).
 
 ---
 
-## Project Directory Structure
+## Project Structure
 
 ```text
-git-on-cloudflare/
-├── .github/                  # GitHub Issue and Pull Request templates
-├── docs/                     # Deep-dive architecture, storage, caching, and API documentation
-├── drizzle/                  # Generated SQL migrations for D1 (drizzle/d1) and Repo DO (drizzle/repo-do)
-├── notes/                    # Engineering audit, phased roadmap, error handling & implementation logs
+gitra/
+├── .github/                  # GitHub Actions auto-deploy workflow, Issue & PR templates
+├── docs/                     # Deployment, architecture, storage, caching & API documentation
+├── drizzle/                  # Generated SQL migrations for D1 and Repo Durable Object SQLite
+├── scripts/                  # Zero-touch Cloudflare auto-deployer (cf-auto-deploy.mjs) & CLI helpers
 ├── src/
 │   ├── client/
-│   │   ├── components/       # Shared SSR React components (Header, RepoNav, User/Admin layouts, UI primitives)
+│   │   ├── components/       # Shared SSR components (Header, Footer, RepoNav, User/Admin layouts)
 │   │   ├── entries/          # Vite client hydration entrypoints
-│   │   ├── islands/          # Focused interactive client islands (profile, tokens, repo editor, admin)
-│   │   ├── pages/            # Route-level React 19 SSR pages
-│   │   ├── server/           # SSR document shell, view registry, markdown renderer & typed error boundary
-│   │   └── styles/           # Tailwind CSS v4 design tokens and cool-slate theme variables
-│   ├── shared/               # Browser-safe formatting, slug validation, HTTP, and RBAC helpers
+│   │   ├── islands/          # Focused interactive client islands (editor, tokens, admin settings, etc.)
+│   │   ├── pages/            # Route-level React 19 SSR pages (Home, Namespaces, Repo, Admin, User)
+│   │   ├── server/           # SSR document shell, SEO head tags, view registry & error boundaries
+│   │   └── styles/           # Tailwind CSS v4 design tokens (dark-first + light mode parity)
+│   ├── shared/               # Browser-safe branding, namespace, slug, formatting & RBAC helpers
 │   └── worker/
-│       ├── auth/             # Session signing, PBKDF2 passwords, PAT hashing, Git Basic auth & demo seed
+│       ├── auth/             # Sessions, PBKDF2 passwords, PAT hashing, Global Admin PATs, CSRF
+│       ├── branding/         # Site settings & R2 branding asset persistence
 │       ├── cache/            # Edge cache policies and cache-key builders
-│       ├── common/           # Structured logger, compression, byte/hex utilities, and DO stubs
-│       ├── db/d1/            # Cloudflare D1 Drizzle schema, bootstrap, and Data Access Layer (DAL)
-│       ├── do/repo/          # RepoDurableObject, receive leases, compaction, storage & SQLite DAL
-│       ├── git/              # Git Smart HTTP v2 core protocol, pack assembly, indexer & Limiter
+│       ├── common/           # Structured logger, Cloudflare tier policy, compression & hex helpers
+│       ├── db/d1/            # Cloudflare D1 Drizzle schema, bootstrap & Data Access Layer (DAL)
+│       ├── do/repo/          # RepoDurableObject, receive leases, compaction & SQLite DAL
+│       ├── git/              # Git Smart HTTP v2 protocol, pack assembly, indexer & Limiter
 │       ├── routes/           # Hono route modules (git, auth, user, admin, systemAdmin, UI SSR)
-│       ├── tasks/            # Cloudflare Queues background consumer (compaction, cache-sync, delete)
-│       └── index.ts          # Main Cloudflare Worker entrypoint, router registration & error boundary
-├── test/                     # Vitest Node unit tests (*.test.ts) and Cloudflare Worker integration tests (*.worker.test.ts)
-├── .dev.vars.example         # Local environment variable template
-├── AGENTS.md                 # Repository engineering rules and architectural invariants
-├── CHANGELOG.md              # Project release and milestone changelog
-├── CODE_OF_CONDUCT.md        # Community code of conduct
-├── CONTRIBUTING.md           # Developer contribution guidelines
-├── LICENSE                   # MIT License
-├── SECURITY.md               # Security architecture and vulnerability reporting policy
-├── SUPPORT.md                # Support channels and troubleshooting guide
-├── package.json              # Scripts and dependencies
-└── wrangler.jsonc            # Cloudflare Workers bindings, migrations, and runtime configuration
+│       ├── tasks/            # Queue consumer + inline Free-tier fallback dispatcher
+│       └── index.ts          # Main Worker entrypoint, router registration & error boundary
+├── test/                     # Node unit tests & Cloudflare Workers integration tests
+├── .dev.vars.example         # Local development environment template
+├── .env.deploy.example       # Zero-touch Cloudflare auto-deploy environment template
+├── wrangler.jsonc            # Clean account-agnostic Free-tier template config
+└── wrangler.paid.jsonc       # Clean account-agnostic Paid-tier template config
 ```
 
 ---
@@ -475,32 +455,30 @@ git-on-cloudflare/
 # Start local development server (Vite + Cloudflare Workers SSR)
 npm run dev
 
-# Build production client and Worker bundles
+# Build production bundles (Free default / Paid)
 npm run build
+npm run build:paid
 
-# Regenerate Cloudflare runtime types and run TypeScript strict typecheck
+# Regenerate Wrangler runtime types and run strict TypeScript check
 npm run typecheck
 
-# Check formatting across the entire repository with Prettier
+# Check or fix formatting with Prettier
 npm run format:check
-
-# Auto-format all files with Prettier
 npm run format
 
-# Run fast Node unit tests (vitest.unit.config.ts)
+# Run fast Node unit tests (Vitest + node:test)
 npm run test
+npx tsx --test test/cloudflare-tier.node-test.ts test/cf-auto-deploy.node-test.ts
 
-# Run Cloudflare Workers integration tests (@cloudflare/vitest-pool-workers)
+# Run Cloudflare Workers integration tests
 npm run test:workers
 
-# Run targeted worker integration suites
-npx vitest run --config vitest.config.ts test/github-feel.worker.test.ts
-npx vitest run --config vitest.config.ts test/demo-user-mock-repo.worker.test.ts
-npx vitest run --config vitest.config.ts test/system-admin.worker.test.ts
-npx vitest run --config vitest.config.ts test/git-acl.worker.test.ts
-npx vitest run --config vitest.config.ts test/error-boundary.worker.test.ts
+# Zero-touch deploy to Cloudflare (Free / Paid / Dry-Run)
+npm run cf:auto-deploy -- --dry-run
+npm run cf:auto-deploy
+npm run cf:auto-deploy:paid
 
-# Generate Drizzle migrations after editing src/worker/do/repo/db/schema.ts or src/worker/db/d1/schema.ts
+# Generate Drizzle migrations after editing schema files
 npm run db:generate
 ```
 
@@ -508,34 +486,52 @@ npm run db:generate
 
 ## Known Platform Constraints
 
-- **HTTPS Git Smart HTTP v2 Only:** Cloudflare Workers handle HTTP(S) traffic at the edge; SSH transport (`git@...:owner/repo.git`) is not supported. Use HTTPS URLs with `goc_...` Personal Access Tokens.
-- **Worker Request CPU & Subrequest Budgets:** Each request operates within Cloudflare Workers CPU limits (`limits.cpu_ms = 300000` in `wrangler.jsonc`) and the 1,000-subrequest platform ceiling (managed automatically by `Limiter`).
-- **Thick Pack Transfer:** `thin-pack` capability is intentionally not advertised so clients send and receive self-contained packs (`side-band-64k`, `ofs-delta`).
-- **Focused Code Forge Scope:** Built for fast Git hosting, code browsing, web file editing, `.vibtools` developer profiles, PAT authentication, and instance administration; does not bundle heavy CI runners or issue/PR workflow engines.
+- **HTTPS Git Smart HTTP v2 Only:** Cloudflare Workers handle HTTP(S) traffic; SSH (`git@...`) is not supported. Authenticate using HTTPS URLs and `goc_...` Personal Access Tokens.
+- **Cloudflare Free vs Paid CPU Limits:** Free accounts enforce a 10ms CPU limit per request (Gitra automatically disables heavy background compaction on Free tier so typical pushes/clones stay within budget). Large monorepo pushes benefit from Cloudflare Workers Paid ($5/mo, `CLOUDFLARE_TIER=paid`, `limits.cpu_ms = 300000`).
+- **Thick Pack Transfer:** `thin-pack` is intentionally not advertised so clients exchange self-contained packs (`side-band-64k`, `ofs-delta`).
+- **Focused Code Forge Scope:** Engineered for fast self-hosted Git hosting, code browsing, web file editing, namespaces, developer profiles, PAT authentication, and site administration without bundled heavy CI runners.
+
+---
+
+## Frequently Asked Questions (FAQ)
+
+### Can I self-host Gitra on a Cloudflare Free account?
+
+Yes. Gitra is Cloudflare Free Plan friendly by default (`CLOUDFLARE_TIER=free`). SQLite Durable Objects, D1, KV, R2 (10 GB/month free after one-time activation), and Queues (10k ops/day free, or optional `--no-queues` inline fallback) all work on the Free tier.
+
+### Will rebuilding or redeploying Gitra break existing passwords, sessions, or Git PATs?
+
+No. `npm run cf:auto-deploy` queries existing Cloudflare resource IDs and existing Worker secret names before deploying. Existing D1/KV/R2 resources are reused and existing secrets (`SESSION_SECRET`, `CREDENTIAL_SECRET`, `ADMIN_BOOTSTRAP_SECRET`) are preserved untouched across unlimited redeploys.
+
+### How is Gitra different from Gitea or Forgejo?
+
+Gitea and Forgejo are full Go applications requiring a persistent VPS, container host, or VM with disk management and backups. Gitra runs 100% serverlessly on Cloudflare Workers + Durable Objects + R2 + D1 with zero servers to patch and global edge routing out of the box.
+
+### How do I bind my own domain like `gitra.co` or `git.yourdomain.com`?
+
+Set `APP_DOMAIN=gitra.co` in `.env.deploy` (or GitHub Actions variables) where the root zone is in your Cloudflare account, then run `npm run cf:auto-deploy`. Cloudflare automatically provisions the DNS record, TLS certificate, and Custom Domain route.
 
 ---
 
 ## Documentation Index
 
-### Architecture & Operations (`docs/`)
+### Deployment & Architecture (`docs/`)
 
-- **[API Endpoints Reference](./docs/api-endpoints.md)** — Complete HTTP route and payload reference.
+- **[Zero-Touch Cloudflare Deployment Guide](./docs/CLOUDFLARE_DEPLOY.md)** — Free & Paid plan setup, `.env.deploy`, and GitHub Actions.
+- **[API Endpoints Reference](./docs/api-endpoints.md)** — Complete HTTP route and JSON payload reference.
 - **[Architecture Overview](./docs/architecture.md)** — Subsystem boundaries and request lifecycle.
 - **[Hybrid Storage Model](./docs/storage.md)** — Durable Object SQLite + R2 pack storage design.
 - **[Data Flows](./docs/data-flows.md)** — End-to-end `git push`, `git fetch`, and SSR UI rendering flows.
-- **[Caching Strategy](./docs/caching.md)** — Two-tier edge caching and invalidation model.
+- **[Caching Strategy](./docs/caching.md)** — Two-tier edge caching and private cache isolation.
 - **[Diff Rendering](./docs/diff.md)** — Commit diff and merge-commit expansion internals.
-- **[Streaming Push Guide](./MIGRATION-STREAMING-PUSH.md)** — Streaming receive pipeline architecture and upgrade notes.
-- **[Ownership & Auth Migration Guide](./MIGRATION-TESSERA-OIDC.md)** — D1 directory ownership and PAT migration notes.
 
-### Engineering & Governance
+### Community & Governance
 
-- **[Contributing Guide](./CONTRIBUTING.md)** — How to set up, test, and submit pull requests.
-- **[Security Policy](./SECURITY.md)** — Security controls and private vulnerability disclosure.
-- **[Support Guide](./SUPPORT.md)** — Where to get help, report bugs, or contact Vib Tools.
-- **[Changelog](./CHANGELOG.md)** — Detailed release history and production upgrade log.
-- **[Code of Conduct](./CODE_OF_CONDUCT.md)** — Community standards and expectations.
-- **[Engineering Notes (`notes/`)](./notes/00-INDEX-AND-WORKFLOW.md)** — Forensic audit, scope locks, error handling matrix, and phase completion logs.
+- **[Contributing Guide](./CONTRIBUTING.md)** — Architecture rules, dev setup, and validation matrix.
+- **[Security Policy](./SECURITY.md)** — Built-in security posture and private vulnerability disclosure.
+- **[Support & Troubleshooting Guide](./SUPPORT.md)** — Official Vib Tools contact routing and FAQ.
+- **[Changelog](./CHANGELOG.md)** — Release history and milestone updates.
+- **[Code of Conduct](./CODE_OF_CONDUCT.md)** — Community standards and enforcement channels.
 
 ---
 
@@ -543,32 +539,34 @@ npm run db:generate
 
 ### About Vib Tools
 
-**Vib Tools** (`Vib.Tools` / `vibtools`) is a software organization focused on building **practical desktop applications, self-hosted software, automation tooling, developer utilities, reusable frameworks, and open-source projects for real workflows**.
+**Gitra** ([gitra.co](https://gitra.co/)) is developed and maintained by **[Vib Tools](https://vib.tools/)** (`Vib.Tools` / `vibtools`), a software organization building practical desktop applications, self-hosted software, automation tooling, developer utilities, reusable frameworks, and open-source projects for real workflows.
 
 > **Mission:** _Build free and open-source tools that help people do real work with less complexity._  
-> **Taglines:** _Practical software for real workflows._ · _Free Open-Source Tools for Developers and Teams._ · _Build Useful Tools. Share Them Openly._
+> **Philosophy:** _Practical software for real workflows._ · _Build Useful Tools. Share Them Openly._
 
 ### Maintainer Identity
 
-- **Organization / Brand:** [Vib Tools](https://vibtools.io/) ([https://vib.tools/](https://vib.tools/))
+- **Project Website:** [https://gitra.co/](https://gitra.co/)
+- **Organization / Brand:** [Vib Tools](https://vib.tools/)
 - **Connected GitHub Organization & Maintainer Account:** [Vib Tools (`@vibtoolshq`)](https://github.com/vibtoolshq)  
   _(Vib Tools is the connected GitHub account holder associated with maintaining and administering Vib Tools repositories.)_
 
 ### Official Contact Channels
 
-| Channel                         | Contact / Destination                                                          | Purpose                                                                                 |
-| :------------------------------ | :----------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------- |
-| **Official Website**            | [https://vibtools.io/](https://vibtools.io/) ([vib.tools](https://vib.tools/)) | Official product catalog, status updates, and company overview                          |
-| **GitHub Organization**         | [https://github.com/vibtoolshq](https://github.com/vibtoolshq)                 | Public source repositories, issues, and pull requests                                   |
-| **GitLab Organization**         | [https://gitlab.com/vibtools](https://gitlab.com/vibtools)                     | GitLab organization profile (`@vibtools`)                                               |
-| **General Inquiries**           | [hello@vibtools.io](mailto:hello@vibtools.io)                                  | Partnerships, press/media, company inquiries, and general questions                     |
-| **Product & Technical Support** | [support@vibtools.io](mailto:support@vibtools.io)                              | Technical support for Vib Tools products, public projects, and private security reports |
-| **Phone / WhatsApp**            | `+880 1795-470603` (`+8801795470603`)                                          | Direct phone & WhatsApp contact (Bangladesh, GMT+6 / Asia-Dhaka business context)       |
-| **Head Office**                 | **Vib Tools HQ**, 5660 Kochakata, Nageswari, Kurigram, Rangpur, Bangladesh     | Official physical head office address                                                   |
+| Channel                         | Contact / Destination                                                      | Purpose                                                                |
+| :------------------------------ | :------------------------------------------------------------------------- | :--------------------------------------------------------------------- |
+| **Gitra Project Website**       | [https://gitra.co/](https://gitra.co/)                                     | Official Gitra project site                                            |
+| **Vib Tools Website**           | [https://vib.tools/](https://vib.tools/)                                   | Official product catalog, status updates, and company overview         |
+| **GitHub Organization**         | [https://github.com/vibtoolshq](https://github.com/vibtoolshq)             | Public source repositories, issues, and pull requests                  |
+| **GitLab Organization**         | [https://gitlab.com/vibtools](https://gitlab.com/vibtools)                 | Official GitLab organization profile (`@vibtools`)                     |
+| **General Inquiries**           | [hello@vibtools.io](mailto:hello@vibtools.io)                              | Partnerships, press/media, company inquiries, and general questions    |
+| **Product & Technical Support** | [support@vibtools.io](mailto:support@vibtools.io)                          | Technical support for public projects and private security disclosures |
+| **Phone / WhatsApp**            | `+880 1795-470603` (`+8801795470603`)                                      | Direct phone & WhatsApp contact (Bangladesh, GMT+6 / Asia-Dhaka)       |
+| **Head Office**                 | **Vib Tools HQ**, 5660 Kochakata, Nageswari, Kurigram, Rangpur, Bangladesh | Published physical head office address                                 |
 
 ### Official Social & Community Profiles
 
-- **Website:** [https://vibtools.io/](https://vibtools.io/) · [https://vib.tools/](https://vib.tools/)
+- **Website:** [https://vib.tools/](https://vib.tools/)
 - **GitHub:** [https://github.com/vibtoolshq](https://github.com/vibtoolshq)
 - **GitLab:** [https://gitlab.com/vibtools](https://gitlab.com/vibtools)
 - **X (Twitter):** [https://x.com/vibtools](https://x.com/vibtools) (`@vibtools`)
@@ -582,4 +580,4 @@ npm run db:generate
 
 ## License
 
-This repository is licensed under the **[MIT License](./LICENSE)**. Always check individual repository [`LICENSE`](./LICENSE), [`SECURITY.md`](./SECURITY.md), and [`CONTRIBUTING.md`](./CONTRIBUTING.md) files before making legal or distribution claims.
+Gitra is open-source software licensed under the **[MIT License](./LICENSE)**. Copyright © 2026 [Vib Tools](https://vib.tools/). Always review individual repository [`LICENSE`](./LICENSE), [`SECURITY.md`](./SECURITY.md), and [`CONTRIBUTING.md`](./CONTRIBUTING.md) files before distribution or reuse.

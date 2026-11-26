@@ -1,6 +1,7 @@
 import type { TokensIslandSummary } from "@/client/islands/tokens";
-import type { AppContext } from "./hono";
+import { workerExecutionContext, type AppContext } from "./hono";
 import type { RouteCacheSyncMessage } from "@/worker/tasks/queue";
+import { dispatchRouteCacheSync } from "@/worker/tasks/dispatch";
 
 import { listPatGrantsByIds, type PersonalAccessTokenRow } from "@/worker/db/d1/dal";
 import type { Db } from "@/worker/db/d1/client";
@@ -22,16 +23,12 @@ export function enqueueRouteCacheSync(
     repoSlug: payload.repoSlug,
     enqueuedAt: Date.now(),
   };
-  c.executionCtx.waitUntil(
-    c.env.REPO_TASKS_QUEUE.send(message).catch((error) => {
-      log.warn("route-cache-sync:enqueue-failed", {
-        repositoryId: payload.repositoryId,
-        namespaceSlug: payload.namespaceSlug,
-        repoSlug: payload.repoSlug,
-        error: String(error),
-      });
-    })
-  );
+  dispatchRouteCacheSync({
+    env: c.env,
+    ctx: workerExecutionContext(c),
+    message,
+    log,
+  });
 }
 
 // Build the wire-shape summary that the management UI consumes. Grants are

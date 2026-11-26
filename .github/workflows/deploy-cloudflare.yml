@@ -1,0 +1,51 @@
+name: Deploy to Cloudflare
+
+on:
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: "Cloudflare plan tier (free or paid)"
+        required: false
+        default: "free"
+        type: choice
+        options:
+          - free
+          - paid
+      use_queues:
+        description: "Enable Cloudflare Queues"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Zero-touch deploy to Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+          APP_NAME: ${{ vars.APP_NAME || 'git-on-cloudflare' }}
+          CLOUDFLARE_TIER: ${{ inputs.tier || vars.CLOUDFLARE_TIER || 'free' }}
+          USE_QUEUES: ${{ inputs.use_queues || vars.USE_QUEUES || 'true' }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: npm run cf:auto-deploy

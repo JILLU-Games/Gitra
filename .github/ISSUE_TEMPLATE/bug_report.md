@@ -1,6 +1,6 @@
 ---
 name: "Bug Report"
-about: "Report a reproducible bug or regression in git-on-cloudflare"
+about: "Report a reproducible bug or regression in Gitra"
 title: "[Bug]: "
 labels: ["bug"]
 assignees: []
@@ -17,11 +17,11 @@ assignees: []
 - [ ] Git Smart HTTP v2 (`info/refs`, `git-upload-pack`, `git-receive-pack`)
 - [ ] Repo Durable Object / SQLite / Pack Compaction (`src/worker/do/repo/*`)
 - [ ] Cloudflare R2 Pack Storage / Indexer (`src/worker/git/pack/*`)
+- [ ] Zero-Touch Auto-Deploy / Free or Paid Tier Config (`scripts/*`, `wrangler.jsonc`)
 - [ ] Authentication, Sessions, RBAC, or PATs (`src/worker/auth/*`, `src/worker/db/d1/*`)
-- [ ] Repository Web UI (`/:owner/:repo/*`)
-- [ ] Public Profile / `.vibtools` README (`/:owner`)
+- [ ] Repository Web UI / Namespaces / Public Profile (`/:owner`, `/namespaces`, `/:owner/:repo/*`)
 - [ ] User Settings Panel (`/user/*`)
-- [ ] Site Administration Control Panel (`/admin/*`)
+- [ ] Site Administration / Branding & SEO Studio (`/admin/*`)
 - [ ] Other (please specify below)
 
 ## Steps to Reproduce
@@ -44,7 +44,8 @@ Paste terminal or console output here
 
 ## Environment
 
-- **Runtime:** Local Dev (`npm run dev`) / Deployed Cloudflare Worker
+- **Runtime:** Local Dev (`npm run dev`) / Cloudflare Workers Free / Cloudflare Workers Paid
+- **Queues Enabled (`USE_QUEUES`):** `true` / `false`
 - **Git Client Version (`git --version`):**
 - **Node.js / Wrangler Version:**
 - **Browser (if UI-related):**

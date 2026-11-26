@@ -6,8 +6,15 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "build:paid": "WRANGLER_CONFIG=./wrangler.paid.jsonc vite build",
     "preview": "vite preview",
     "deploy": "npm run db:migrate && npm run build && wrangler deploy",
+    "deploy:free": "npm run deploy",
+    "deploy:paid": "wrangler d1 migrations apply DB --remote --config wrangler.paid.jsonc && npm run build:paid && wrangler deploy",
+    "cf:auto-deploy": "node scripts/cf-auto-deploy.mjs",
+    "cf:auto-deploy:paid": "node scripts/cf-auto-deploy.mjs --paid",
+    "cf:setup": "node scripts/cloudflare-setup.mjs",
+    "cf:setup:paid": "node scripts/cloudflare-setup.mjs --paid",
     "test": "vitest run --config vitest.unit.config.ts",
     "test:workers": "vitest run --config vitest.config.ts",
     "test:auth": "vitest run --config vitest.config.ts test/auth.worker.test.ts",
@@ -19,8 +26,8 @@
     "db:generate:repo": "drizzle-kit generate --config drizzle-repo-do.config.ts",
     "db:generate:d1": "drizzle-kit generate --config drizzle-d1.config.ts",
     "db:generate": "npm run db:generate:repo && npm run db:generate:d1",
-    "db:migrate": "wrangler d1 migrations apply git-on-cloudflare --remote",
-    "db:migrate:local": "wrangler d1 migrations apply git-on-cloudflare --local"
+    "db:migrate": "wrangler d1 migrations apply DB --remote",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.36.4",

@@ -2,7 +2,7 @@
 
 ## Our Pledge
 
-We as members, contributors, and maintainers of **`git-on-cloudflare`** and the **[Vib Tools](https://vibtools.io/)** community pledge to make participation in our community a harassment-free experience for everyone, regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, caste, color, religion, or sexual identity and orientation.
+We as members, contributors, and maintainers of **Gitra** ([gitra.co](https://gitra.co/)) and the **[Vib Tools](https://vib.tools/)** community pledge to make participation in our community a harassment-free experience for everyone, regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, caste, color, religion, or sexual identity and orientation.
 
 We pledge to act and interact in ways that contribute to an open, welcoming, diverse, inclusive, practical, and healthy technical community aligned with our philosophy: **Build Useful Tools. Share Them Openly.**
 
@@ -50,7 +50,7 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
 
 - **Support & Conduct Contact:** [support@vibtools.io](mailto:support@vibtools.io)
 - **General Company Contact:** [hello@vibtools.io](mailto:hello@vibtools.io)
-- **Official Website:** [https://vibtools.io/](https://vibtools.io/)
+- **Official Website:** [https://vib.tools/](https://vib.tools/)
 
 All complaints will be reviewed and investigated promptly and fairly. All maintainers are obligated to respect the privacy and security of the reporter of any incident.
 

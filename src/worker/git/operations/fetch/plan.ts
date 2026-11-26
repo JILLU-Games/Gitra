@@ -5,6 +5,7 @@ import type { OrderedPackSnapshot, ServeUploadPackPlan, UploadPackPlan } from ".
 import type { PackRefSnapshotEntry, PackRefSnapshotLoadResult } from "@/worker/git/pack/refIndex";
 
 import { createLogger } from "@/worker/common";
+import { sendOptionalMaintenanceTask } from "@/worker/tasks/dispatch";
 import { buildInitialCloneNeeded, loadOrderedPackSnapshot } from "@/worker/git/pack/snapshot";
 import { getDoIdFromPath } from "@/worker/keys";
 import { findCommonHaves } from "../closure";
@@ -55,17 +56,23 @@ function schedulePackRefBackfill(args: {
     return;
   }
 
-  const send = args.env.REPO_TASKS_QUEUE.send({
-    kind: "pack-ref-backfill",
-    doId,
-    repoId: args.repoId,
-    packKey: args.packKey,
+  const send = sendOptionalMaintenanceTask({
+    env: args.env,
+    message: {
+      kind: "pack-ref-backfill",
+      doId,
+      repoId: args.repoId,
+      packKey: args.packKey,
+    },
+    log: args.log,
   })
-    .then(() => {
-      args.log.info("stream:fetch:ref-index-backfill-queued", {
-        packKey: args.packKey,
-        reason: args.reason,
-      });
+    .then((sent) => {
+      if (sent) {
+        args.log.info("stream:fetch:ref-index-backfill-queued", {
+          packKey: args.packKey,
+          reason: args.reason,
+        });
+      }
     })
     .catch((error) => {
       args.log.warn("stream:fetch:ref-index-backfill-enqueue-failed", {

@@ -3,6 +3,8 @@ import type { Logger } from "@/worker/common/logger";
 import type { RepoDurableObject } from "@/worker/do";
 import type { PackCatalogRow } from "@/worker/do/repo/db/schema";
 import type { ReceiveCommand, ReceiveStatus } from "@/worker/git/operations/validation";
+import { shouldAutoQueueBackgroundCompaction } from "@/worker/common/tier";
+import { sendOptionalMaintenanceTask } from "@/worker/tasks/dispatch";
 
 import { SubrequestLimiter } from "@/worker/git/operations/limits";
 import {
@@ -347,19 +349,27 @@ export async function executeReceivePipeline(
     }
 
     if (finalize.shouldQueueCompaction) {
-      args.log.info("receive:compaction-requested", { repoId: args.repoId });
-      args.ctx.waitUntil(
-        args.env.REPO_TASKS_QUEUE.send({
-          kind: "compaction",
-          doId: args.stub.id.toString(),
-          repoId: args.repoId,
-        }).catch((error) => {
-          args.log.warn("receive:compaction-enqueue-failed", {
-            repoId: args.repoId,
-            error: String(error),
-          });
-        })
-      );
+      if (shouldAutoQueueBackgroundCompaction(args.env)) {
+        args.log.info("receive:compaction-requested", { repoId: args.repoId });
+        args.ctx.waitUntil(
+          sendOptionalMaintenanceTask({
+            env: args.env,
+            message: {
+              kind: "compaction",
+              doId: args.stub.id.toString(),
+              repoId: args.repoId,
+            },
+            log: args.log,
+          }).catch((error) => {
+            args.log.warn("receive:compaction-enqueue-failed", {
+              repoId: args.repoId,
+              error: String(error),
+            });
+          })
+        );
+      } else {
+        args.log.debug("receive:compaction-deferred-free-tier", { repoId: args.repoId });
+      }
     }
 
     return buildReceiveResult({

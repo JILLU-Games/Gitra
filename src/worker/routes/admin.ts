@@ -6,8 +6,9 @@ import { type RepositoryRoute } from "@/worker/repositories/route";
 import { deleteRepoBranchCacheRecord } from "@/worker/repositories/routeCache";
 import { safeParseJsonRequest } from "@/shared/web";
 import type { RepositoryDeleteMessage } from "@/worker/tasks/queue";
+import { dispatchRepositoryDelete, sendOptionalMaintenanceTask } from "@/worker/tasks/dispatch";
 import { resolveAdminApiRepoAccess, type AdminRepoAccess } from "./ui/helpers";
-import type { AppContext, AppRouter } from "./hono";
+import { workerExecutionContext, type AppContext, type AppRouter } from "./hono";
 import {
   AdminCompactionRequestSchema,
   AdminHeadPayloadSchema,
@@ -66,15 +67,21 @@ export function registerAdminRoutes(router: AppRouter) {
         ? await limiter.run("do:admin-preview-compaction", () => stub.previewCompaction())
         : await limiter.run("do:admin-request-compaction", () => stub.requestCompaction());
       if (!dryRun && res.status === "queued" && res.shouldEnqueue) {
-        const queueTask = env.REPO_TASKS_QUEUE.send({
-          kind: "compaction",
-          doId: stub.id.toString(),
-          repoId: route.doName,
+        const queueTask = sendOptionalMaintenanceTask({
+          env,
+          message: {
+            kind: "compaction",
+            doId: stub.id.toString(),
+            repoId: route.doName,
+          },
+          log,
         })
-          .then(() => {
-            log.info("admin:compaction-enqueue-requested", {
-              doId: stub.id.toString(),
-            });
+          .then((sent) => {
+            if (sent) {
+              log.info("admin:compaction-enqueue-requested", {
+                doId: stub.id.toString(),
+              });
+            }
           })
           .catch((error) => {
             log.warn("admin:compaction-enqueue-failed", {
@@ -323,18 +330,26 @@ export function registerAdminRoutes(router: AppRouter) {
       actor: viewer.userId,
       requestedAt: Date.now(),
     };
+    let queued = true;
     try {
-      // Required: a failed enqueue must not mutate D1/KV/R2/DO. Returning
-      // 503 lets the operator retry without leaving partial state behind.
-      await c.env.REPO_TASKS_QUEUE.send(message);
+      // Required: a failed enqueue/cleanup must not leave partial state behind.
+      // Returning 503 lets the operator retry safely.
+      const dispatched = await dispatchRepositoryDelete({
+        env: c.env,
+        ctx: workerExecutionContext(c),
+        message,
+        log,
+      });
+      queued = dispatched.queued;
     } catch (error) {
       log.error("admin-purge:enqueue-failed", { error: String(error) });
       return json({ ok: false, error: "Failed to enqueue delete; please retry" }, 503);
     }
     log.info("admin-purge:enqueued", {
       actor: viewer.userId,
+      queued,
       requestedAt: message.requestedAt,
     });
-    return json({ ok: true, queued: true }, 202);
+    return json({ ok: true, queued }, queued ? 202 : 200);
   });
 }

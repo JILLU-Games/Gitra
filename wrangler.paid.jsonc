@@ -1,0 +1,106 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Cloudflare Workers Paid Plan ($5/mo+) configuration.
+  // - Enables 300,000ms (5 min) CPU ceiling for large repositories, heavy packfile
+  //   pushes/clones, and automatic background compaction.
+  // - Deploy with: `npm run deploy:paid`
+  "name": "git-on-cloudflare",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-05-13",
+  "compatibility_flags": [
+    "nodejs_als"
+  ],
+  "workers_dev": true,
+  // Optional custom domain routes (uncomment and replace with your Cloudflare zone):
+  // "routes": [
+  //   {
+  //     "pattern": "git.yourdomain.com",
+  //     "custom_domain": true
+  //   }
+  // ],
+  "limits": {
+    "cpu_ms": 300000
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "REPO_DO",
+        "class_name": "RepoDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "RepoDurableObject"
+      ]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": [
+        "AuthDurableObject"
+      ]
+    },
+    {
+      "tag": "v3",
+      "deleted_classes": [
+        "AuthDurableObject"
+      ]
+    }
+  ],
+  // Clean Paid-tier template bindings (no production IDs or domains committed).
+  // Prefer `npm run cf:auto-deploy:paid` which generates an ephemeral config with live IDs.
+  "kv_namespaces": [
+    {
+      "binding": "ROUTES",
+      "id": "local-routes-kv"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "local-git-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "drizzle/d1"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "REPO_BUCKET",
+      "bucket_name": "local-git-repos"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "REPO_TASKS_QUEUE",
+        "queue": "local-repo-maint"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "local-repo-maint",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1
+      }
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "dist/client",
+    "html_handling": "none"
+  },
+  // Environment variables (text/JSON)
+  "vars": {
+    // Deployment plan tier: "paid" enables automatic background pack compaction
+    "CLOUDFLARE_TIER": "paid",
+    // Repo DO idle cleanup threshold (minutes)
+    "REPO_DO_IDLE_MINUTES": "30",
+    // Logging level: debug|info|warn|error
+    "LOG_LEVEL": "info"
+  }
+}

@@ -43,7 +43,7 @@ export function AppLayout({ children, currentView, viewer, branding, origin }: A
             {children}
           </main>
         )}
-        <Footer branding={branding} />
+        <Footer branding={branding} viewer={viewer ?? null} origin={origin} />
       </div>
     </>
   );
