@@ -171,7 +171,7 @@ export function Sidebar({ currentView, viewer }: SidebarProps) {
               className="flex items-center gap-2 text-[14px] font-semibold text-fg no-underline"
             >
               <GitBranch className="h-4 w-4 text-fg" aria-hidden="true" />
-              <span>git-on-cloudflare</span>
+              <span>gitra</span>
             </a>
             <button
               type="button"

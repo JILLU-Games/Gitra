@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.vib.tools/schemas/vibtools-docs.schema.json",
+  "schemaVersion": 1,
+  "docsType": "both",
+  "slug": "gitra",
+  "title": "Gitra",
+  "version": "0.1.0",
+  "accentColor": "#6366F1",
+  "logoPath": ".vibtools/logo.svg",
+  "branch": "main",
+  "targets": {
+    "users": {
+      "slug": "gitra",
+      "title": "Gitra",
+      "category": "Developer Tools",
+      "description": "Serverless Git Smart HTTP v2 hosting on Cloudflare Workers, Durable Objects, R2, D1, and KV — user and self-hosting guides.",
+      "accentColor": "#6366F1",
+      "docsPath": "docs/users",
+      "ctaLabel": "Open Gitra",
+      "ctaUrl": "https://gitra.co/"
+    },
+    "developer": {
+      "slug": "gitra",
+      "title": "Gitra Developer Guide",
+      "category": "Core Infrastructure",
+      "description": "Architecture, Hono + React 19 SSR internals, D1 and Repo Durable Object schemas, HTTP API reference, and testing guide for Gitra.",
+      "accentColor": "#4F46E5",
+      "docsPath": "docs/dev",
+      "ctaLabel": "GitHub",
+      "ctaUrl": "https://github.com/vibtoolshq/gitra"
+    }
+  }
+}

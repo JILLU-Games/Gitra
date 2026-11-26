@@ -71,7 +71,11 @@ describe("system admin panel & dedicated users management APIs", () => {
     const publicHomeRes = await SELF.fetch(`${ORIGIN}/`);
     expect(publicHomeRes.status).toBe(200);
     const publicHomeHtml = await publicHomeRes.text();
-    expect(publicHomeHtml).toContain("git-on-cloudflare");
+    expect(publicHomeHtml).toContain("gitra");
+    expect(publicHomeHtml).toContain("https://gitra.co");
+    expect(publicHomeHtml).toContain("https://vibtools.io");
+    expect(publicHomeHtml).toContain("gitra.co");
+    expect(publicHomeHtml).toContain("vibtools.io");
     expect(publicHomeHtml).toContain("Sign in");
     expect(publicHomeHtml).toContain("admin/edge-starter");
     expect(publicHomeHtml).not.toContain("admin/infra-notes");
@@ -1580,16 +1584,16 @@ describe("system admin panel & dedicated users management APIs", () => {
       expect(homeUpdatedHtml).toContain("Orbit Git");
       expect(homeUpdatedHtml).toContain("Orbit Engineering Repositories");
       expect(homeUpdatedHtml).toContain("© 2026 Orbit Labs");
-      expect(homeUpdatedHtml).toContain("git-on-cloudflare");
+      expect(homeUpdatedHtml).toContain("gitra");
 
       // Reset branding defaults cleanly
       await SELF.fetch(`${ORIGIN}/admin/api/settings`, {
         method: "PUT",
         headers: { Cookie: adminCookie, Origin: ORIGIN, "Content-Type": "application/json" },
         body: JSON.stringify({
-          shortName: "Vib Git",
+          shortName: "gitra",
           heroTitle: "Vib Tools Open-Source Repositories",
-          footerText: "© 2026 Vib Tools · Open-Source Git Forge",
+          footerText: "© 2026 gitra · Vib Tools",
         }),
       });
 

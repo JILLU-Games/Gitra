@@ -35,31 +35,31 @@ function renderWithProps<Props extends object>(
 const views: Record<string, ViewDefinition> = {
   home: {
     kind: "document",
-    title: "Repositories · git-on-cloudflare",
+    title: "Repositories · gitra",
     clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.homePage],
     render: renderWithProps((props: HomePageProps) => <HomePage {...props} />),
   },
   explore: {
     kind: "document",
-    title: "Explore · git-on-cloudflare",
+    title: "Explore · gitra",
     clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.homePage],
     render: renderWithProps((props: HomePageProps) => <HomePage {...props} />),
   },
   namespaces: {
     kind: "document",
-    title: "Namespaces · git-on-cloudflare",
+    title: "Namespaces · gitra",
     clientEntrypoints: [clientEntrypoints.shell],
     render: renderWithProps((props: NamespacesPageProps) => <NamespacesPage {...props} />),
   },
   "404": {
     kind: "document",
-    title: "404 · git-on-cloudflare",
+    title: "404 · gitra",
     clientEntrypoints: [clientEntrypoints.shell],
     render: () => <NotFoundPage />,
   },
   error: {
     kind: "document",
-    title: "Error · git-on-cloudflare",
+    title: "Error · gitra",
     clientEntrypoints: [clientEntrypoints.shell],
     render: renderWithProps((props: ErrorPageProps) => <ErrorPage {...props} />),
   },
@@ -95,13 +95,13 @@ const views: Record<string, ViewDefinition> = {
   },
   "auth-signin": {
     kind: "document",
-    title: "Admin login · git-on-cloudflare",
+    title: "Admin login · gitra",
     clientEntrypoints: [clientEntrypoints.shell],
     render: renderWithProps((props: AuthSignInPageProps) => <AuthSignInPage {...props} />),
   },
   account: {
     kind: "document",
-    title: "Account · git-on-cloudflare",
+    title: "Account · gitra",
     clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.accountPage],
     render: renderWithProps((props: AccountPageProps) => <AccountPage {...props} />),
   },
@@ -112,13 +112,13 @@ const views: Record<string, ViewDefinition> = {
   },
   "system-admin": {
     kind: "document",
-    title: "Control Panel · Site Administration · git-on-cloudflare",
+    title: "Control Panel · Site Administration · gitra",
     clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.systemAdminPage],
     render: renderWithProps((props: SystemAdminPageProps) => <SystemAdminPage {...props} />),
   },
   "system-admin-repositories": {
     kind: "document",
-    title: "Repositories · Control Panel · git-on-cloudflare",
+    title: "Repositories · Control Panel · gitra",
     clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.systemAdminPage],
     render: renderWithProps((props: SystemAdminPageProps) => (
       <SystemAdminPage {...props} activeSection="repositories" />
@@ -126,7 +126,7 @@ const views: Record<string, ViewDefinition> = {
   },
   "system-admin-tokens": {
     kind: "document",
-    title: "Access Tokens · Control Panel · git-on-cloudflare",
+    title: "Access Tokens · Control Panel · gitra",
     clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.systemAdminPage],
     render: renderWithProps((props: SystemAdminPageProps) => (
       <SystemAdminPage {...props} activeSection="tokens" />
@@ -134,19 +134,19 @@ const views: Record<string, ViewDefinition> = {
   },
   "system-admin-users": {
     kind: "document",
-    title: "Users · Control Panel · git-on-cloudflare",
+    title: "Users · Control Panel · gitra",
     clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.adminUsersPage],
     render: renderWithProps((props: AdminUsersPageProps) => <AdminUsersPage {...props} />),
   },
   "system-admin-settings": {
     kind: "document",
-    title: "Instance Settings · Control Panel · git-on-cloudflare",
+    title: "Instance Settings · Control Panel · gitra",
     clientEntrypoints: [clientEntrypoints.shell, clientEntrypoints.adminSettingsPage],
     render: renderWithProps((props: AdminSettingsPageProps) => <AdminSettingsPage {...props} />),
   },
   "system-admin-security": {
     kind: "document",
-    title: "Security & Policies · Control Panel · git-on-cloudflare",
+    title: "Security & Policies · Control Panel · gitra",
     clientEntrypoints: [clientEntrypoints.shell],
     render: renderWithProps((props: AdminSecurityPageProps) => <AdminSecurityPage {...props} />),
   },

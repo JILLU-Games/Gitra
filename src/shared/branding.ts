@@ -26,10 +26,10 @@ export type SiteBrandingConfig = {
 };
 
 export const DEFAULT_SITE_BRANDING: SiteBrandingConfig = {
-  siteName: "git-on-cloudflare",
-  shortName: "Vib Git",
-  siteTitle: "Vib Git · Open-Source Git Forge",
-  metaTitle: "Vib Tools Open-Source Repositories",
+  siteName: "gitra",
+  shortName: "gitra",
+  siteTitle: "gitra · Open-Source Git Forge",
+  metaTitle: "gitra · Vib Tools Open-Source Repositories",
   metaDescription:
     "Practical software for real developer workflows. Browse public source code, edge-native starter kits, SDKs, and production tools maintained by Vib Tools.",
   metaKeywords: "",
@@ -46,7 +46,7 @@ export const DEFAULT_SITE_BRANDING: SiteBrandingConfig = {
   websiteLabel: "vibtools.io",
   docsUrl: "https://docs.vib.tools",
   supportEmail: "support@vibtools.io",
-  footerText: "© 2026 Vib Tools · Open-Source Git Forge",
+  footerText: "© 2026 gitra · Vib Tools",
 };
 
 const INTERNAL_SITE_ASSET_PATH_RE =
@@ -208,6 +208,94 @@ export function resolveAbsoluteBrandingUrl(url: string, origin?: string): string
   return safe;
 }
 
+export type FooterAttributionSegment = {
+  text: string;
+  href?: string;
+};
+
+export type FooterAttributionLink = {
+  label: string;
+  href: string;
+};
+
+export type ParsedFooterAttribution = {
+  segments: FooterAttributionSegment[];
+  links: FooterAttributionLink[];
+};
+
+const CANONICAL_FOOTER_BRANDS: readonly {
+  pattern: RegExp;
+  label: string;
+  href: string;
+}[] = [
+  { pattern: /\bgitra\b/gi, label: "gitra.co", href: "https://gitra.co" },
+  { pattern: /\bVib Tools\b/gi, label: "vibtools.io", href: "https://vibtools.io" },
+];
+
+/**
+ * Links canonical brand mentions ("gitra", "Vib Tools") inside the footer
+ * copyright line to their official websites while leaving custom white-label
+ * footer text untouched.
+ */
+export function parseFooterAttribution(footerText: string): ParsedFooterAttribution {
+  if (!footerText) {
+    return { segments: [], links: [] };
+  }
+
+  type BrandMatch = {
+    start: number;
+    end: number;
+    text: string;
+    label: string;
+    href: string;
+  };
+
+  const matches: BrandMatch[] = [];
+  for (const brand of CANONICAL_FOOTER_BRANDS) {
+    brand.pattern.lastIndex = 0;
+    for (const match of footerText.matchAll(brand.pattern)) {
+      if (match.index === undefined) continue;
+      matches.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        text: match[0],
+        label: brand.label,
+        href: brand.href,
+      });
+    }
+  }
+
+  if (matches.length === 0) {
+    return { segments: [{ text: footerText }], links: [] };
+  }
+
+  matches.sort((a, b) => a.start - b.start || b.end - a.end);
+
+  const segments: FooterAttributionSegment[] = [];
+  const links: FooterAttributionLink[] = [];
+  const seenHrefs = new Set<string>();
+  let cursor = 0;
+
+  for (const match of matches) {
+    if (match.start < cursor) continue;
+    if (match.start > cursor) {
+      segments.push({ text: footerText.slice(cursor, match.start) });
+    }
+    segments.push({ text: match.text, href: match.href });
+    if (!seenHrefs.has(match.href)) {
+      seenHrefs.add(match.href);
+      links.push({ label: match.label, href: match.href });
+    }
+    cursor = match.end;
+  }
+
+  if (cursor < footerText.length) {
+    segments.push({ text: footerText.slice(cursor) });
+  }
+
+  return { segments, links };
+}
+
 export function resolveDocumentTitle(
   pageTitle: string | undefined,
   branding?: SiteBrandingConfig,
@@ -217,14 +305,21 @@ export function resolveDocumentTitle(
   const suffix = resolved.siteTitle || resolved.siteName || DEFAULT_SITE_BRANDING.siteTitle;
   const homeTitle = resolved.metaTitle || suffix;
 
-  if (viewName === "home" && (!pageTitle || pageTitle === "Repositories · git-on-cloudflare")) {
+  if (
+    viewName === "home" &&
+    (!pageTitle ||
+      pageTitle === "Repositories · gitra" ||
+      pageTitle === "Repositories · git-on-cloudflare")
+  ) {
     return homeTitle;
   }
-  if (!pageTitle || pageTitle === "git-on-cloudflare") {
+  if (!pageTitle || pageTitle === "gitra" || pageTitle === "git-on-cloudflare") {
     return homeTitle;
   }
-  if (pageTitle.endsWith(" · git-on-cloudflare")) {
-    return `${pageTitle.slice(0, -" · git-on-cloudflare".length)} · ${suffix}`;
+  for (const defaultSuffix of [" · gitra", " · git-on-cloudflare"]) {
+    if (pageTitle.endsWith(defaultSuffix)) {
+      return `${pageTitle.slice(0, -defaultSuffix.length)} · ${suffix}`;
+    }
   }
   if (pageTitle.includes(suffix) || (resolved.siteName && pageTitle.includes(resolved.siteName))) {
     return pageTitle;

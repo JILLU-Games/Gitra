@@ -1,5 +1,7 @@
 # Modernize Fetch/Upload-Pack: Ordered Pack Snapshot + Shared Rewrite Core
 
+> **Historical Design Document:** Preserved as architectural design context for Gitra's streaming `git-upload-pack` implementation. For current architecture and verified file paths, see **[`docs/dev/architecture.md`](./dev/architecture.md)** and **[`docs/data-flows.md`](./data-flows.md)**.
+
 ## Context
 
 Phase 3 of the streaming-push work already introduced the right low-level

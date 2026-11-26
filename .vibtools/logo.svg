@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="gitra-logo-title gitra-logo-desc">
+  <title id="gitra-logo-title">Gitra</title>
+  <desc id="gitra-logo-desc">Gitra geometric git-branch emblem on a rounded dark indigo badge.</desc>
+  <defs>
+    <linearGradient id="gitra-bg" x1="24" y1="20" x2="232" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1E1B4B" />
+      <stop offset="0.55" stop-color="#312E81" />
+      <stop offset="1" stop-color="#4F46E5" />
+    </linearGradient>
+    <linearGradient id="gitra-accent" x1="68" y1="56" x2="188" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E0E7FF" />
+      <stop offset="1" stop-color="#FFFFFF" />
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="52" fill="url(#gitra-bg)" />
+  <rect x="24" y="24" width="208" height="208" rx="44" fill="none" stroke="#818CF8" stroke-opacity="0.35" stroke-width="3" />
+  <path d="M88 76v104" fill="none" stroke="url(#gitra-accent)" stroke-width="16" stroke-linecap="round" />
+  <path d="M168 156v-34c0-18-14-32-32-32h-22" fill="none" stroke="#A5B4FC" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="88" cy="76" r="18" fill="#6366F1" stroke="#FFFFFF" stroke-width="10" />
+  <circle cx="88" cy="180" r="18" fill="#6366F1" stroke="#FFFFFF" stroke-width="10" />
+  <circle cx="168" cy="156" r="18" fill="#4F46E5" stroke="#E0E7FF" stroke-width="10" />
+  <circle cx="132" cy="126" r="12" fill="#A5B4FC" />
+</svg>

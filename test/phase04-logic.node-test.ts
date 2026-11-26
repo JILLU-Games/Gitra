@@ -7,6 +7,7 @@ import {
   DEFAULT_SITE_BRANDING,
   extractHostLabel,
   mergeAndSanitizeSiteBranding,
+  parseFooterAttribution,
   resolveAbsoluteBrandingUrl,
   resolveDocumentTitle,
   sanitizeBrandingAssetUrl,
@@ -300,10 +301,20 @@ describe("phase 04 pure domain logic", () => {
     assert.equal(merged.ogImageUrl, "https://cdn.acme.test/og.png");
     assert.equal(merged.allowIndexing, false);
 
+    assert.equal(DEFAULT_SITE_BRANDING.siteName, "gitra");
+    assert.equal(DEFAULT_SITE_BRANDING.shortName, "gitra");
+    assert.equal(DEFAULT_SITE_BRANDING.siteTitle, "gitra · Open-Source Git Forge");
+    assert.equal(DEFAULT_SITE_BRANDING.footerText, "© 2026 gitra · Vib Tools");
+
+    assert.equal(
+      resolveDocumentTitle("Repositories · gitra", merged, "home"),
+      "Acme Git — Private Engineering Forge"
+    );
     assert.equal(
       resolveDocumentTitle("Repositories · git-on-cloudflare", merged, "home"),
       "Acme Git — Private Engineering Forge"
     );
+    assert.equal(resolveDocumentTitle("Explore · gitra", merged, "explore"), "Explore · Acme Git");
     assert.equal(
       resolveDocumentTitle("Explore · git-on-cloudflare", merged, "explore"),
       "Explore · Acme Git"
@@ -312,5 +323,24 @@ describe("phase 04 pure domain logic", () => {
       resolveDocumentTitle("acme/core · git-on-cloudflare", merged, "repo"),
       "acme/core · Acme Git"
     );
+
+    const defaultAttribution = parseFooterAttribution(DEFAULT_SITE_BRANDING.footerText);
+    assert.deepEqual(defaultAttribution.links, [
+      { label: "gitra.co", href: "https://gitra.co" },
+      { label: "vibtools.io", href: "https://vibtools.io" },
+    ]);
+    assert.deepEqual(
+      defaultAttribution.segments.filter((segment) => segment.href),
+      [
+        { text: "gitra", href: "https://gitra.co" },
+        { text: "Vib Tools", href: "https://vibtools.io" },
+      ]
+    );
+
+    const customAttribution = parseFooterAttribution("© 2026 Orbit Labs");
+    assert.deepEqual(customAttribution, {
+      segments: [{ text: "© 2026 Orbit Labs" }],
+      links: [],
+    });
   });
 });

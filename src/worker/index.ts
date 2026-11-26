@@ -327,19 +327,19 @@ app.onError(async (error, c) => {
       c.env,
       "error",
       {
-        title: "Error · git-on-cloudflare",
+        title: "Error · gitra",
         message: publicMessage,
         stack,
       },
       {
         status,
-        failureBody: buildEscapedErrorHtmlDocument("Error · git-on-cloudflare", publicMessage),
+        failureBody: buildEscapedErrorHtmlDocument("Error · gitra", publicMessage),
         failureStatus: status,
         viewer,
       }
     );
   } catch {
-    return new Response(buildEscapedErrorHtmlDocument("Error · git-on-cloudflare", publicMessage), {
+    return new Response(buildEscapedErrorHtmlDocument("Error · gitra", publicMessage), {
       status,
       headers: {
         "Content-Type": "text/html; charset=utf-8",

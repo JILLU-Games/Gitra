@@ -2,6 +2,7 @@ import type { Viewer } from "@/client/server/viewer";
 import {
   DEFAULT_SITE_BRANDING,
   extractHostLabel,
+  parseFooterAttribution,
   type SiteBrandingConfig,
 } from "@/shared/branding";
 
@@ -19,6 +20,7 @@ export function Footer({ branding, viewer, origin }: FooterProps) {
   const hostLabel = extractHostLabel(origin, resolved.websiteUrl);
   const summaryText = resolved.heroDescription || resolved.tagline;
   const hasResources = Boolean(resolved.websiteUrl || resolved.docsUrl || resolved.supportEmail);
+  const attribution = parseFooterAttribution(resolved.footerText);
 
   return (
     <footer
@@ -196,7 +198,47 @@ export function Footer({ branding, viewer, origin }: FooterProps) {
       {/* Bottom attribution & protocol line */}
       <div className="border-t border-borderSubtle">
         <div className="mx-auto flex max-w-[1160px] flex-col items-start justify-between gap-2 px-5 py-4 text-[12px] text-fgMuted sm:flex-row sm:items-center">
-          <span>{resolved.footerText}</span>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>
+              {attribution.segments.map((segment, index) =>
+                segment.href ? (
+                  <a
+                    key={`${segment.href}-${index}`}
+                    href={segment.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-fgBody hover:text-fg underline-offset-4 hover:underline transition-colors no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent rounded-sm"
+                  >
+                    {segment.text}
+                  </a>
+                ) : (
+                  <span key={`text-${index}`}>{segment.text}</span>
+                )
+              )}
+            </span>
+            {attribution.links.length > 0 ? (
+              <>
+                <span className="text-border" aria-hidden="true">
+                  |
+                </span>
+                <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {attribution.links.map((link, index) => (
+                    <span key={link.href} className="inline-flex items-center gap-2">
+                      {index > 0 ? <span aria-hidden="true">·</span> : null}
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-[11px] text-fgMuted hover:text-fg underline-offset-4 hover:underline transition-colors no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent rounded-sm"
+                      >
+                        {link.label}
+                      </a>
+                    </span>
+                  ))}
+                </span>
+              </>
+            ) : null}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {resolved.workspaceName ? <span>{resolved.workspaceName}</span> : null}
             {resolved.workspaceName ? <span aria-hidden="true">·</span> : null}

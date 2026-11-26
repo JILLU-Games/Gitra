@@ -1,5 +1,7 @@
 # tessera Ownership Migration Plan
 
+> **Historical Architecture Plan — Superseded (Auth Layer):** D1 repository ownership, namespaces, PATs, and sealed browser sessions from this plan are live, while **Tessera OIDC has been replaced** by local administrator credentials + D1 PBKDF2-SHA256 directory passwords and RBAC (`src/worker/auth/adminAuth.ts`, `src/worker/auth/passwords.ts`, `src/worker/routes/authLogin.ts`). Only the historical `users.tessera_sub` column name and unused `openid-client` dependency remain. See **[`docs/dev/security.md`](./dev/security.md)** and **[`docs/users/features/auth-rbac-and-tokens.md`](./users/features/auth-rbac-and-tokens.md)** for the current implementation.
+
 This plan modernizes git-on-cloudflare repository ownership and moves human identity to tessera OIDC while preserving the existing Git storage model: Workers remain stateless, RepoDO remains the per-repository metadata authority for refs and pack catalog state, and R2 remains the pack/object data plane.
 
 The implementation is split into three phases so identity, route resolution, authorization, caching, and legacy removal do not all land in one deploy.

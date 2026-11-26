@@ -254,7 +254,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               type="text"
               value={form.siteName}
               onChange={(event) => updateField("siteName", event.target.value)}
-              placeholder="git-on-cloudflare"
+              placeholder="gitra"
               helperText="Full instance name for og:site_name and accessibility labels."
               required
             />
@@ -264,7 +264,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               type="text"
               value={form.shortName}
               onChange={(event) => updateField("shortName", event.target.value)}
-              placeholder="Vib Git"
+              placeholder="gitra"
               helperText="Compact brand text displayed next to the header logo."
               required
             />
@@ -274,7 +274,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               type="text"
               value={form.siteTitle}
               onChange={(event) => updateField("siteTitle", event.target.value)}
-              placeholder="Vib Git · Open-Source Git Forge"
+              placeholder="gitra · Open-Source Git Forge"
               helperText="Appended to page titles across repositories, commits, and admin views."
               required
             />
@@ -302,7 +302,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
             type="text"
             value={form.metaTitle}
             onChange={(event) => updateField("metaTitle", event.target.value)}
-            placeholder="Vib Tools Open-Source Repositories"
+            placeholder="gitra · Vib Tools Open-Source Repositories"
             helperText="Recommended under 60 characters for search results."
             required
           />
@@ -548,7 +548,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
             type="text"
             value={form.footerText}
             onChange={(event) => updateField("footerText", event.target.value)}
-            placeholder="© 2026 Vib Tools · Open-Source Git Forge"
+            placeholder="© 2026 gitra · Vib Tools"
           />
         </div>
 

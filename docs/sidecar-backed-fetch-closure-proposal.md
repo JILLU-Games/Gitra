@@ -1,5 +1,7 @@
 # One-Shot Plan: Sidecar-Backed Fetch Closure
 
+> **Historical Design Plan — Implemented:** Per-pack `.refs` logical reference sidecars (`src/worker/keys.ts#packRefsKey`, `src/worker/tasks/refBackfill.ts`) are now implemented. For current architecture and storage layout, see **[`docs/dev/architecture.md`](./dev/architecture.md)** and **[`docs/dev/database-schema.md`](./dev/database-schema.md)**.
+
 ## Summary
 
 Implement per-pack logical object-reference sidecars and use them for final `git-upload-pack` closure planning. This directly addresses the incident: fetch planning must not read thousands of packed objects from R2 just to discover commit/tree/tag edges.

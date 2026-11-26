@@ -1,5 +1,7 @@
 # Commit Diff Proposal
 
+> **Historical Design Note — Implemented:** Both V1 (changed file list on `GET /:owner/:repo/commit/:oid`) and V2 (lazy per-file patch expansion on `GET /:owner/:repo/commit/:oid/diff`) are now implemented in `src/worker/routes/ui/commits.ts` and `src/client/pages/CommitPage.tsx`. Source paths below (such as `src/routes/ui.ts` and `src/ui/`) predate the `src/worker/` + `src/client/` reorganization. See **[`docs/dev/api-reference.md`](./dev/api-reference.md)** for current contracts.
+
 This document proposes a staged implementation for a GitHub-style "what changed in this commit" view that fits the current `git-on-cloudflare` architecture and respects the existing soft IO/subrequest budget.
 
 ## Goals
