@@ -5,6 +5,7 @@ import { Check, GitBranch, Tag } from "lucide-react";
 
 import { hydrateIsland } from "@/client/hydrate";
 import { buttonClasses } from "@/client/components/ui/button";
+import { inputClasses } from "@/client/components/ui/input";
 
 type RefItem = {
   name: string;
@@ -74,7 +75,7 @@ function RefPickerSection({
         return isCurrent ? (
           <span
             key={`${title}-${item.name}`}
-            className="flex items-center gap-2 rounded border border-border bg-surfaceHover px-2 py-1.5 text-[12px] text-fg"
+            className="flex items-center gap-2 rounded-none border border-border bg-surfaceHover px-2 py-1.5 text-[12px] text-fg"
           >
             <Check className="h-3.5 w-3.5 flex-shrink-0 text-fg" aria-hidden="true" />
             <Icon className="h-3.5 w-3.5 flex-shrink-0 text-fgMuted" aria-hidden="true" />
@@ -84,7 +85,7 @@ function RefPickerSection({
           <a
             key={`${title}-${item.name}`}
             href={href}
-            className="flex items-center gap-2 rounded px-2 py-1.5 font-mono text-[12px] text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
+            className="flex items-center gap-2 rounded-none px-2 py-1.5 font-mono text-[12px] text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
           >
             <span className="h-3.5 w-3.5 flex-shrink-0"></span>
             <Icon className="h-3.5 w-3.5 flex-shrink-0 text-fgMuted" aria-hidden="true" />
@@ -93,7 +94,7 @@ function RefPickerSection({
         ) : (
           <span
             key={`${title}-${item.name}`}
-            className="flex items-center gap-2 rounded px-2 py-1.5 font-mono text-[12px] text-fgBody"
+            className="flex items-center gap-2 rounded-none px-2 py-1.5 font-mono text-[12px] text-fgBody"
           >
             <span className="h-3.5 w-3.5 flex-shrink-0"></span>
             <Icon className="h-3.5 w-3.5 flex-shrink-0 text-fgMuted" aria-hidden="true" />
@@ -210,14 +211,14 @@ export function RefPickerIsland({ owner, repo, currentRef }: RefPickerProps) {
         >
           <span className="font-mono">{formatRefLabel(currentRef)}</span>
         </summary>
-        <div className="fixed inset-x-0 z-20 mx-3 mt-1.5 rounded-md border border-border bg-surface p-2 sm:absolute sm:right-0 sm:left-auto sm:mx-0 sm:w-72">
+        <div className="fixed inset-x-0 z-20 mx-3 mt-1.5 rounded-none border border-border bg-surface p-2 sm:absolute sm:right-0 sm:left-auto sm:mx-0 sm:w-72">
           <input
             ref={filterRef}
             type="text"
             placeholder="Filter branches/tags"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+            className={`${inputClasses} text-[12px]`}
             autoComplete="off"
           />
           <div className="mt-1.5 max-h-48 overflow-y-auto text-[12px] sm:max-h-64 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
@@ -228,7 +229,7 @@ export function RefPickerIsland({ owner, repo, currentRef }: RefPickerProps) {
                 {showCurrentChip ? (
                   <>
                     <div className="px-2 py-1 text-[11px] uppercase text-fgMuted">Current</div>
-                    <span className="flex items-center gap-2 rounded border border-border bg-surfaceHover px-2 py-1.5 font-mono text-[12px] text-fg">
+                    <span className="flex items-center gap-2 rounded-none border border-border bg-surfaceHover px-2 py-1.5 font-mono text-[12px] text-fg">
                       <Check className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
                       <span className="font-semibold">
                         {/^[0-9a-f]{40}$/i.test(currentRef)

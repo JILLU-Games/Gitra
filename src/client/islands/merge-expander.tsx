@@ -93,7 +93,7 @@ export function MergeExpanderIsland({ owner, repo, commits }: MergeExpanderProps
       id="commits-table"
       data-owner={owner}
       data-repo={repo}
-      className="mt-3 overflow-hidden rounded-md border border-border bg-surface"
+      className="mt-3 overflow-hidden rounded-none border border-border bg-surface"
     >
       <thead>
         <tr>

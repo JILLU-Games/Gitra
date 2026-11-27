@@ -14,7 +14,7 @@ type FooterProps = {
 };
 
 const LINK_CLASS =
-  "inline-flex items-center text-[13px] text-fgBody hover:text-fg transition-colors no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent rounded-sm";
+  "inline-flex items-center text-[13px] text-fgBody hover:text-fg transition-colors no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent rounded-none";
 
 export function Footer({ branding, viewer, origin }: FooterProps) {
   const resolved = branding ?? DEFAULT_SITE_BRANDING;
@@ -34,14 +34,14 @@ export function Footer({ branding, viewer, origin }: FooterProps) {
           <div className="md:col-span-5">
             <a
               href="/"
-              className="inline-flex items-center gap-2 text-fg no-underline hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent rounded-sm"
+              className="inline-flex items-center gap-2 text-fg no-underline hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent rounded-none"
             >
               {resolved.logoUrl ? (
                 <img
                   src={resolved.logoUrl}
                   alt={resolved.shortName}
                   referrerPolicy="no-referrer"
-                  className="h-5 w-auto max-w-[120px] shrink-0 rounded-sm object-contain"
+                  className="h-5 w-auto max-w-[120px] shrink-0 rounded-none object-contain"
                 />
               ) : (
                 <svg
@@ -211,7 +211,7 @@ export function Footer({ branding, viewer, origin }: FooterProps) {
                     href={segment.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-fgBody hover:text-fg underline-offset-4 hover:underline transition-colors no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent rounded-sm"
+                    className="text-fgBody hover:text-fg underline-offset-4 hover:underline transition-colors no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent rounded-none"
                   >
                     {segment.text}
                   </a>
@@ -233,7 +233,7 @@ export function Footer({ branding, viewer, origin }: FooterProps) {
                         href={link.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-mono text-[11px] text-fgMuted hover:text-fg underline-offset-4 hover:underline transition-colors no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent rounded-sm"
+                        className="font-mono text-[11px] text-fgMuted hover:text-fg underline-offset-4 hover:underline transition-colors no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent rounded-none"
                       >
                         {link.label}
                       </a>
@@ -244,6 +244,7 @@ export function Footer({ branding, viewer, origin }: FooterProps) {
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <span data-pwa-install-slot="" className="inline-flex items-center gap-2" />
             {resolved.workspaceName ? <span>{resolved.workspaceName}</span> : null}
             {resolved.workspaceName ? <span aria-hidden="true">·</span> : null}
             <span className="font-mono text-[11px]">Git Smart HTTP v2</span>

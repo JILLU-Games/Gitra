@@ -16,12 +16,10 @@ const variantStyles: Record<BadgeVariant, string> = {
   warning: "bg-amber-500/10 text-amber-300 border border-amber-500/25",
 };
 
+export function badgeClasses(variant: BadgeVariant = "default"): string {
+  return `inline-flex items-center rounded-none px-1.5 py-0.5 text-[11px] font-medium leading-4 ${variantStyles[variant]}`;
+}
+
 export function Badge({ variant = "default", className = "", children }: BadgeProps) {
-  return (
-    <span
-      className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium leading-4 ${variantStyles[variant]} ${className}`.trim()}
-    >
-      {children}
-    </span>
-  );
+  return <span className={`${badgeClasses(variant)} ${className}`.trim()}>{children}</span>;
 }

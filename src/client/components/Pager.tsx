@@ -21,14 +21,14 @@ export function Pager({ pager }: PagerProps) {
   }
 
   return (
-    <div className="my-4 flex items-center justify-between rounded-md border border-border bg-surface px-3.5 py-2.5">
+    <div className="my-4 flex items-center justify-between rounded-none border border-border bg-surface px-3.5 py-2.5">
       <div className="flex items-center gap-2 text-[12px]">
         <span className="text-fgMuted">Per page:</span>
         {pager.perPageLinks.map((link) => (
           <a
             key={link.href}
             href={link.href}
-            className="rounded px-2 py-0.5 text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
+            className="rounded-none px-2 py-0.5 text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
           >
             {link.text}
           </a>

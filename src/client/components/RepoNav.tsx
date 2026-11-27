@@ -66,7 +66,7 @@ export function RepoNav({
             </a>
           </div>
           {visibility ? (
-            <span className="inline-flex items-center rounded border border-border bg-canvas px-1.5 py-0.5 text-[11px] font-medium capitalize text-fgMuted">
+            <span className="inline-flex items-center rounded-none border border-border bg-canvas px-1.5 py-0.5 text-[11px] font-medium capitalize text-fgMuted">
               {visibility}
             </span>
           ) : null}

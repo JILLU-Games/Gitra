@@ -4,9 +4,18 @@ import { registerAdminRoutes } from "./routes/admin";
 import { registerSystemAdminRoutes } from "./routes/systemAdmin";
 import { registerUiRoutes } from "./routes/ui";
 import { registerAuthRoutes } from "./routes/auth";
-import { requestServicesMiddleware, type AppBindings, type AppContext } from "./routes/hono";
+import {
+  requestServicesMiddleware,
+  workerExecutionContext,
+  type AppBindings,
+  type AppContext,
+} from "./routes/hono";
 import { renderUiDocumentResponse } from "./routes/uiResponse";
 import { loadSiteBranding } from "./branding";
+import {
+  enrichRepositoriesWithMetadata,
+  type RepoDerivedSummary,
+} from "./repositories/repoMetadata";
 import { loadViewer } from "./auth/session";
 import {
   DEFAULT_DEMO_USER_USERNAME,
@@ -83,6 +92,8 @@ app.get("/", async (c) => {
   ]);
   const primaryAdminSlug = primaryAdminNs?.slug ?? resolveInitialAdminNamespaceSlug(c.env);
 
+  const execCtx = workerExecutionContext(c);
+
   if (!viewer) {
     const [publicMeta, publicNamespaces] = await Promise.all([
       listRepositoryMetaMap(
@@ -91,16 +102,15 @@ app.get("/", async (c) => {
       ),
       listPublicNamespaceSummaries(c.env.DB, publicRows, primaryAdminSlug),
     ]);
-    const publicRepositories = publicRows.map((row) => ({
-      id: row.repository.id,
-      slug: row.repository.slug,
-      namespaceSlug: row.namespace.slug,
-      visibility: row.repository.visibility,
-      description: publicMeta.get(row.repository.id)?.description ?? "",
-      pinned: publicMeta.get(row.repository.id)?.pinned ?? false,
-      homePinned: publicMeta.get(row.repository.id)?.homePinned ?? false,
-      updatedAt: row.repository.updatedAt,
-    }));
+    const publicRepositories = await enrichRepositoriesWithMetadata({
+      env: c.env,
+      req: c.req.raw,
+      ctx: execCtx,
+      limiter: c.var.limiter,
+      log: c.var.logFor({ service: "HomePage" }),
+      rows: publicRows,
+      metaMap: publicMeta,
+    });
     return renderUiDocumentResponse(
       c.env,
       "home",
@@ -127,16 +137,28 @@ app.get("/", async (c) => {
     ])
   );
   const repoMeta = await listRepositoryMetaMap(c.env.DB, allRepoIds);
-  const publicRepositories = publicRows.map((row) => ({
-    id: row.repository.id,
-    slug: row.repository.slug,
-    namespaceSlug: row.namespace.slug,
-    visibility: row.repository.visibility,
-    description: repoMeta.get(row.repository.id)?.description ?? "",
-    pinned: repoMeta.get(row.repository.id)?.pinned ?? false,
-    homePinned: repoMeta.get(row.repository.id)?.homePinned ?? false,
-    updatedAt: row.repository.updatedAt,
-  }));
+  const sharedDerived = new Map<string, RepoDerivedSummary>();
+  const homeLog = c.var.logFor({ service: "HomePage" });
+  const publicRepositories = await enrichRepositoriesWithMetadata({
+    env: c.env,
+    req: c.req.raw,
+    ctx: execCtx,
+    limiter: c.var.limiter,
+    log: homeLog,
+    rows: publicRows,
+    metaMap: repoMeta,
+    sharedDerived,
+  });
+  const repositories = await enrichRepositoriesWithMetadata({
+    env: c.env,
+    req: c.req.raw,
+    ctx: execCtx,
+    limiter: c.var.limiter,
+    log: homeLog,
+    rows: repositoryRows,
+    metaMap: repoMeta,
+    sharedDerived,
+  });
 
   return renderUiDocumentResponse(
     c.env,
@@ -150,16 +172,7 @@ app.get("/", async (c) => {
       viewerRole: viewer.role,
       namespaces: namespaces.map((ns) => ({ id: ns.id, slug: ns.slug })),
       publicNamespaces,
-      repositories: repositoryRows.map((row) => ({
-        id: row.repository.id,
-        slug: row.repository.slug,
-        namespaceSlug: row.namespace.slug,
-        visibility: row.repository.visibility,
-        description: repoMeta.get(row.repository.id)?.description ?? "",
-        pinned: repoMeta.get(row.repository.id)?.pinned ?? false,
-        homePinned: repoMeta.get(row.repository.id)?.homePinned ?? false,
-        updatedAt: row.repository.updatedAt,
-      })),
+      repositories,
       publicRepositories,
     },
     { failureBody: "Failed to render page\n", viewer, branding, origin }
@@ -184,16 +197,15 @@ app.get("/explore", async (c) => {
     ),
     listPublicNamespaceSummaries(c.env.DB, publicRows, primaryAdminSlug),
   ]);
-  const publicRepositories = publicRows.map((row) => ({
-    id: row.repository.id,
-    slug: row.repository.slug,
-    namespaceSlug: row.namespace.slug,
-    visibility: row.repository.visibility,
-    description: publicMeta.get(row.repository.id)?.description ?? "",
-    pinned: publicMeta.get(row.repository.id)?.pinned ?? false,
-    homePinned: publicMeta.get(row.repository.id)?.homePinned ?? false,
-    updatedAt: row.repository.updatedAt,
-  }));
+  const publicRepositories = await enrichRepositoriesWithMetadata({
+    env: c.env,
+    req: c.req.raw,
+    ctx: workerExecutionContext(c),
+    limiter: c.var.limiter,
+    log: c.var.logFor({ service: "ExplorePage" }),
+    rows: publicRows,
+    metaMap: publicMeta,
+  });
 
   return renderUiDocumentResponse(
     c.env,

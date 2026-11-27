@@ -4,7 +4,7 @@ import { Button } from "@/client/components/ui/button";
 export function NotFoundPage() {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center justify-center gap-3.5 py-14 text-center">
-      <span className="inline-grid h-10 w-10 place-items-center rounded-md border border-border bg-surface">
+      <span className="inline-grid h-10 w-10 place-items-center rounded-none border border-border bg-surface">
         <Search className="h-5 w-5 text-fgMuted" aria-hidden="true" />
       </span>
       <div>

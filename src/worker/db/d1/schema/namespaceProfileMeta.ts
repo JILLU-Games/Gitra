@@ -10,6 +10,7 @@ export const namespaceProfileMeta = sqliteTable("namespace_profile_meta", {
   bio: text("bio").notNull().default(""),
   location: text("location").notNull().default(""),
   website: text("website").notNull().default(""),
+  commitEmail: text("commit_email").notNull().default(""),
   updatedAt: integer("updated_at").notNull(),
 });
 

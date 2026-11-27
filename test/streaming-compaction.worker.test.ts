@@ -979,4 +979,56 @@ describe("streaming compaction", () => {
       sendSpy.mockRestore();
     }
   });
+
+  it("F-10: rejects manual compaction with 409 queues-required when REPO_TASKS_QUEUE is unbound without leaving orphan compactionWantedAt", async () => {
+    const owner = "o";
+    const repo = uniqueRepoId("stream-compaction-no-queue-guard");
+    const seededRepo = await setupRepoForTests(env, owner, repo);
+    const repoId = `${owner}/${repo}`;
+    const seeded = await seedPackFirstRepo(repoId);
+    await promoteToStreaming(owner, repo);
+
+    await pushOverflowingStreamingHistory({
+      owner,
+      repo,
+      repoId,
+      startingCommitOid: seeded.nextCommit.oid,
+      updates: 4,
+    });
+
+    const originalQueue = (env as unknown as Record<string, unknown>).REPO_TASKS_QUEUE;
+    (env as unknown as Record<string, unknown>).REPO_TASKS_QUEUE = undefined;
+    try {
+      const requestResponse = await workerExports.default.fetch(
+        `https://example.com/${owner}/${repo}/admin/compact`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: seededRepo.cookieHeader,
+            "Content-Type": "application/json",
+            Origin: "https://example.com",
+          },
+          body: JSON.stringify({ dryRun: false }),
+        }
+      );
+      expect(requestResponse.status).toBe(409);
+      const requestJson = (await requestResponse.json()) as {
+        ok?: boolean;
+        status?: string;
+        queued?: boolean;
+        shouldEnqueue?: boolean;
+        reason?: string;
+      };
+      expect(requestJson.ok).toBe(false);
+      expect(requestJson.status).toBe("rejected");
+      expect(requestJson.queued).toBe(false);
+      expect(requestJson.shouldEnqueue).toBe(false);
+      expect(requestJson.reason).toBe("queues-required");
+
+      const stateAfterReject = await getDebugState(owner, repo, seededRepo.cookieHeader);
+      expect(stateAfterReject.compaction?.queued).toBe(false);
+    } finally {
+      (env as unknown as Record<string, unknown>).REPO_TASKS_QUEUE = originalQueue;
+    }
+  });
 });

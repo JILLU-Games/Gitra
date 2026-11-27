@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Clipboard } from "lucide-react";
 import { shortRefName } from "@/shared/git/ref-display";
+import { copyToClipboard } from "@/client/components/ui";
 import { Card } from "@/client/components/ui/card";
 import { formatSampleBytes, shortValue } from "./format";
 import type { AdminState } from "./types";
@@ -32,11 +33,14 @@ export function RepoOverviewCard({
 
   async function copyDoId(doId: string) {
     setCopyError(false);
-    try {
-      await navigator.clipboard.writeText(doId);
+    const copied = await copyToClipboard(doId, {
+      label: "Durable Object ID",
+      successTitle: "DO ID copied",
+    });
+    if (copied) {
       setCopiedDoId(true);
       window.setTimeout(() => setCopiedDoId(false), 1200);
-    } catch {
+    } else {
       setCopiedDoId(false);
       setCopyError(true);
       window.setTimeout(() => setCopyError(false), 2000);
@@ -73,7 +77,7 @@ export function RepoOverviewCard({
               <span title={state.meta.doId}>{shortValue(String(state.meta.doId), 12)}</span>
               <button
                 type="button"
-                className="ml-2 inline-flex rounded border border-border bg-canvas p-1 text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
+                className="ml-2 inline-flex rounded-none border border-border bg-canvas p-1 text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
                 title={copiedDoId ? "Copied" : copyError ? "Copy failed" : "Copy DO ID"}
                 aria-label="Copy DO ID"
                 onClick={() => void copyDoId(String(state.meta?.doId || ""))}

@@ -9,7 +9,7 @@ type CardProps = {
   className?: string;
 } & Omit<ComponentProps<"div">, "children" | "className">;
 
-const base = "rounded-md p-4";
+const base = "rounded-none p-4";
 
 const variantStyles: Record<CardVariant, string> = {
   default: "border border-border bg-surface",
@@ -18,6 +18,10 @@ const variantStyles: Record<CardVariant, string> = {
 
 const interactiveStyles = "hover:bg-surfaceHover/50 transition-colors cursor-pointer";
 
+export function cardClasses(variant: CardVariant = "default", interactive = false): string {
+  return `${base} ${variantStyles[variant]} ${interactive ? interactiveStyles : ""}`.trim();
+}
+
 export function Card({
   variant = "default",
   interactive = false,
@@ -25,8 +29,7 @@ export function Card({
   children,
   ...rest
 }: CardProps) {
-  const classes =
-    `${base} ${variantStyles[variant]} ${interactive ? interactiveStyles : ""} ${className}`.trim();
+  const classes = `${cardClasses(variant, interactive)} ${className}`.trim();
 
   return (
     <div className={classes} {...rest}>

@@ -93,6 +93,14 @@ export async function renderBlobDocumentResponse(
         fileName,
         tooLarge: true,
         canEditFile: false,
+        canMutateFile: Boolean(
+          viewer &&
+          canWriteRepositories(viewer.role) &&
+          access.showActivityBanner &&
+          Boolean(path) &&
+          !OID_RE.test(ref) &&
+          !(ref.startsWith("refs/") && !ref.startsWith("refs/heads/"))
+        ),
         sizeStr,
         viewRawHref,
         rawHref,
@@ -111,29 +119,29 @@ export async function renderBlobDocumentResponse(
   const isBinary = detectBinary(result.content);
   const isCommitSha = OID_RE.test(ref);
   const hasNonBranchPrefix = ref.startsWith("refs/") && !ref.startsWith("refs/heads/");
-  const mayEditCandidate = Boolean(
+  const mayMutateCandidate = Boolean(
     viewer &&
     canWriteRepositories(viewer.role) &&
     access.showActivityBanner &&
-    !isBinary &&
     Boolean(path) &&
     !isCommitSha &&
     !hasNonBranchPrefix
   );
-  let canEditFile = false;
-  if (mayEditCandidate) {
+  let canMutateFile = false;
+  if (mayMutateCandidate) {
     const { head, refs } = await getHeadAndRefs(env, repoId, cacheCtx);
     if (ref === "HEAD") {
-      canEditFile = Boolean(head?.target?.startsWith("refs/heads/"));
+      canMutateFile = Boolean(head?.target?.startsWith("refs/heads/"));
     } else if (ref.startsWith("refs/heads/")) {
-      canEditFile = true;
+      canMutateFile = true;
     } else {
       const hasBranch = refs.some((entry) => entry.name === `refs/heads/${ref}`);
       const hasTag = refs.some((entry) => entry.name === `refs/tags/${ref}`);
-      canEditFile = hasBranch || !hasTag;
+      canMutateFile = hasBranch || !hasTag;
     }
   }
-  if (canEditFile) {
+  const canEditFile = canMutateFile && !isBinary;
+  if (canMutateFile) {
     markRequestPrivate(cacheCtx);
   }
   const isPrivate = isRequestPrivate(cacheCtx);
@@ -154,6 +162,7 @@ export async function renderBlobDocumentResponse(
     progress,
     fileName,
     canEditFile,
+    canMutateFile,
     viewRawHref,
     breadcrumbs,
     parentHref,

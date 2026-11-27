@@ -1142,4 +1142,78 @@ describe("git fetch streaming (default)", () => {
     expect(firstDataIdx).toBeGreaterThanOrEqual(0);
     expect(prepareIdx).toBeLessThan(firstDataIdx);
   });
+
+  it("F-09: repairs missing .refs sidecars inline during incremental fetch when REPO_TASKS_QUEUE is unbound", async () => {
+    const owner = "o";
+    const repo = uniqueRepoId("no-queue-inline-ref-backfill");
+    await setupRepoForTests(env, owner, repo);
+    const { getStub, firstCommit, secondCommit } = await seedTwoCommitRepo(owner, repo);
+
+    const activeCatalog = await getStub().getActivePackCatalog();
+    expect(activeCatalog.length).toBeGreaterThan(0);
+    for (const pack of activeCatalog) {
+      await env.REPO_BUCKET.delete(packRefsKey(pack.packKey));
+    }
+
+    const originalQueue = (env as unknown as Record<string, unknown>).REPO_TASKS_QUEUE;
+    (env as unknown as Record<string, unknown>).REPO_TASKS_QUEUE = undefined;
+    try {
+      const res = await postFinalFetch({
+        owner,
+        repo,
+        wants: [secondCommit],
+        haves: [firstCommit],
+      });
+      expect(res.status).toBe(200);
+      const okBytes = new Uint8Array(await res.arrayBuffer());
+      expect(new TextDecoder().decode(okBytes.subarray(4, 13))).toBe("packfile\n");
+
+      for (const pack of activeCatalog) {
+        await expect(env.REPO_BUCKET.head(packRefsKey(pack.packKey))).resolves.toBeTruthy();
+      }
+    } finally {
+      (env as unknown as Record<string, unknown>).REPO_TASKS_QUEUE = originalQueue;
+    }
+  });
+
+  it("F-17: accepts legacy v0/v1 want/have upload-pack fetch bodies without Git-Protocol: version=2 and rejects malformed empty bodies", async () => {
+    const owner = "o";
+    const repo = uniqueRepoId("legacy-v1-upload-pack");
+    await setupRepoForTests(env, owner, repo);
+    const { firstCommit, secondCommit } = await seedTwoCommitRepo(owner, repo);
+
+    const legacyV1Body = concatChunks([
+      pktLine(`want ${secondCommit} multi_ack_detailed side-band-64k ofs-delta\n`),
+      flushPkt(),
+      pktLine(`have ${firstCommit}\n`),
+      pktLine("done\n"),
+    ]);
+
+    const res = await workerExports.default.fetch(
+      `https://example.com/${owner}/${repo}/git-upload-pack`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-git-upload-pack-request",
+        },
+        body: asBufferSource(legacyV1Body),
+      }
+    );
+    expect(res.status).toBe(200);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(new TextDecoder().decode(bytes.subarray(4, 13))).toBe("packfile\n");
+
+    const badRes = await workerExports.default.fetch(
+      `https://example.com/${owner}/${repo}/git-upload-pack`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-git-upload-pack-request",
+        },
+        body: asBufferSource(flushPkt()),
+      }
+    );
+    expect(badRes.status).toBe(400);
+    expect(await badRes.text()).toContain("Expected Git protocol v2");
+  });
 });

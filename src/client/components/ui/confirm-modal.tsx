@@ -85,7 +85,7 @@ export function ConfirmModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-modal-title"
-        className="w-full max-w-md rounded-md border border-border bg-surface shadow-lg"
+        className="w-full max-w-md rounded-none border border-border bg-surface"
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 id="confirm-modal-title" className="m-0 text-[14px] font-semibold text-fg">
@@ -96,7 +96,7 @@ export function ConfirmModal({
             onClick={onCancel}
             disabled={busy}
             aria-label="Close confirmation dialog"
-            className="inline-flex h-7 w-7 items-center justify-center rounded border border-transparent text-fgMuted hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-none border border-transparent text-fgMuted hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -129,7 +129,7 @@ export function ConfirmModal({
                   if (localError) setLocalError(null);
                 }}
                 placeholder={requireText}
-                className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 font-mono text-[12px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+                className="h-8 w-full rounded-none border border-border bg-canvas px-2.5 font-mono text-[12px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
               />
             </div>
           ) : null}
@@ -137,7 +137,7 @@ export function ConfirmModal({
           {displayError ? (
             <p
               role="alert"
-              className="m-0 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
+              className="m-0 rounded-none border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
             >
               {displayError}
             </p>

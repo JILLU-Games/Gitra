@@ -241,6 +241,7 @@ describe("D1 schema + DAL round-trips", () => {
       bio: "Hello",
       location: "Edge",
       website: "https://example.com",
+      commitEmail: "",
     });
 
     await upsertRepositoryMeta(env.DB, "repo-meta", {

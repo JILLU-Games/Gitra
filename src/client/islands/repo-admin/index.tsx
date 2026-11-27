@@ -41,6 +41,8 @@ export function RepoAdminIsland(props: RepoAdminProps) {
     notice,
     confirmRequest,
     confirmError,
+    compactionCleared,
+    removedPacks,
     clearNotice,
     cancelConfirm,
     executeConfirm,
@@ -53,7 +55,17 @@ export function RepoAdminIsland(props: RepoAdminProps) {
   } = useRepoAdminActions(owner, repo);
 
   const { branchCount, tagCount } = countRefsByKind(refs);
-  const packStats = Array.isArray(state.packStats) ? state.packStats : [];
+  const rawPackStats = Array.isArray(state.packStats) ? state.packStats : [];
+  const packStats = rawPackStats.filter((item) => {
+    const packName = String(item.key).split("/").pop() || item.key;
+    return !removedPacks.includes(packName);
+  });
+  const effectivePackCount = Math.max(0, packCount - removedPacks.length);
+  const effectiveSupersededCount = Math.max(0, supersededPackCount - removedPacks.length);
+  const effectiveCompactionData = compactionCleared
+    ? { ...compactionData, queued: false, running: false, wantedAt: null }
+    : compactionData;
+  const effectiveCompactionStatus = compactionCleared ? "idle" : compactionStatus;
 
   const confirmBusy =
     confirmRequest?.kind === "clear-compaction"
@@ -84,7 +96,7 @@ export function RepoAdminIsland(props: RepoAdminProps) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3.5 text-[13px] text-amber-300">
+      <div className="rounded-none border border-amber-500/30 bg-amber-500/10 p-3.5 text-[13px] text-amber-300">
         <strong>
           <TriangleAlert
             className="mr-2 inline h-4 w-4 align-[-2px] text-amber-400"
@@ -98,7 +110,7 @@ export function RepoAdminIsland(props: RepoAdminProps) {
       {notice ? (
         <div
           role={notice.tone === "error" ? "alert" : "status"}
-          className={`flex items-center justify-between gap-2 rounded-md border px-3.5 py-2.5 text-[12px] ${
+          className={`flex items-center justify-between gap-2 rounded-none border px-3.5 py-2.5 text-[12px] ${
             notice.tone === "error"
               ? "border-red-500/30 bg-red-500/10 text-red-400"
               : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
@@ -109,7 +121,7 @@ export function RepoAdminIsland(props: RepoAdminProps) {
             type="button"
             onClick={clearNotice}
             aria-label="Dismiss notification"
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-surfaceHover"
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-none hover:bg-surfaceHover"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -118,9 +130,9 @@ export function RepoAdminIsland(props: RepoAdminProps) {
 
       <RepoOverviewCard
         storageSize={storageSize}
-        packCount={packCount}
-        supersededPackCount={supersededPackCount}
-        compactionStatus={compactionStatus}
+        packCount={effectivePackCount}
+        supersededPackCount={effectiveSupersededCount}
+        compactionStatus={effectiveCompactionStatus}
         state={state}
         head={head}
         branchCount={branchCount}
@@ -128,9 +140,9 @@ export function RepoAdminIsland(props: RepoAdminProps) {
       />
 
       <CompactionCard
-        compactionData={compactionData}
+        compactionData={effectiveCompactionData}
         compactionStartedAt={compactionStartedAt}
-        compactionStatus={compactionStatus}
+        compactionStatus={effectiveCompactionStatus}
         state={state}
         pending={pending}
         startCompaction={startCompaction}
@@ -139,7 +151,7 @@ export function RepoAdminIsland(props: RepoAdminProps) {
       />
 
       <PackFilesCard
-        packCount={packCount}
+        packCount={effectivePackCount}
         packStats={packStats}
         pending={pending}
         removePack={removePack}

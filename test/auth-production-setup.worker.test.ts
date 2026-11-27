@@ -141,21 +141,18 @@ describe("production mode first-run admin setup and zero-demo isolation", () => 
       expect(securityHtml).toContain("login: founder (d1)");
 
       // 9. D1 primary admin can change own password via POST /auth/api/change-password
-      const changePwRes = await workerExports.default.fetch(
-        `${ORIGIN}/auth/api/change-password`,
-        {
-          method: "POST",
-          headers: {
-            Cookie: founderCookie,
-            Origin: ORIGIN,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            currentPassword: "StrongPassword#2026",
-            newPassword: "BrandNewStrongPassword#2026",
-          }),
-        }
-      );
+      const changePwRes = await workerExports.default.fetch(`${ORIGIN}/auth/api/change-password`, {
+        method: "POST",
+        headers: {
+          Cookie: founderCookie,
+          Origin: ORIGIN,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          currentPassword: "StrongPassword#2026",
+          newPassword: "BrandNewStrongPassword#2026",
+        }),
+      });
       expect(changePwRes.status).toBe(200);
       const changePwJson = (await changePwRes.json()) as { ok: boolean };
       expect(changePwJson.ok).toBe(true);
@@ -210,6 +207,53 @@ describe("production mode first-run admin setup and zero-demo isolation", () => 
       });
       expect(newLoginRes.status).toBe(303);
       expect(newLoginRes.headers.get("location")).toBe("/admin");
+
+      // 12. Creating a member user with handle `@admin` does not hijack `@founder` primary-admin status
+      const createMemberAdminSlugRes = await workerExports.default.fetch(
+        `${ORIGIN}/admin/api/users`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: refreshedCookie,
+            Origin: ORIGIN,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            handle: "admin",
+            displayName: "Regular Admin Handle User",
+            role: "member",
+            status: "active",
+            password: "MemberPassword#2026",
+          }),
+        }
+      );
+      expect(createMemberAdminSlugRes.status).toBe(201);
+
+      const listUsersRes = await workerExports.default.fetch(`${ORIGIN}/admin/api/users`, {
+        headers: { Cookie: refreshedCookie },
+      });
+      expect(listUsersRes.status).toBe(200);
+      const listUsersJson = (await listUsersRes.json()) as {
+        users: Array<{ id: string; slug: string; isPrimaryAdmin: boolean; role: string }>;
+      };
+      const founderEntry = listUsersJson.users.find((u) => u.slug === "founder");
+      const memberAdminEntry = listUsersJson.users.find((u) => u.slug === "admin");
+      expect(founderEntry?.isPrimaryAdmin).toBe(true);
+      expect(memberAdminEntry?.isPrimaryAdmin).toBe(false);
+      expect(memberAdminEntry?.role).toBe("member");
+
+      // Primary admin `@founder` remains protected against deletion
+      const deleteFounderRes = await workerExports.default.fetch(
+        `${ORIGIN}/admin/api/users/${encodeURIComponent(founderEntry!.id)}`,
+        {
+          method: "DELETE",
+          headers: {
+            Cookie: refreshedCookie,
+            Origin: ORIGIN,
+          },
+        }
+      );
+      expect(deleteFounderRes.status).toBe(403);
     } finally {
       env.AUTH_MODE = originalAuthMode;
       env.ADMIN_PASSWORD = originalAdminPassword;

@@ -8,6 +8,7 @@ Every patch specification below maps **1:1** to verified findings `F-01` through
 ## Phase 01 — Regression Fix, Production Auth & Session Security (`F-01`–`F-08`)
 
 ### Scope Lock (`Phase 01`)
+
 - **Allowed Paths:** `src/client/components/footer.tsx`, `src/worker/auth/{adminAuth,session,cookies,rateLimit}.ts`, `src/worker/routes/{authLogin,systemAdmin,ui/overview}.ts`, `src/worker/index.ts` (primary admin lookup lines only), `src/worker/db/d1/*`, `drizzle/d1/*`, `src/client/pages/{AccountPage,AdminSettingsPage,AdminSecurityPage}.tsx`, `src/client/islands/change-password.tsx`, `src/client/islands/admin-users/{index,UserFormModal}.tsx`, `test/auth*.ts`, `test/admin-auth*.ts`, `test/demo-user-mock-repo.worker.test.ts`.
 - **Forbidden Outside Scope:** Do NOT alter Git protocol/pack/compaction (`src/worker/git/`, `src/worker/do/`), homepage metadata (`home-repos.tsx`), CSS tokens, PWA, or `scripts/cf-auto-deploy*.mjs`.
 
@@ -39,7 +40,9 @@ Every patch specification below maps **1:1** to verified findings `F-01` through
    - **Target:** `src/client/islands/change-password.tsx:53-67`, `src/client/pages/AccountPage.tsx:229-230`, `src/client/islands/admin-users/UserFormModal.tsx:63,110,161,254-263,359`, `src/worker/routes/authTokens.ts:59-72`, `src/worker/routes/systemAdmin.ts:231-250,478-487`
    - **Current Code (`change-password.tsx:53`):**
      ```tsx
-     if (isPrimaryAdmin) { return <div>Managed by environment configuration</div>; }
+     if (isPrimaryAdmin) {
+       return <div>Managed by environment configuration</div>;
+     }
      ```
    - **Required Patch:** Pass explicit boolean `passwordManagedByEnv` (`resolveAdminAuthConfig(env).password !== null`) in viewer/admin props. Lock password change UI ONLY when `isPrimaryAdmin && passwordManagedByEnv`; allow D1-claimed primary admin to change password in `/user/settings/security` and manage via `/admin/users` (while still blocking demote/disable/delete in `evaluatePrimaryAdminPatchPolicy`).
 
@@ -63,7 +66,13 @@ Every patch specification below maps **1:1** to verified findings `F-01` through
    - **Target:** `src/worker/auth/cookies.ts:11-38`, `src/worker/auth/origin.ts`
    - **Current Code (`cookies.ts:17-23`):**
      ```ts
-     const SHARED_COOKIE_OPTIONS = { httpOnly: true, secure: true, sameSite: "None", partitioned: true, prefix: "host" };
+     const SHARED_COOKIE_OPTIONS = {
+       httpOnly: true,
+       secure: true,
+       sameSite: "None",
+       partitioned: true,
+       prefix: "host",
+     };
      ```
    - **Required Patch:** Derive request security dynamically from `isSecureRequest(c)` (`url.protocol === "https:"` or `x-forwarded-proto === "https"`): use `__Host-` + `Secure; SameSite=None; Partitioned` on HTTPS, and fall back to `goc_session` (`Path=/; HttpOnly; SameSite=Lax; secure: false`) on plain HTTP (`http://192.168.x.x` / local IP) so self-hosted HTTP works without breaking iframe HTTPS preview.
 
@@ -72,6 +81,7 @@ Every patch specification below maps **1:1** to verified findings `F-01` through
 ## Phase 02 — Background Queues, Compaction, Tier Policy & Git Engine (`F-09`, `F-10`, `F-17`–`F-19`)
 
 ### Scope Lock (`Phase 02`)
+
 - **Allowed Paths:** `src/worker/git/operations/fetch/plan.ts`, `src/worker/tasks/{dispatch,packRefBackfill,compaction,queue}.ts`, `src/worker/routes/{admin,git,systemAdmin}.ts`, `src/worker/do/repo/catalog/compaction/{requests,lease,plan}.ts`, `src/worker/common/tier.ts`, related worker unit/integration tests (`test/*.worker.test.ts`, `test/pack-ref-index.test.ts`).
 - **Forbidden Outside Scope:** Do NOT alter auth login/session files (`src/worker/auth/`), client UI styles/pages (`src/client/components/ui/`), or deploy scripts.
 
@@ -104,6 +114,7 @@ Every patch specification below maps **1:1** to verified findings `F-01` through
 ## Phase 03 — Real Repo Metadata, Branding Defaults & Web Git Editing (`F-11`, `F-12`, `F-16`)
 
 ### Scope Lock (`Phase 03`)
+
 - **Allowed Paths:** `src/client/islands/home-repos.tsx`, `src/shared/branding.ts`, `src/worker/index.ts` (repo prop enrichment lines only), `src/worker/routes/{authRepositories,admin,ui/raw}.ts`, `src/worker/git/commitFile.ts`, `src/client/islands/{repo-overview-actions,blob-editor,blob-actions}.tsx`, `src/client/pages/{OverviewPage,TreePage,BlobPage}.tsx`.
 - **Forbidden Outside Scope:** Do NOT alter auth, Session, compaction, or global CSS/Toast/PWA systems (Phase 04).
 
@@ -126,6 +137,7 @@ Every patch specification below maps **1:1** to verified findings `F-01` through
 ## Phase 04 — Component-Only Design System, Global Toast & PWA (`F-13`, `F-14`, `F-15`)
 
 ### Scope Lock (`Phase 04`)
+
 - **Allowed Paths:** `src/client/styles/app.css`, `src/client/components/ui/*`, `src/client/components/{header,footer,Sidebar,AdminSettingsLayout,UserSettingsLayout}.tsx`, `src/client/server/document.tsx`, `src/client/islands/*`, `public/` (PWA manifest, service worker, icons), `vite.config.ts`.
 - **Forbidden Outside Scope:** Zero changes to Worker API logic, Git protocol, D1/DO schemas, or deploy scripts.
 
@@ -147,6 +159,7 @@ Every patch specification below maps **1:1** to verified findings `F-01` through
 ## Phase 05 — Deploy Pipeline, Secret Hygiene & Bundle Cleanup (`F-20`, `F-21`)
 
 ### Scope Lock (`Phase 05`)
+
 - **Allowed Paths:** `scripts/cf-auto-deploy-lib.mjs`, `scripts/cf-auto-deploy.mjs`, `test/cf-auto-deploy.node-test.ts`, `wrangler.paid.jsonc`, `public/assets/aistudio/` (removal), `package.json` (only if script cleanup strictly needed).
 - **Forbidden Outside Scope:** Zero edits to application runtime `src/`.
 

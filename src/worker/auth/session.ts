@@ -10,11 +10,7 @@ import type { UserRow } from "@/worker/db/d1/schema";
 import type { AppContext } from "@/worker/routes/hono";
 import { z } from "zod";
 
-import {
-  isProductionRuntime,
-  resolveAdminAuthConfig,
-  resolveAdminAuthSource,
-} from "./adminAuth";
+import { isProductionRuntime, resolveAdminAuthConfig, resolveAdminAuthSource } from "./adminAuth";
 import { clearSessionCookie, getSessionCookie, setSessionCookie } from "./cookies";
 
 // Session cookie value shape: `goc_sess_<base64url AES-GCM blob>`.
@@ -280,6 +276,9 @@ async function loadViewerUncached(c: AppContext): Promise<Viewer | null> {
         userId: active.user.id,
         error: String(error),
       });
+      if (authConfig.password === null) {
+        return null;
+      }
       displayName = undefined;
     }
     return {

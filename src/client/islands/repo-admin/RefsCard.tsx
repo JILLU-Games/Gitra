@@ -40,7 +40,7 @@ export function RefsCard({ refs }: RefsCardProps) {
                     </td>
                     <td className="py-2">
                       <span
-                        className={`rounded border px-1.5 py-0.5 font-mono text-[11px] ${
+                        className={`rounded-none border px-1.5 py-0.5 font-mono text-[11px] ${
                           kind === "branch"
                             ? "border-accent/30 bg-accent/10 text-accent"
                             : kind === "tag"

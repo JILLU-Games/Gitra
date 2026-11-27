@@ -87,10 +87,10 @@ export function OwnerPage({
   return (
     <div className="space-y-4">
       {/* Compact Namespace Header */}
-      <header className="flex flex-col gap-3 rounded-md border border-border bg-surface p-4 sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-col gap-3 rounded-none border border-border bg-surface p-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3.5">
           <div
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border bg-canvas text-[16px] font-semibold text-fg"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-none border border-border bg-canvas text-[16px] font-semibold text-fg"
             aria-hidden="true"
           >
             {avatarInitial}
@@ -102,7 +102,7 @@ export function OwnerPage({
               </h1>
               <span className="font-mono text-[12px] text-fgMuted">@{owner}</span>
               {role ? (
-                <span className="rounded border border-border bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-fgMuted">
+                <span className="rounded-none border border-border bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-fgMuted">
                   {role}
                 </span>
               ) : null}
@@ -146,7 +146,7 @@ export function OwnerPage({
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <a
               href="/user/profile"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
+              className="inline-flex h-8 items-center gap-1.5 rounded-none border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
             >
               <Pencil className="h-3 w-3" aria-hidden="true" />
               <span>Edit profile</span>

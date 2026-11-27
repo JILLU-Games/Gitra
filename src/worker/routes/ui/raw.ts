@@ -1,6 +1,7 @@
 import { readBlobStream, readPath } from "@/worker/git";
 import { getErrorMessage, isGitReadMissError, resolveErrorStatus } from "@/client/server/error";
 import { isValidRef, isValidPath, OID_RE, getContentTypeFromName, isHttpError } from "@/shared/web";
+import { isRawPathRequestAllowed } from "@/shared/web/rawHotlink";
 import { isRequestPrivate, resolveUiRepoAccess } from "./helpers";
 import type { AppContext } from "../hono";
 
@@ -83,17 +84,7 @@ export async function handleRawPath(c: AppContext<"/:owner/:repo/rawpath">) {
     return new Response("Bad Request\n", { status: 400 });
   }
 
-  // Basic hotlink protection: require same-origin Referer
-  const referer = c.req.raw.headers.get("referer") || "";
-  let allowedReferer = false;
-  if (referer) {
-    try {
-      allowedReferer = new URL(referer).host === url.host;
-    } catch {
-      allowedReferer = false;
-    }
-  }
-  if (!allowedReferer) {
+  if (!isRawPathRequestAllowed(c.req.raw, url)) {
     return new Response("Hotlinking not allowed\n", { status: 403 });
   }
 

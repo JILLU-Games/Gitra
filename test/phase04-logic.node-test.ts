@@ -304,7 +304,7 @@ describe("phase 04 pure domain logic", () => {
     assert.equal(DEFAULT_SITE_BRANDING.siteName, "gitra");
     assert.equal(DEFAULT_SITE_BRANDING.shortName, "gitra");
     assert.equal(DEFAULT_SITE_BRANDING.siteTitle, "gitra · Open-Source Git Forge");
-    assert.equal(DEFAULT_SITE_BRANDING.footerText, "© 2026 gitra · Vib Tools");
+    assert.equal(DEFAULT_SITE_BRANDING.footerText, "© 2026 gitra");
 
     assert.equal(
       resolveDocumentTitle("Repositories · gitra", merged, "home"),
@@ -325,12 +325,19 @@ describe("phase 04 pure domain logic", () => {
     );
 
     const defaultAttribution = parseFooterAttribution(DEFAULT_SITE_BRANDING.footerText);
-    assert.deepEqual(defaultAttribution.links, [
+    assert.deepEqual(defaultAttribution.links, [{ label: "gitra.co", href: "https://gitra.co" }]);
+    assert.deepEqual(
+      defaultAttribution.segments.filter((segment) => segment.href),
+      [{ text: "gitra", href: "https://gitra.co" }]
+    );
+
+    const partnerAttribution = parseFooterAttribution("© 2026 gitra · Vib Tools");
+    assert.deepEqual(partnerAttribution.links, [
       { label: "gitra.co", href: "https://gitra.co" },
       { label: "vibtools.io", href: "https://vibtools.io" },
     ]);
     assert.deepEqual(
-      defaultAttribution.segments.filter((segment) => segment.href),
+      partnerAttribution.segments.filter((segment) => segment.href),
       [
         { text: "gitra", href: "https://gitra.co" },
         { text: "Vib Tools", href: "https://vibtools.io" },

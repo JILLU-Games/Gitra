@@ -6,6 +6,12 @@
  * acquire or release compaction leases.
  */
 import type { Logger } from "@/worker/common/logger";
+import {
+  exceedsFreeTierCompactionBudget,
+  FREE_TIER_COMPACTION_MAX_BYTES,
+  FREE_TIER_COMPACTION_MAX_OBJECTS,
+  hasRepoTasksQueue,
+} from "@/worker/common/tier";
 import type { RepoStateSchema } from "../../repoState";
 
 import { asTypedStorage } from "../../repoState";
@@ -71,8 +77,9 @@ export async function previewCompactionState(args: {
 /**
  * Record a compaction request and schedule background work.
  *
- * Only succeeds when the active catalog actually has a tier overflow.
- * Clears stale `compactionWantedAt` when no plan exists.
+ * Only succeeds when the active catalog actually has a tier overflow,
+ * `REPO_TASKS_QUEUE` is bound, and the plan fits the current tier's CPU budget.
+ * Clears stale `compactionWantedAt` when no plan exists or queueing is unavailable.
  */
 export async function requestCompactionState(args: {
   ctx: DurableObjectState;
@@ -96,6 +103,51 @@ export async function requestCompactionState(args: {
       packCatalogVersion: context.packCatalogVersion,
       reason: "below-threshold",
       message: "The active pack catalog is already within the compaction policy.",
+    };
+  }
+
+  if (!hasRepoTasksQueue(args.env)) {
+    if (typeof context.wantedAt === "number") {
+      await context.store.delete("compactionWantedAt");
+    }
+    args.logger?.warn("compaction:request-rejected-no-queue", {
+      sourceTier: context.plan.sourceTier,
+      sourceCount: context.plan.sourcePacks.length,
+    });
+    return {
+      action: "request",
+      status: "rejected",
+      queued: false,
+      shouldEnqueue: false,
+      activeCatalog: context.activeCatalog,
+      packCatalogVersion: context.packCatalogVersion,
+      plan: context.plan,
+      reason: "queues-required",
+      message:
+        "Background pack compaction requires the REPO_TASKS_QUEUE Cloudflare Queues binding.",
+    };
+  }
+
+  if (exceedsFreeTierCompactionBudget(args.env, context.plan)) {
+    if (typeof context.wantedAt === "number") {
+      await context.store.delete("compactionWantedAt");
+    }
+    args.logger?.warn("compaction:request-rejected-free-tier-budget", {
+      sourceBytes: context.plan.sourceBytes,
+      sourceObjects: context.plan.sourceObjects,
+      maxBytes: FREE_TIER_COMPACTION_MAX_BYTES,
+      maxObjects: FREE_TIER_COMPACTION_MAX_OBJECTS,
+    });
+    return {
+      action: "request",
+      status: "rejected",
+      queued: false,
+      shouldEnqueue: false,
+      activeCatalog: context.activeCatalog,
+      packCatalogVersion: context.packCatalogVersion,
+      plan: context.plan,
+      reason: "free-tier-budget-exceeded",
+      message: `Compaction plan (${context.plan.sourceBytes} bytes, ${context.plan.sourceObjects} objects) exceeds the Cloudflare Free tier CPU safety budget (${FREE_TIER_COMPACTION_MAX_BYTES} bytes, ${FREE_TIER_COMPACTION_MAX_OBJECTS} objects). Switch to CLOUDFLARE_TIER=paid for large pack rewrites.`,
     };
   }
 

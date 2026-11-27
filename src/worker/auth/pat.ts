@@ -19,7 +19,10 @@ import {
   findNamespaceBySlug,
   listNamespacesForUser,
 } from "@/worker/db/d1/dal/namespaces";
-import { findDirectoryAccountByUserId } from "@/worker/db/d1/dal/adminDirectory";
+import {
+  findDirectoryAccountByUserId,
+  resolvePrimaryAdminUser,
+} from "@/worker/db/d1/dal/adminDirectory";
 import { findUserById } from "@/worker/db/d1/dal/users";
 
 // Parse/generate/hash/validate helpers and `verifyPat` share a single file
@@ -191,13 +194,17 @@ async function resolvePatOwnerPolicy(env: Env, db: Db, userId: string): Promise<
   const user = await findUserById(db, userId);
   if (!user) return { ok: false, reason: "grant-missing" };
 
-  const primaryAdminSubject = buildLocalAccountSubject(resolveAdminAuthConfig(env).username);
-  if (user.tesseraSub === primaryAdminSubject) {
-    return { ok: true, role: "admin", isActiveAdmin: true };
+  if (!env.DB) {
+    const primaryAdminSubject = buildLocalAccountSubject(resolveAdminAuthConfig(env).username);
+    if (user.tesseraSub === primaryAdminSubject) {
+      return { ok: true, role: "admin", isActiveAdmin: true };
+    }
+    return { ok: true, role: "member", isActiveAdmin: false };
   }
 
-  if (!env.DB) {
-    return { ok: true, role: "member", isActiveAdmin: false };
+  const primaryAdminUser = await resolvePrimaryAdminUser(env.DB, db, env);
+  if (primaryAdminUser && user.id === primaryAdminUser.id) {
+    return { ok: true, role: "admin", isActiveAdmin: true };
   }
 
   try {

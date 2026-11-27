@@ -307,6 +307,9 @@ export const REPO_DESCRIPTION_MAX_LENGTH = 200;
 export const PROFILE_BIO_MAX_LENGTH = 200;
 export const PROFILE_LOCATION_MAX_LENGTH = 60;
 export const PROFILE_WEBSITE_MAX_LENGTH = 160;
+export const PROFILE_COMMIT_EMAIL_MAX_LENGTH = 120;
+
+const COMMIT_EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 
 function normalizeSingleLineText(raw: string, maxLen: number): string {
   return raw
@@ -326,6 +329,30 @@ export function sanitizeProfileBio(raw: string): string {
 
 export function sanitizeProfileLocation(raw: string): string {
   return normalizeSingleLineText(raw, PROFILE_LOCATION_MAX_LENGTH);
+}
+
+export function validateCommitEmailInput(
+  raw: string
+): { ok: true; email: string } | { ok: false; reason: "invalid-commit-email" } {
+  if (typeof raw !== "string") {
+    return { ok: true, email: "" };
+  }
+  if (/[\u0000-\u001f\u007f<>]/.test(raw)) {
+    return { ok: false, reason: "invalid-commit-email" };
+  }
+  const trimmed = raw.trim().slice(0, PROFILE_COMMIT_EMAIL_MAX_LENGTH);
+  if (!trimmed) {
+    return { ok: true, email: "" };
+  }
+  if (!COMMIT_EMAIL_RE.test(trimmed)) {
+    return { ok: false, reason: "invalid-commit-email" };
+  }
+  return { ok: true, email: trimmed };
+}
+
+export function sanitizeCommitEmail(raw: string): string {
+  const checked = validateCommitEmailInput(raw);
+  return checked.ok ? checked.email : "";
 }
 
 /**

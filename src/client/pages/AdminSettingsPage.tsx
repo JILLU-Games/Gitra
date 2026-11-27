@@ -62,10 +62,10 @@ export function AdminSettingsPage({
         </IslandHost>
 
         {/* Instance & Auth Configuration (Read-only runtime status) */}
-        <section className="rounded-md border border-border bg-surface">
+        <section className="rounded-none border border-border bg-surface">
           <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
             <span className="text-[13px] font-semibold text-fg">Instance &amp; Authentication</span>
-            <span className="rounded border border-border bg-canvas px-1.5 py-0.5 font-mono text-[10px] text-fgMuted">
+            <span className="rounded-none border border-border bg-canvas px-1.5 py-0.5 font-mono text-[10px] text-fgMuted">
               {resolvedAuthSource === "d1"
                 ? "d1-auth · read-only"
                 : resolvedAuthSource === "env"
@@ -147,7 +147,7 @@ export function AdminSettingsPage({
 
         {/* Directory & Repository Summary */}
         <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="rounded-md border border-border bg-surface p-4">
+          <div className="rounded-none border border-border bg-surface p-4">
             <div className="flex items-center justify-between text-[13px] font-medium text-fg">
               <span>User Directory</span>
               <Users className="h-4 w-4 text-fgMuted" aria-hidden="true" />
@@ -165,7 +165,7 @@ export function AdminSettingsPage({
             </a>
           </div>
 
-          <div className="rounded-md border border-border bg-surface p-4">
+          <div className="rounded-none border border-border bg-surface p-4">
             <div className="flex items-center justify-between text-[13px] font-medium text-fg">
               <span>Repositories</span>
               <Shield className="h-4 w-4 text-fgMuted" aria-hidden="true" />
@@ -187,7 +187,7 @@ export function AdminSettingsPage({
         </section>
 
         {/* Security Guardrails */}
-        <section className="rounded-md border border-border bg-surface p-4">
+        <section className="rounded-none border border-border bg-surface p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="m-0 text-[13px] font-semibold text-fg">Active Security Policies</h2>
             <a

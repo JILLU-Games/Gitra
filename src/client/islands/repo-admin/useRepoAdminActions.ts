@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { showToast } from "@/client/components/ui";
 import { safeReadJson } from "@/client/json";
 import { isJsonObject, type JsonValue } from "@/shared/web";
 
@@ -19,6 +20,8 @@ export function useRepoAdminActions(owner: string, repo: string) {
   const [notice, setNotice] = useState<RepoAdminNotice | null>(null);
   const [confirmRequest, setConfirmRequest] = useState<RepoAdminConfirmRequest | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [compactionCleared, setCompactionCleared] = useState(false);
+  const [removedPacks, setRemovedPacks] = useState<string[]>([]);
 
   function readFlag(value: JsonValue | null, key: string): boolean {
     return isJsonObject(value) && value[key] === true;
@@ -49,15 +52,50 @@ export function useRepoAdminActions(owner: string, repo: string) {
   async function startCompaction(dryRun: boolean) {
     setNotice(null);
     await runAction(dryRun ? "compaction-dry-run" : "compaction-start", async () => {
-      const response = await fetch(`/${owner}/${repo}/admin/compact`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dryRun }),
-      });
-      const data = await safeReadJson(response);
-      setCompactionResult(data);
-      if (response.ok && !dryRun) {
-        window.setTimeout(() => window.location.reload(), 2000);
+      try {
+        const response = await fetch(`/${owner}/${repo}/admin/compact`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dryRun }),
+        });
+        const data = await safeReadJson(response);
+        setCompactionResult(data);
+        if (!response.ok) {
+          const message = readErrorMessage(data);
+          setNotice({ tone: "error", text: message });
+          showToast({
+            tone: "error",
+            title: dryRun ? "Compaction preview failed" : "Compaction request failed",
+            message,
+          });
+          return;
+        }
+        if (dryRun) {
+          showToast({
+            tone: "info",
+            title: "Compaction preview ready",
+            message: "Review the dry-run summary in the result panel.",
+          });
+        } else {
+          setCompactionCleared(false);
+          setNotice({
+            tone: "success",
+            text: "Compaction job requested. Use Refresh All when ready to inspect updated pack state.",
+          });
+          showToast({
+            tone: "success",
+            title: "Compaction job requested",
+            message: "Background compaction has been queued.",
+            action: {
+              label: "Refresh page",
+              onClick: () => window.location.reload(),
+            },
+          });
+        }
+      } catch {
+        const message = "Network error while requesting compaction.";
+        setNotice({ tone: "error", text: message });
+        showToast({ tone: "error", title: "Compaction request failed", message });
       }
     });
   }
@@ -83,15 +121,47 @@ export function useRepoAdminActions(owner: string, repo: string) {
     setOidError(null);
 
     await runAction("check-oid", async () => {
-      const response = await fetch(`/${owner}/${repo}/admin/debug-oid/${trimmed}`);
-      setOidResult(await safeReadJson(response));
+      try {
+        const response = await fetch(`/${owner}/${repo}/admin/debug-oid/${trimmed}`);
+        const data = await safeReadJson(response);
+        setOidResult(data);
+        if (!response.ok) {
+          showToast({
+            tone: "error",
+            title: "Object lookup failed",
+            message: readErrorMessage(data),
+          });
+        }
+      } catch {
+        showToast({
+          tone: "error",
+          title: "Object lookup failed",
+          message: "Network error while inspecting OID.",
+        });
+      }
     });
   }
 
   async function dumpState() {
     await runAction("dump-state", async () => {
-      const response = await fetch(`/${owner}/${repo}/admin/debug-state`);
-      setStateDump(await safeReadJson(response));
+      try {
+        const response = await fetch(`/${owner}/${repo}/admin/debug-state`);
+        const data = await safeReadJson(response);
+        setStateDump(data);
+        if (!response.ok) {
+          showToast({
+            tone: "error",
+            title: "State dump failed",
+            message: readErrorMessage(data),
+          });
+        }
+      } catch {
+        showToast({
+          tone: "error",
+          title: "State dump failed",
+          message: "Network error while loading Durable Object state.",
+        });
+      }
     });
   }
 
@@ -107,15 +177,25 @@ export function useRepoAdminActions(owner: string, repo: string) {
 
     if (confirmRequest.kind === "clear-compaction") {
       await runAction("compaction-clear", async () => {
-        const response = await fetch(`/${owner}/${repo}/admin/compact`, { method: "DELETE" });
-        const data = await safeReadJson(response);
-        if (readFlag(data, "ok")) {
-          setConfirmRequest(null);
-          setNotice({ tone: "success", text: "Compaction request cleared. Refreshing…" });
-          window.setTimeout(() => window.location.reload(), 600);
-          return;
+        try {
+          const response = await fetch(`/${owner}/${repo}/admin/compact`, { method: "DELETE" });
+          const data = await safeReadJson(response);
+          if (readFlag(data, "ok")) {
+            setConfirmRequest(null);
+            setCompactionCleared(true);
+            const message = "Compaction request cleared.";
+            setNotice({ tone: "success", text: message });
+            showToast({ tone: "success", title: "Compaction cleared", message });
+            return;
+          }
+          const err = readErrorMessage(data);
+          setConfirmError(err);
+          showToast({ tone: "error", title: "Could not clear compaction", message: err });
+        } catch {
+          const err = "Network error while clearing compaction request.";
+          setConfirmError(err);
+          showToast({ tone: "error", title: "Could not clear compaction", message: err });
         }
-        setConfirmError(readErrorMessage(data));
       });
       return;
     }
@@ -123,40 +203,57 @@ export function useRepoAdminActions(owner: string, repo: string) {
     if (confirmRequest.kind === "remove-pack") {
       const packName = confirmRequest.packName;
       await runAction(`remove-pack:${packName}`, async () => {
-        const response = await fetch(
-          `/${owner}/${repo}/admin/pack/${encodeURIComponent(packName)}`,
-          { method: "DELETE" }
-        );
-        const data = await safeReadJson(response);
-        if (readFlag(data, "ok")) {
-          setConfirmRequest(null);
-          setNotice({
-            tone: "success",
-            text: `Pack ${packName} removal requested (pack: ${readFlag(data, "deletedPack") ? "deleted" : "unchanged"}, index: ${readFlag(data, "deletedIndex") ? "deleted" : "unchanged"}, metadata: ${readFlag(data, "deletedMetadata") ? "cleaned" : "unchanged"}). Refreshing…`,
-          });
-          window.setTimeout(() => window.location.reload(), 600);
-          return;
+        try {
+          const response = await fetch(
+            `/${owner}/${repo}/admin/pack/${encodeURIComponent(packName)}`,
+            { method: "DELETE" }
+          );
+          const data = await safeReadJson(response);
+          if (readFlag(data, "ok")) {
+            setConfirmRequest(null);
+            setRemovedPacks((prev) => (prev.includes(packName) ? prev : [...prev, packName]));
+            const detail = `pack: ${readFlag(data, "deletedPack") ? "deleted" : "unchanged"}, index: ${readFlag(data, "deletedIndex") ? "deleted" : "unchanged"}, metadata: ${readFlag(data, "deletedMetadata") ? "cleaned" : "unchanged"}`;
+            const message = `Pack ${packName} removed (${detail}).`;
+            setNotice({ tone: "success", text: message });
+            showToast({ tone: "success", title: `Removed ${packName}`, message: detail });
+            return;
+          }
+          const err = readErrorMessage(data);
+          setConfirmError(err);
+          showToast({ tone: "error", title: `Failed to remove ${packName}`, message: err });
+        } catch {
+          const err = `Network error while removing pack ${packName}.`;
+          setConfirmError(err);
+          showToast({ tone: "error", title: `Failed to remove ${packName}`, message: err });
         }
-        setConfirmError(readErrorMessage(data));
       });
       return;
     }
 
     const expectedConfirm = `purge-${owner}/${repo}`;
     await runAction("purge-repo", async () => {
-      const response = await fetch(`/${owner}/${repo}/admin/purge`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm: expectedConfirm }),
-      });
-      const data = await safeReadJson(response);
-      if (readFlag(data, "ok")) {
-        setConfirmRequest(null);
-        setNotice({ tone: "success", text: "Repository permanently deleted. Redirecting…" });
-        window.location.href = `/${owner}`;
-        return;
+      try {
+        const response = await fetch(`/${owner}/${repo}/admin/purge`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirm: expectedConfirm }),
+        });
+        const data = await safeReadJson(response);
+        if (readFlag(data, "ok")) {
+          setConfirmRequest(null);
+          setNotice({ tone: "success", text: "Repository permanently deleted. Redirecting…" });
+          showToast({ tone: "success", title: "Repository deleted" });
+          window.location.href = `/${owner}`;
+          return;
+        }
+        const err = readErrorMessage(data);
+        setConfirmError(err);
+        showToast({ tone: "error", title: "Repository delete failed", message: err });
+      } catch {
+        const err = "Network error while deleting repository.";
+        setConfirmError(err);
+        showToast({ tone: "error", title: "Repository delete failed", message: err });
       }
-      setConfirmError(readErrorMessage(data));
     });
   }
 
@@ -169,6 +266,8 @@ export function useRepoAdminActions(owner: string, repo: string) {
     notice,
     confirmRequest,
     confirmError,
+    compactionCleared,
+    removedPacks,
     clearNotice,
     cancelConfirm,
     executeConfirm,

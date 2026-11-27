@@ -2,6 +2,7 @@ import {
   canAccessAdminPanel,
   normalizeNamespaceHandle,
   sanitizeDisplayName,
+  validateCommitEmailInput,
   validateUserPassword,
 } from "@/shared/admin/panel";
 import { safeParseJsonRequest } from "@/shared/web";
@@ -539,6 +540,15 @@ export function registerAuthLoginRoutes(router: AppRouter) {
       return json({ ok: false, reason: "invalid-payload" } as const, 400);
     }
 
+    let validatedCommitEmail: string | undefined;
+    if (parsed.data.commitEmail !== undefined) {
+      const emailCheck = validateCommitEmailInput(parsed.data.commitEmail);
+      if (!emailCheck.ok) {
+        return json({ ok: false, reason: emailCheck.reason } as const, 400);
+      }
+      validatedCommitEmail = emailCheck.email;
+    }
+
     const now = Date.now();
     const nextDisplayName = sanitizeDisplayName(
       parsed.data.displayName ?? viewer.displayName ?? namespace.slug,
@@ -559,6 +569,7 @@ export function registerAuthLoginRoutes(router: AppRouter) {
       bio: parsed.data.bio,
       location: parsed.data.location,
       website: parsed.data.website,
+      commitEmail: validatedCommitEmail,
       now,
     });
 
@@ -574,6 +585,7 @@ export function registerAuthLoginRoutes(router: AppRouter) {
       bio: profileMeta.bio,
       location: profileMeta.location,
       website: profileMeta.website,
+      commitEmail: profileMeta.commitEmail,
     } as const);
   });
 

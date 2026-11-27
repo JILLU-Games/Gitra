@@ -6,11 +6,17 @@ type InputProps = {
   error?: string;
 } & Omit<ComponentProps<"input">, "className">;
 
-const inputClasses =
-  "h-8 w-full rounded-md border border-border bg-canvas px-3 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none";
+export const inputClasses =
+  "h-8 w-full rounded-none border border-border bg-canvas px-3 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-50";
 
-const errorInputClasses =
-  "h-8 w-full rounded-md border border-red-500/50 bg-canvas px-3 text-[13px] text-fg placeholder:text-fgMuted focus:border-red-500 focus:outline-none";
+export const errorInputClasses =
+  "h-8 w-full rounded-none border border-red-500/50 bg-canvas px-3 text-[13px] text-fg placeholder:text-fgMuted focus:border-red-500 focus:outline-none disabled:opacity-50";
+
+export const textareaClasses =
+  "w-full rounded-none border border-border bg-canvas p-2.5 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-50";
+
+export const selectClasses =
+  "h-8 w-full rounded-none border border-border bg-canvas px-2.5 text-[12px] text-fg focus:border-fgMuted focus:outline-none disabled:cursor-not-allowed disabled:opacity-50";
 
 export function Input({ label, helperText, error, id, ...rest }: InputProps) {
   const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, "-") : undefined);

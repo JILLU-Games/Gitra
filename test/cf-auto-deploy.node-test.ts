@@ -5,6 +5,8 @@ import test from "node:test";
 
 import {
   buildGeneratedWranglerConfig,
+  buildSecretsUploadPayload,
+  buildWranglerDeployArgs,
   normalizeDomain,
   parseCliArgs,
   parseDotEnv,
@@ -199,4 +201,56 @@ test("committed wrangler.jsonc and wrangler.paid.jsonc contain zero hardcoded pr
       `${fileName} must not hardcode a real KV namespace ID`
     );
   }
+});
+
+test("F-20: provisions only active SESSION_SECRET and attaches pending secrets atomically before/with deploy", () => {
+  assert.deepEqual(REQUIRED_WORKER_SECRETS, ["SESSION_SECRET"]);
+  assert.equal(REQUIRED_WORKER_SECRETS.includes("CREDENTIAL_SECRET"), false);
+  assert.equal(REQUIRED_WORKER_SECRETS.includes("ADMIN_BOOTSTRAP_SECRET"), false);
+
+  const firstInstallPlan = planSecretReconciliation({
+    existingRemoteSecretNames: new Set(),
+    envSecrets: { ADMIN_USERNAME: "founder", ADMIN_PASSWORD: "StrongPassword#1" },
+    forceRotate: false,
+    generateSecret: () => "generated-session-secret",
+  });
+  const firstUpload = buildSecretsUploadPayload(firstInstallPlan);
+  assert.equal(firstUpload.count, 3);
+  assert.deepEqual(firstUpload.payload, {
+    SESSION_SECRET: "generated-session-secret",
+    ADMIN_USERNAME: "founder",
+    ADMIN_PASSWORD: "StrongPassword#1",
+  });
+  assert.deepEqual(buildWranglerDeployArgs({ secretsFilePath: ".wrangler/deploy.secrets.json" }), [
+    "wrangler",
+    "deploy",
+    "--secrets-file",
+    ".wrangler/deploy.secrets.json",
+  ]);
+
+  // Redeploy with preserved secrets produces zero upload keys and plain `wrangler deploy`
+  const redeployPlan = planSecretReconciliation({
+    existingRemoteSecretNames: new Set(["SESSION_SECRET", "ADMIN_USERNAME", "ADMIN_PASSWORD"]),
+    envSecrets: { ADMIN_USERNAME: "founder", ADMIN_PASSWORD: "changed-ignored" },
+    forceRotate: false,
+    generateSecret: () => "unused",
+  });
+  const redeployUpload = buildSecretsUploadPayload(redeployPlan);
+  assert.equal(redeployUpload.count, 0);
+  assert.deepEqual(redeployUpload.payload, {});
+  assert.deepEqual(buildWranglerDeployArgs(), ["wrangler", "deploy"]);
+
+  // Verify scripts/cf-auto-deploy.mjs live deployment path plans secrets before invoking buildWranglerDeployArgs
+  const deployScript = fs.readFileSync(path.resolve("scripts/cf-auto-deploy.mjs"), "utf8");
+  const liveFlow = deployScript.slice(deployScript.indexOf("// Phase C:"));
+  const planIndex = liveFlow.indexOf("planSecretReconciliation(");
+  const deployIndex = liveFlow.indexOf("buildWranglerDeployArgs(");
+  assert.ok(
+    planIndex >= 0 && deployIndex > planIndex,
+    "Secrets must be planned before wrangler deploy"
+  );
+});
+
+test("F-21: unreferenced public/assets/aistudio design artifacts are removed from static assets", () => {
+  assert.equal(fs.existsSync(path.resolve("public/assets/aistudio")), false);
 });

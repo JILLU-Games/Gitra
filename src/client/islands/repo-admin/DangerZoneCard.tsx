@@ -15,13 +15,13 @@ export function DangerZoneCard({
   purgeRepo,
 }: DangerZoneCardProps) {
   return (
-    <details className="rounded-md border border-red-500/35 bg-surface p-4">
+    <details className="rounded-none border border-red-500/35 bg-surface p-4">
       <summary className="cursor-pointer text-[14px] font-semibold text-red-400">
         <TriangleAlert className="mr-2 inline h-4 w-4 align-[-2px]" aria-hidden="true" />
         Danger Zone - Irreversible Actions
       </summary>
       <div className="mt-4 space-y-3.5">
-        <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3.5 text-[12px] text-red-400">
+        <div className="rounded-none border border-red-500/30 bg-red-500/10 p-3.5 text-[12px] text-red-400">
           <strong>Warning:</strong> These actions cannot be undone. All repository data will be
           permanently deleted.
         </div>

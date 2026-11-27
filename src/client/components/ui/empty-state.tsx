@@ -13,7 +13,7 @@ export function EmptyState({ icon, title, detail, large = false }: EmptyStatePro
       className={`flex flex-col items-center text-center ${large ? "gap-2.5 py-8" : "gap-1.5 py-5"}`}
     >
       <span
-        className={`inline-grid place-items-center rounded-md border border-border bg-canvas text-fgMuted ${large ? "h-10 w-10" : "h-8 w-8"}`}
+        className={`inline-grid place-items-center rounded-none border border-border bg-canvas text-fgMuted ${large ? "h-10 w-10" : "h-8 w-8"}`}
       >
         {icon}
       </span>

@@ -7,9 +7,7 @@
   "name": "git-on-cloudflare",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-05-13",
-  "compatibility_flags": [
-    "nodejs_als"
-  ],
+  "compatibility_flags": ["nodejs_als"],
   "workers_dev": true,
   // Optional custom domain routes (uncomment and replace with your Cloudflare zone):
   // "routes": [
@@ -32,21 +30,15 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": [
-        "RepoDurableObject"
-      ]
+      "new_sqlite_classes": ["RepoDurableObject"]
     },
     {
       "tag": "v2",
-      "new_sqlite_classes": [
-        "AuthDurableObject"
-      ]
+      "new_sqlite_classes": ["AuthDurableObject"]
     },
     {
       "tag": "v3",
-      "deleted_classes": [
-        "AuthDurableObject"
-      ]
+      "deleted_classes": ["AuthDurableObject"]
     }
   ],
   // Clean Paid-tier template bindings (no production IDs or domains committed).

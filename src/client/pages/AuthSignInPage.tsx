@@ -58,8 +58,8 @@ export function AuthSignInPage({
           <span
             className={
               showDemoUi
-                ? "inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-amber-300"
-                : "inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-emerald-400"
+                ? "inline-flex items-center gap-1 rounded-none border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-amber-300"
+                : "inline-flex items-center gap-1 rounded-none border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-medium text-emerald-400"
             }
           >
             {showDemoUi ? (
@@ -204,7 +204,7 @@ export function AuthSignInPage({
                 </Button>
               </form>
             </div>
-            <div className="mt-2.5 grid gap-1 rounded-md border border-border bg-canvas px-3 py-2 text-[12px] text-fgBody">
+            <div className="mt-2.5 grid gap-1 rounded-none border border-border bg-canvas px-3 py-2 text-[12px] text-fgBody">
               <p className="m-0 flex items-center justify-between gap-3">
                 <span>Admin demo account</span>
                 <span className="font-mono font-medium text-fg">

@@ -370,17 +370,14 @@ export async function resolvePrimaryAdminUser(
 ): Promise<UserRow | undefined> {
   const authConfig = resolveAdminAuthConfig(env);
   const configuredSubject = buildLocalAccountSubject(authConfig.username);
-  const configuredUser = await findUserBySubject(db, configuredSubject);
-  if (configuredUser) {
-    return configuredUser;
-  }
 
-  // Only fall back to the earliest D1-claimed local admin when ADMIN_PASSWORD
-  // is unset (unconfigured Production mode using `/auth/setup`).
   if (authConfig.password !== null) {
-    return undefined;
+    return await findUserBySubject(db, configuredSubject);
   }
 
+  // When ADMIN_PASSWORD is unset (Production D1 mode via `/auth/setup`),
+  // the earliest local admin account in D1 is the canonical primary admin,
+  // even if a non-admin account with slug `admin` is created later.
   const row = await d1
     .prepare(
       `SELECT u.id AS id, u.tessera_sub AS tesseraSub, u.created_at AS createdAt
@@ -393,7 +390,11 @@ export async function resolvePrimaryAdminUser(
        LIMIT 1`
     )
     .first<UserRow>();
-  return row ?? undefined;
+  if (row) {
+    return row;
+  }
+
+  return await findUserBySubject(db, configuredSubject);
 }
 
 /**

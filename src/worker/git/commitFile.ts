@@ -42,7 +42,39 @@ export type CommitFileInput = {
   repositoryId: string;
   doName: string;
   filePath: string;
-  content: string;
+  content: string | Uint8Array;
+  commitMessage: string;
+  authorName: string;
+  authorEmail: string;
+  targetRef?: string;
+};
+
+export type TreeMutationOperation =
+  | {
+      kind: "upsert";
+      filePath: string;
+      content: string | Uint8Array;
+    }
+  | {
+      kind: "delete";
+      filePath: string;
+    }
+  | {
+      kind: "move";
+      fromPath: string;
+      toPath: string;
+      content?: string | Uint8Array;
+    };
+
+export type CommitMutationInput = {
+  env: Env;
+  db: Db;
+  limiter: Limiter;
+  log: Logger;
+  cacheCtx: CacheContext;
+  repositoryId: string;
+  doName: string;
+  operation: TreeMutationOperation;
   commitMessage: string;
   authorName: string;
   authorEmail: string;
@@ -53,11 +85,11 @@ export type CommitFileResult =
   | { ok: true; commitOid: string; ref: string; unchanged: boolean }
   | {
       ok: false;
-      reason: "invalid-path" | "invalid-ref" | "repo-busy" | "commit-failed";
+      reason: "invalid-path" | "invalid-ref" | "not-found" | "repo-busy" | "commit-failed";
       detail?: string;
     };
 
-function resolveEditableBranchRef(
+export function resolveEditableBranchRef(
   rawTarget: string,
   headAndRefs: { head: Head; refs: Ref[] }
 ): string | null {
@@ -81,7 +113,7 @@ function resolveEditableBranchRef(
 }
 
 async function cleanupFailedWebCommit(args: {
-  input: CommitFileInput;
+  input: Pick<CommitMutationInput, "env" | "limiter" | "log" | "repositoryId">;
   stub: ReturnType<typeof getRepoStub>;
   token: string;
   packKey: string | undefined;
@@ -105,7 +137,7 @@ async function cleanupFailedWebCommit(args: {
   }
 }
 
-function normalizeRepoFilePath(raw: string): string[] | null {
+export function normalizeRepoFilePath(raw: string): string[] | null {
   const cleaned = raw.trim().replace(/^\/+/, "");
   if (!cleaned) return null;
   const parts = cleaned.split("/").filter(Boolean);
@@ -114,6 +146,10 @@ function normalizeRepoFilePath(raw: string): string[] | null {
     if (part === "." || part === ".." || part.includes("\0")) return null;
   }
   return parts;
+}
+
+function toBlobBytes(content: string | Uint8Array): Uint8Array {
+  return typeof content === "string" ? textEncoder.encode(content) : content;
 }
 
 function encodeTreePayload(entries: TreeEntry[]): Uint8Array {
@@ -140,7 +176,7 @@ function sanitizeIdentPart(raw: string, fallback: string): string {
 export type UpsertTreeEntryPlan =
   | {
       ok: true;
-      mode: "100644" | "100755" | "40000";
+      mode: "100644" | "100755" | "120000" | "40000";
       existingSubtreeOid: string | null;
     }
   | {
@@ -152,7 +188,8 @@ export type UpsertTreeEntryPlan =
 export function resolveUpsertTreeEntryPlan(
   existingEntries: readonly TreeEntry[],
   segment: string,
-  isLeaf: boolean
+  isLeaf: boolean,
+  explicitMode?: "100644" | "100755" | "120000"
 ): UpsertTreeEntryPlan {
   const existing = existingEntries.find((entry) => entry.name === segment);
   if (isLeaf) {
@@ -163,9 +200,10 @@ export function resolveUpsertTreeEntryPlan(
         detail: `Cannot overwrite non-regular file entry '${segment}' (mode ${existing.mode}).`,
       };
     }
+    const mode = explicitMode ?? (existing?.mode === "100755" ? "100755" : "100644");
     return {
       ok: true,
-      mode: existing?.mode === "100755" ? "100755" : "100644",
+      mode,
       existingSubtreeOid: null,
     };
   }
@@ -195,6 +233,7 @@ async function upsertTreePath(args: {
   parts: string[];
   depth: number;
   blobOid: string;
+  explicitMode?: "100644" | "100755" | "120000";
   objectsByOid: Map<string, PackObjectInput>;
 }): Promise<UpsertTreePathResult> {
   const segment = args.parts[args.depth]!;
@@ -204,7 +243,7 @@ async function upsertTreePath(args: {
     ? await readTree(args.env, args.doName, args.currentTreeOid, args.cacheCtx)
     : [];
 
-  const plan = resolveUpsertTreeEntryPlan(existingEntries, segment, isLeaf);
+  const plan = resolveUpsertTreeEntryPlan(existingEntries, segment, isLeaf, args.explicitMode);
   if (!plan.ok) {
     return plan;
   }
@@ -221,6 +260,7 @@ async function upsertTreePath(args: {
       parts: args.parts,
       depth: args.depth + 1,
       blobOid: args.blobOid,
+      explicitMode: args.explicitMode,
       objectsByOid: args.objectsByOid,
     });
     if (!childResult.ok) {
@@ -244,19 +284,191 @@ async function upsertTreePath(args: {
   return { ok: true, treeOid: oid };
 }
 
-/**
- * Commits a single file directly to a repository's branch using the standard
- * single-hop `beginReceive -> R2 pack/idx -> finalizeReceive` pipeline so
- * browser edits create genuine Git commits, trees, and blobs.
- */
-export async function commitRepositoryFile(input: CommitFileInput): Promise<CommitFileResult> {
-  const parts = normalizeRepoFilePath(input.filePath);
-  if (!parts) {
-    return { ok: false, reason: "invalid-path" };
+type ReadTreeEntryResult =
+  | { ok: true; entry: TreeEntry }
+  | { ok: false; reason: "not-found" | "invalid-path"; detail: string };
+
+async function readTreeEntryAtPath(args: {
+  env: Env;
+  doName: string;
+  cacheCtx: CacheContext;
+  rootTreeOid: string | null;
+  parts: string[];
+}): Promise<ReadTreeEntryResult> {
+  let currentTreeOid = args.rootTreeOid;
+  for (let i = 0; i < args.parts.length; i++) {
+    if (!currentTreeOid) {
+      return {
+        ok: false,
+        reason: "not-found",
+        detail: `Path '${args.parts.join("/")}' does not exist on this branch.`,
+      };
+    }
+    const entries = await readTree(args.env, args.doName, currentTreeOid, args.cacheCtx);
+    const segment = args.parts[i]!;
+    const entry = entries.find((item) => item.name === segment);
+    if (!entry) {
+      return {
+        ok: false,
+        reason: "not-found",
+        detail: `Path '${args.parts.join("/")}' does not exist on this branch.`,
+      };
+    }
+    const isLeaf = i === args.parts.length - 1;
+    if (isLeaf) {
+      if (entry.mode.startsWith("40000")) {
+        return {
+          ok: false,
+          reason: "invalid-path",
+          detail: `Target '${args.parts.join("/")}' is a directory, not a file.`,
+        };
+      }
+      return { ok: true, entry };
+    }
+    if (!entry.mode.startsWith("40000")) {
+      return {
+        ok: false,
+        reason: "not-found",
+        detail: `Parent segment '${segment}' is not a directory.`,
+      };
+    }
+    currentTreeOid = entry.oid;
+  }
+  return {
+    ok: false,
+    reason: "invalid-path",
+    detail: "File path cannot be empty.",
+  };
+}
+
+export function resolveDeleteTreeEntries(
+  existingEntries: readonly TreeEntry[],
+  segment: string,
+  childResultOid: string | null
+): TreeEntry[] {
+  const withoutSegment = existingEntries.filter((entry) => entry.name !== segment);
+  if (childResultOid === null) {
+    return withoutSegment;
+  }
+  withoutSegment.push({
+    mode: "40000",
+    name: segment,
+    oid: childResultOid,
+  });
+  return withoutSegment;
+}
+
+type DeleteTreePathResult =
+  | { ok: true; treeOid: string | null }
+  | { ok: false; reason: "not-found" | "invalid-path"; detail: string };
+
+async function deleteTreePath(args: {
+  env: Env;
+  doName: string;
+  cacheCtx: CacheContext;
+  currentTreeOid: string | null;
+  parts: string[];
+  depth: number;
+  objectsByOid: Map<string, PackObjectInput>;
+}): Promise<DeleteTreePathResult> {
+  if (!args.currentTreeOid) {
+    return {
+      ok: false,
+      reason: "not-found",
+      detail: `Path '${args.parts.join("/")}' does not exist on this branch.`,
+    };
   }
 
-  // Bypass edge cache while constructing parent tree diffs so we always read
-  // authoritative DO refs and active R2 pack contents.
+  const segment = args.parts[args.depth]!;
+  const isLeaf = args.depth === args.parts.length - 1;
+  const existingEntries = await readTree(args.env, args.doName, args.currentTreeOid, args.cacheCtx);
+  const existing = existingEntries.find((entry) => entry.name === segment);
+
+  if (!existing) {
+    return {
+      ok: false,
+      reason: "not-found",
+      detail: `Path '${args.parts.join("/")}' does not exist on this branch.`,
+    };
+  }
+
+  let nextEntries: TreeEntry[];
+  if (isLeaf) {
+    if (existing.mode.startsWith("40000")) {
+      return {
+        ok: false,
+        reason: "invalid-path",
+        detail: `Cannot delete directory '${segment}' as a file.`,
+      };
+    }
+    nextEntries = resolveDeleteTreeEntries(existingEntries, segment, null);
+  } else {
+    if (!existing.mode.startsWith("40000")) {
+      return {
+        ok: false,
+        reason: "not-found",
+        detail: `Path segment '${segment}' is not a directory.`,
+      };
+    }
+    const childResult = await deleteTreePath({
+      env: args.env,
+      doName: args.doName,
+      cacheCtx: args.cacheCtx,
+      currentTreeOid: existing.oid,
+      parts: args.parts,
+      depth: args.depth + 1,
+      objectsByOid: args.objectsByOid,
+    });
+    if (!childResult.ok) {
+      return childResult;
+    }
+    nextEntries = resolveDeleteTreeEntries(existingEntries, segment, childResult.treeOid);
+  }
+
+  // Prune empty subdirectories (depth > 0); root (depth === 0) must still encode a valid empty tree.
+  if (nextEntries.length === 0 && args.depth > 0) {
+    return { ok: true, treeOid: null };
+  }
+
+  const payload = encodeTreePayload(nextEntries);
+  const { oid } = await createGitObject("tree", payload);
+  if (!args.objectsByOid.has(oid)) {
+    args.objectsByOid.set(oid, { type: "tree", payload });
+  }
+  return { ok: true, treeOid: oid };
+}
+
+function formatDefaultCommitMessage(operation: TreeMutationOperation): string {
+  if (operation.kind === "upsert") return `Update ${operation.filePath}`;
+  if (operation.kind === "delete") return `Delete ${operation.filePath}`;
+  return `Move ${operation.fromPath} to ${operation.toPath}`;
+}
+
+function collectAffectedDirs(operation: TreeMutationOperation): string[] {
+  const dirs = new Set<string>();
+  const addParent = (filePath: string) => {
+    const parts = normalizeRepoFilePath(filePath);
+    if (!parts) return;
+    const parent = parts.slice(0, -1).join("/");
+    if (parent) dirs.add(parent);
+  };
+  if (operation.kind === "move") {
+    addParent(operation.fromPath);
+    addParent(operation.toPath);
+  } else {
+    addParent(operation.filePath);
+  }
+  return Array.from(dirs);
+}
+
+/**
+ * Commits a single file upsert, delete, or rename/move directly to a branch
+ * through `beginReceive -> R2 pack/idx -> finalizeReceive`.
+ */
+export async function commitRepositoryMutation(
+  input: CommitMutationInput
+): Promise<CommitFileResult> {
+  const op = input.operation;
   const freshCacheCtx: CacheContext = {
     req: input.cacheCtx.req,
     ctx: input.cacheCtx.ctx,
@@ -266,6 +478,26 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
       limiter: input.limiter,
     },
   };
+
+  let logPath: string;
+  let primaryParts: string[] | null = null;
+  let moveFromParts: string[] | null = null;
+  let moveToParts: string[] | null = null;
+
+  if (op.kind === "move") {
+    moveFromParts = normalizeRepoFilePath(op.fromPath);
+    moveToParts = normalizeRepoFilePath(op.toPath);
+    if (!moveFromParts || !moveToParts) {
+      return { ok: false, reason: "invalid-path" };
+    }
+    logPath = `${moveFromParts.join("/")} -> ${moveToParts.join("/")}`;
+  } else {
+    primaryParts = normalizeRepoFilePath(op.filePath);
+    if (!primaryParts) {
+      return { ok: false, reason: "invalid-path" };
+    }
+    logPath = primaryParts.join("/");
+  }
 
   const stub = getRepoStub(input.env, input.doName);
   const headAndRefs = await input.limiter.run(
@@ -294,35 +526,139 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
   }
 
   const objectsByOid = new Map<string, PackObjectInput>();
-  const blobPayload = textEncoder.encode(input.content);
-  const { oid: blobOid } = await createGitObject("blob", blobPayload);
-  objectsByOid.set(blobOid, { type: "blob", payload: blobPayload });
+  let newTreeOid: string;
 
-  const treeResult = await upsertTreePath({
-    env: input.env,
-    doName: input.doName,
-    cacheCtx: freshCacheCtx,
-    currentTreeOid: parentTreeOid,
-    parts,
-    depth: 0,
-    blobOid,
-    objectsByOid,
-  });
-  if (!treeResult.ok) {
-    input.log.warn("web-commit:invalid-tree-path", {
-      repositoryId: input.repositoryId,
-      path: parts.join("/"),
-      detail: treeResult.detail,
+  if (op.kind === "upsert") {
+    const blobPayload = toBlobBytes(op.content);
+    const { oid: blobOid } = await createGitObject("blob", blobPayload);
+    objectsByOid.set(blobOid, { type: "blob", payload: blobPayload });
+
+    const treeResult = await upsertTreePath({
+      env: input.env,
+      doName: input.doName,
+      cacheCtx: freshCacheCtx,
+      currentTreeOid: parentTreeOid,
+      parts: primaryParts!,
+      depth: 0,
+      blobOid,
+      objectsByOid,
     });
-    return treeResult;
+    if (!treeResult.ok) {
+      input.log.warn("web-commit:invalid-tree-path", {
+        repositoryId: input.repositoryId,
+        path: logPath,
+        detail: treeResult.detail,
+      });
+      return treeResult;
+    }
+    newTreeOid = treeResult.treeOid;
+  } else if (op.kind === "delete") {
+    const delResult = await deleteTreePath({
+      env: input.env,
+      doName: input.doName,
+      cacheCtx: freshCacheCtx,
+      currentTreeOid: parentTreeOid,
+      parts: primaryParts!,
+      depth: 0,
+      objectsByOid,
+    });
+    if (!delResult.ok) {
+      input.log.warn("web-commit:delete-tree-failed", {
+        repositoryId: input.repositoryId,
+        path: logPath,
+        reason: delResult.reason,
+        detail: delResult.detail,
+      });
+      return delResult;
+    }
+    if (!delResult.treeOid) {
+      const payload = encodeTreePayload([]);
+      const { oid } = await createGitObject("tree", payload);
+      objectsByOid.set(oid, { type: "tree", payload });
+      newTreeOid = oid;
+    } else {
+      newTreeOid = delResult.treeOid;
+    }
+  } else {
+    const fromNormalized = moveFromParts!.join("/");
+    const toNormalized = moveToParts!.join("/");
+    if (fromNormalized === toNormalized && op.content === undefined) {
+      return { ok: true, commitOid: oldOid, ref: branchRef, unchanged: true };
+    }
+
+    const sourceLookup = await readTreeEntryAtPath({
+      env: input.env,
+      doName: input.doName,
+      cacheCtx: freshCacheCtx,
+      rootTreeOid: parentTreeOid,
+      parts: moveFromParts!,
+    });
+    if (!sourceLookup.ok) {
+      return sourceLookup;
+    }
+
+    let targetBlobOid = sourceLookup.entry.oid;
+    let targetMode: "100644" | "100755" | "120000" =
+      sourceLookup.entry.mode === "100755"
+        ? "100755"
+        : sourceLookup.entry.mode === "120000"
+          ? "120000"
+          : "100644";
+
+    if (op.content !== undefined) {
+      const blobPayload = toBlobBytes(op.content);
+      const { oid } = await createGitObject("blob", blobPayload);
+      objectsByOid.set(oid, { type: "blob", payload: blobPayload });
+      targetBlobOid = oid;
+      if (targetMode === "120000") {
+        targetMode = "100644";
+      }
+    }
+
+    let intermediateTreeOid = parentTreeOid;
+    if (fromNormalized !== toNormalized) {
+      const delResult = await deleteTreePath({
+        env: input.env,
+        doName: input.doName,
+        cacheCtx: freshCacheCtx,
+        currentTreeOid: parentTreeOid,
+        parts: moveFromParts!,
+        depth: 0,
+        objectsByOid,
+      });
+      if (!delResult.ok) {
+        return delResult;
+      }
+      intermediateTreeOid = delResult.treeOid;
+    }
+
+    const upsertResult = await upsertTreePath({
+      env: input.env,
+      doName: input.doName,
+      cacheCtx: freshCacheCtx,
+      currentTreeOid: intermediateTreeOid,
+      parts: moveToParts!,
+      depth: 0,
+      blobOid: targetBlobOid,
+      explicitMode: targetMode,
+      objectsByOid,
+    });
+    if (!upsertResult.ok) {
+      input.log.warn("web-commit:move-upsert-failed", {
+        repositoryId: input.repositoryId,
+        path: logPath,
+        detail: upsertResult.detail,
+      });
+      return upsertResult;
+    }
+    newTreeOid = upsertResult.treeOid;
   }
-  const newTreeOid = treeResult.treeOid;
 
   if (parentTreeOid && newTreeOid === parentTreeOid) {
     input.log.info("web-commit:unchanged", {
       repositoryId: input.repositoryId,
       ref: branchRef,
-      path: parts.join("/"),
+      path: logPath,
     });
     return { ok: true, commitOid: oldOid, ref: branchRef, unchanged: true };
   }
@@ -330,12 +666,12 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
   const now = Date.now();
   const timestampSec = Math.floor(now / 1000);
   const cleanName = sanitizeIdentPart(input.authorName, "Administrator");
-  const cleanEmail = sanitizeIdentPart(input.authorEmail, "admin@local.dev");
+  const cleanEmail = sanitizeIdentPart(input.authorEmail, "noreply@localhost");
   const ident = `${cleanName} <${cleanEmail}> ${timestampSec} +0000`;
 
   const message = input.commitMessage.trim()
     ? `${input.commitMessage.trim()}\n`
-    : `Update ${parts.join("/")}\n`;
+    : `${formatDefaultCommitMessage(op)}\n`;
 
   const commitLines = [`tree ${newTreeOid}`];
   if (hasParentCommit) {
@@ -354,7 +690,7 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
   if (!leaseResult.ok) {
     input.log.warn("web-commit:lease-busy", {
       repositoryId: input.repositoryId,
-      path: parts.join("/"),
+      path: logPath,
     });
     return { ok: false, reason: "repo-busy" };
   }
@@ -449,7 +785,7 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
     await deleteRepoBranchCacheRecord(input.env, input.repositoryId).catch(() => {});
 
     const shortBranch = shortRefName(branchRef);
-    const parentDir = parts.slice(0, -1).join("/");
+    const affectedDirs = collectAffectedDirs(op);
     const versionsToPurge = Array.from(new Set<string | undefined>([prevVersion, undefined]));
     const refVariants = Array.from(
       new Set([shortBranch, branchRef, ...(hasParentCommit ? [oldOid] : []), commitOid])
@@ -496,7 +832,7 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
             })
           )
         );
-        if (parentDir) {
+        for (const parentDir of affectedDirs) {
           cacheDeletions.push(
             cacheDeleteJSON(
               buildCacheKeyFrom(input.cacheCtx.req, "/_cache/tree", {
@@ -513,9 +849,10 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
     await Promise.all(cacheDeletions);
     input.log.info("web-commit:ok", {
       repositoryId: input.repositoryId,
+      kind: op.kind,
       commitOid,
       ref: branchRef,
-      path: parts.join("/"),
+      path: logPath,
       objects: resolveResult.objectCount,
     });
 
@@ -523,10 +860,32 @@ export async function commitRepositoryFile(input: CommitFileInput): Promise<Comm
   } catch (error) {
     input.log.warn("web-commit:failed", {
       repositoryId: input.repositoryId,
-      path: parts.join("/"),
+      kind: op.kind,
+      path: logPath,
       error: String(error),
     });
     await cleanupFailedWebCommit({ input, stub, token, packKey: stagedPackKey });
     return { ok: false, reason: "commit-failed", detail: String(error) };
   }
+}
+
+export async function commitRepositoryFile(input: CommitFileInput): Promise<CommitFileResult> {
+  return await commitRepositoryMutation({
+    env: input.env,
+    db: input.db,
+    limiter: input.limiter,
+    log: input.log,
+    cacheCtx: input.cacheCtx,
+    repositoryId: input.repositoryId,
+    doName: input.doName,
+    operation: {
+      kind: "upsert",
+      filePath: input.filePath,
+      content: input.content,
+    },
+    commitMessage: input.commitMessage,
+    authorName: input.authorName,
+    authorEmail: input.authorEmail,
+    targetRef: input.targetRef,
+  });
 }

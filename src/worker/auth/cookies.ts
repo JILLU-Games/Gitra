@@ -63,9 +63,7 @@ export function setSessionCookie(c: AppContext, opaqueToken: string): void {
 }
 
 export function getSessionCookie(c: AppContext): string | undefined {
-  return (
-    getCookie(c, SESSION_COOKIE_NAME, AUTH_COOKIE_PREFIX) ?? getCookie(c, SESSION_COOKIE_NAME)
-  );
+  return getCookie(c, SESSION_COOKIE_NAME, AUTH_COOKIE_PREFIX) ?? getCookie(c, SESSION_COOKIE_NAME);
 }
 
 export function clearSessionCookie(c: AppContext): void {

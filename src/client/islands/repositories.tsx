@@ -4,7 +4,15 @@ import { useMemo, useState } from "react";
 import { FolderGit2, Globe, Lock, Plus } from "lucide-react";
 
 import { hydrateIsland } from "@/client/hydrate";
-import { Button, Card, ConfirmModal, EmptyState, ErrorBanner, Input } from "@/client/components/ui";
+import {
+  Button,
+  Card,
+  ConfirmModal,
+  EmptyState,
+  ErrorBanner,
+  Input,
+  showToast,
+} from "@/client/components/ui";
 
 // SSR-side repository summary mirrored to keep the island bundle decoupled
 // from the page-side `AccountRepository` shape. Browser islands intentionally
@@ -112,11 +120,15 @@ export function RepositoriesIsland({
       });
       const body = (await res.json().catch(() => null)) as CreateResult | null;
       if (!body) {
-        setError("Could not create repository");
+        const msg = "Could not create repository";
+        setError(msg);
+        showToast({ tone: "error", title: "Create failed", message: msg });
         return false;
       }
       if (!body.ok) {
-        setError(describeCreateReason(body.reason));
+        const msg = describeCreateReason(body.reason);
+        setError(msg);
+        showToast({ tone: "error", title: "Create failed", message: msg });
         return false;
       }
       const next = [
@@ -130,9 +142,16 @@ export function RepositoriesIsland({
         },
       ].sort(compareRepositoriesByName);
       broadcast(next);
+      showToast({
+        tone: "success",
+        title: "Repository created",
+        message: `${body.namespaceSlug}/${body.slug}`,
+      });
       return true;
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Create failed", message: msg });
       return false;
     }
   }
@@ -151,7 +170,9 @@ export function RepositoriesIsland({
       const body = (await res.json().catch(() => null)) as ToggleResult | null;
       if (!body || !body.ok) {
         const reason = body && !body.ok ? body.reason : "unknown";
-        setError(`Could not toggle visibility (${reason})`);
+        const msg = `Could not toggle visibility (${reason})`;
+        setError(msg);
+        showToast({ tone: "error", title: "Visibility update failed", message: msg });
         return;
       }
       const updated = repositories.map((r) =>
@@ -159,8 +180,14 @@ export function RepositoriesIsland({
       );
       broadcast(updated);
       setConfirmMakePublicRepo(null);
+      showToast({
+        tone: "success",
+        title: `${repo.namespaceSlug}/${repo.slug} is now ${body.visibility}`,
+      });
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Visibility update failed", message: msg });
     } finally {
       setPendingId(null);
     }
@@ -198,7 +225,7 @@ export function RepositoriesIsland({
           ) : null}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-md border border-border bg-surface">
+        <div className="overflow-hidden rounded-none border border-border bg-surface">
           <table>
             <thead>
               <tr>
@@ -404,7 +431,7 @@ type VisibilityTilesProps = {
 // page reads as one cohesive control language.
 function VisibilityTiles({ visibility, onChange }: VisibilityTilesProps) {
   const tile =
-    "group relative flex cursor-pointer flex-col gap-1 rounded-md border border-border bg-canvas p-3 transition-colors hover:border-fgMuted has-[:checked]:border-fgMuted has-[:checked]:bg-surfaceHover";
+    "group relative flex cursor-pointer flex-col gap-1 rounded-none border border-border bg-canvas p-3 transition-colors hover:border-fgMuted has-[:checked]:border-fgMuted has-[:checked]:bg-surfaceHover";
   return (
     <fieldset className="m-0 grid gap-3 border-0 p-0 sm:grid-cols-2">
       <legend className="sr-only">Visibility</legend>

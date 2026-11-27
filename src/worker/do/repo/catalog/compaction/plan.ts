@@ -41,14 +41,14 @@ export type PreviewCompactionResult = {
 
 export type RequestCompactionResult = {
   action: "request";
-  status: "queued" | "no_work";
+  status: "queued" | "no_work" | "rejected";
   queued: boolean;
   shouldEnqueue: boolean;
   wantedAt?: number;
   activeCatalog: PackCatalogRow[];
   packCatalogVersion: number;
   plan?: CompactionPlan;
-  reason?: "below-threshold";
+  reason?: "below-threshold" | "queues-required" | "free-tier-budget-exceeded";
   message: string;
 };
 

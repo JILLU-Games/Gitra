@@ -18,7 +18,9 @@
   - `npm run test:workers` (Cloudflare `workerd` integration suite): **FAILED** (`57` passed / `1` failed test files; `349` passed / `1` failed tests — failure at `test/demo-user-mock-repo.worker.test.ts:155`)
 
 ### High-Level Verdict
+
 Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, R2 pack/index storage, Repo Durable Object SQLite/lease state), PAT scoping, D1 CRUD for users/namespaces/repositories/branding, and single-file text commits work genuinely against Cloudflare bindings. However, the application is **not cleanly production-ready** due to:
+
 1. A broken `footer.tsx` Profile link that collides with `/admin` and breaks the worker test suite (`F-01`);
 2. Production first-run `/auth/setup` & primary-admin password/label bugs when `ADMIN_PASSWORD` is unset (`F-02`, `F-03`, `F-04`, `F-05`, `F-06`);
 3. Incremental `git fetch` (`503`) and manual pack compaction (`"queued"` deadlock / Free-tier CPU mismatch) failures when `REPO_TASKS_QUEUE` is unbound or `CLOUDFLARE_TIER=free` (`F-09`, `F-10`);
@@ -29,18 +31,18 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 
 ## 2. Demo Mode vs. Production Mode Feature Parity Matrix
 
-| Capability / Area | Dev / Demo Mode (`!import.meta.env.PROD` & `ADMIN_PASSWORD` unset & `AUTH_MODE!=production`) | Production Mode (`import.meta.env.PROD` or `AUTH_MODE=production` or `ADMIN_PASSWORD` set) | Code Proof |
-| :--- | :--- | :--- | :--- |
-| **Quick Demo Login (`POST /auth/demo-login`) & UI Card** | Active (one-click `admin` & `alex-dev` sign-in; Demo credentials shown) | Strictly disabled (compile-time & runtime `403`, UI card stripped) | `src/worker/routes/authLogin.ts:680-683`, `src/client/pages/AuthSignInPage.tsx:48,178-220` |
-| **Auto-Seeded Showcase Workspace (`demoSeed.ts`)** | Active (`admin` + `alex-dev`, seeded repos/READMEs on entry) | Strictly disabled (`ensureDemoWorkspaceOnPublicEntry` returns early) | `src/worker/index.ts:62-79,174-177,225-228`, `src/worker/auth/adminAuth.ts:168-173` |
-| **First-Run D1 Admin Claim (`/auth/setup`)** | Disabled | Active when `ADMIN_PASSWORD` unset & D1 `users` table empty; **buggy if chosen handle != `ADMIN_USERNAME`** | `src/worker/routes/authLogin.ts:561-667` (`F-02`, `F-04`) |
-| **Primary Admin Self-Password Change (`/user/settings/security`)** | Disabled (`Env / Demo config`) | **Blocked in UI even when D1-claimed (`ADMIN_PASSWORD` unset)** despite backend supporting it | `src/worker/routes/authLogin.ts:434-436`, `src/client/islands/change-password.tsx:53-67` (`F-03`) |
-| **Admin Mode & Security Status Labels** | Correctly shows Demo Mode | **Falsely reports `"ADMIN_PASSWORD set"` and `login: admin (env)` when using D1 password** | `src/worker/auth/adminAuth.ts:153-158`, `src/client/pages/AdminSettingsPage.tsx:103-107` (`F-06`) |
-| **Session Secret Policy** | Ephemeral per-isolate random fallback if `SESSION_SECRET` unset | Strict fail-closed if `SESSION_SECRET` missing/blank/dev-placeholder | `src/worker/auth/session.ts:153-171` |
-| **Site Branding & Copy (`/admin/settings`)** | Pre-populated defaults (`gitra` / `Vib Tools`) | **Defaults still emit hardcoded `"Vib Tools"` / `"gitra"` descriptions & external links until edited** | `src/shared/branding.ts:28-50`, `src/client/islands/home-repos.tsx:438-440` (`F-11`) |
-| **Git Smart HTTP v2 (Clone, Fetch, Push)** | Real Worker + DO + R2 + PAT | Real Worker + DO + R2 + PAT (**incremental fetch breaks if `REPO_TASKS_QUEUE` unbound**) | `src/worker/routes/git.ts:99-248`, `src/worker/git/operations/fetch/plan.ts:185-188` (`F-09`) |
-| **User / Namespace / PAT / Repo CRUD** | Real D1 + DO + R2 (seeded initially) | Real D1 + DO + R2 (starts empty; footer `Profile` link collides with `/admin` if slug is `admin`) | `src/client/components/footer.tsx:108-114` (`F-01`) |
-| **Background Pack Compaction & `.refs` Backfill** | Works only if Queue bound & paid config; dead under `--no-queues` | **Stucks `"queued"` under `--no-queues`; Free tier risks Error 1102 / alarm re-arm stall** | `src/worker/routes/admin.ts:69-96`, `src/worker/common/tier.ts:44-46` (`F-09`, `F-10`) |
+| Capability / Area                                                  | Dev / Demo Mode (`!import.meta.env.PROD` & `ADMIN_PASSWORD` unset & `AUTH_MODE!=production`) | Production Mode (`import.meta.env.PROD` or `AUTH_MODE=production` or `ADMIN_PASSWORD` set)                  | Code Proof                                                                                        |
+| :----------------------------------------------------------------- | :------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------ |
+| **Quick Demo Login (`POST /auth/demo-login`) & UI Card**           | Active (one-click `admin` & `alex-dev` sign-in; Demo credentials shown)                      | Strictly disabled (compile-time & runtime `403`, UI card stripped)                                          | `src/worker/routes/authLogin.ts:680-683`, `src/client/pages/AuthSignInPage.tsx:48,178-220`        |
+| **Auto-Seeded Showcase Workspace (`demoSeed.ts`)**                 | Active (`admin` + `alex-dev`, seeded repos/READMEs on entry)                                 | Strictly disabled (`ensureDemoWorkspaceOnPublicEntry` returns early)                                        | `src/worker/index.ts:62-79,174-177,225-228`, `src/worker/auth/adminAuth.ts:168-173`               |
+| **First-Run D1 Admin Claim (`/auth/setup`)**                       | Disabled                                                                                     | Active when `ADMIN_PASSWORD` unset & D1 `users` table empty; **buggy if chosen handle != `ADMIN_USERNAME`** | `src/worker/routes/authLogin.ts:561-667` (`F-02`, `F-04`)                                         |
+| **Primary Admin Self-Password Change (`/user/settings/security`)** | Disabled (`Env / Demo config`)                                                               | **Blocked in UI even when D1-claimed (`ADMIN_PASSWORD` unset)** despite backend supporting it               | `src/worker/routes/authLogin.ts:434-436`, `src/client/islands/change-password.tsx:53-67` (`F-03`) |
+| **Admin Mode & Security Status Labels**                            | Correctly shows Demo Mode                                                                    | **Falsely reports `"ADMIN_PASSWORD set"` and `login: admin (env)` when using D1 password**                  | `src/worker/auth/adminAuth.ts:153-158`, `src/client/pages/AdminSettingsPage.tsx:103-107` (`F-06`) |
+| **Session Secret Policy**                                          | Ephemeral per-isolate random fallback if `SESSION_SECRET` unset                              | Strict fail-closed if `SESSION_SECRET` missing/blank/dev-placeholder                                        | `src/worker/auth/session.ts:153-171`                                                              |
+| **Site Branding & Copy (`/admin/settings`)**                       | Pre-populated defaults (`gitra` / `Vib Tools`)                                               | **Defaults still emit hardcoded `"Vib Tools"` / `"gitra"` descriptions & external links until edited**      | `src/shared/branding.ts:28-50`, `src/client/islands/home-repos.tsx:438-440` (`F-11`)              |
+| **Git Smart HTTP v2 (Clone, Fetch, Push)**                         | Real Worker + DO + R2 + PAT                                                                  | Real Worker + DO + R2 + PAT (**incremental fetch breaks if `REPO_TASKS_QUEUE` unbound**)                    | `src/worker/routes/git.ts:99-248`, `src/worker/git/operations/fetch/plan.ts:185-188` (`F-09`)     |
+| **User / Namespace / PAT / Repo CRUD**                             | Real D1 + DO + R2 (seeded initially)                                                         | Real D1 + DO + R2 (starts empty; footer `Profile` link collides with `/admin` if slug is `admin`)           | `src/client/components/footer.tsx:108-114` (`F-01`)                                               |
+| **Background Pack Compaction & `.refs` Backfill**                  | Works only if Queue bound & paid config; dead under `--no-queues`                            | **Stucks `"queued"` under `--no-queues`; Free tier risks Error 1102 / alarm re-arm stall**                  | `src/worker/routes/admin.ts:69-96`, `src/worker/common/tier.ts:44-46` (`F-09`, `F-10`)            |
 
 ---
 
@@ -49,6 +51,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ### Group A — Broken Functionality, Test Failure & Auth/Security Bugs
 
 #### `F-01` [Critical] Footer `Profile` link points to `/${slug}` instead of `/profile/${slug}`, colliding with `/admin` and failing `npm run test:workers`
+
 - **Evidence:**
   - `src/worker/routes/ui.ts:11-12`:
     ```ts
@@ -57,13 +60,15 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
     ```
   - `src/client/components/footer.tsx:108-114`:
     ```tsx
-    {viewer.primaryNamespaceSlug ? (
-      <li>
-        <a href={`/${viewer.primaryNamespaceSlug}`} className={LINK_CLASS}>
-          Profile
-        </a>
-      </li>
-    ) : null}
+    {
+      viewer.primaryNamespaceSlug ? (
+        <li>
+          <a href={`/${viewer.primaryNamespaceSlug}`} className={LINK_CLASS}>
+            Profile
+          </a>
+        </li>
+      ) : null;
+    }
     ```
   - `test/demo-user-mock-repo.worker.test.ts:150-155` (live `npm run test:workers` failure):
     ```ts
@@ -76,6 +81,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-02` [Critical] Production first-run `/auth/setup` creates user under chosen handle while Primary-Admin checks hardcode `ADMIN_USERNAME`
+
 - **Evidence:**
   - `src/worker/routes/authLogin.ts:617-622`:
     ```ts
@@ -104,6 +110,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-03` [High] Production D1-claimed primary admin is blocked in UI from changing or resetting their password
+
 - **Evidence:**
   - Backend allows primary-admin password change when `ADMIN_PASSWORD` is unset (`src/worker/routes/authLogin.ts:434-436` & `src/worker/auth/session.ts:254`):
     ```ts
@@ -123,6 +130,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-04` [High] Non-transactional `/auth/setup` causes permanent setup lockout on partial failure
+
 - **Evidence:**
   - `src/worker/routes/authLogin.ts:592, 618-652`:
     ```ts
@@ -138,6 +146,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-05` [High] Password change and admin password reset do not invalidate existing sessions
+
 - **Evidence:**
   - `src/worker/auth/session.ts:26-31, 198-206`:
     ```ts
@@ -154,6 +163,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-06` [Medium] UI displays `"Configured (ADMIN_PASSWORD set)"` and `"(env)"` even when running D1-claimed Production auth
+
 - **Evidence:**
   - `src/worker/auth/adminAuth.ts:153-158`: returns `mode: "configured"` even when `password: null`.
   - Passed directly to SSR views (`src/worker/routes/systemAdmin.ts:709, 739, 769, 841, 886`).
@@ -170,6 +180,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-07` [Medium] Auth rate limiter has a KV read-modify-write race condition and fails open
+
 - **Evidence:**
   - `src/worker/auth/rateLimit.ts:119-153`:
     - `checkAuthRateLimit` (`lines 125-133`) reads `kv.get(key)` and returns `{ allowed: true }` if `ROUTES` is unbound or throws.
@@ -179,6 +190,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-08` [Medium] Unconditional `__Host-` + `Secure` + `SameSite=None; Partitioned` session cookies break plain-HTTP non-localhost deployments
+
 - **Evidence:**
   - `src/worker/auth/cookies.ts:11-23`:
     ```ts
@@ -198,6 +210,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ### Group B — Backend Engines, Queues, Tier Limits & Git Protocol
 
 #### `F-09` [High] Incremental `git fetch` permanently returns `503` when `REPO_TASKS_QUEUE` is unbound and a pack lacks `.refs`
+
 - **Evidence:**
   - `src/worker/git/operations/fetch/plan.ts:132-139, 185-188`:
     ```ts
@@ -220,6 +233,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-10` [High] Manual compaction hangs `"queued"` without `REPO_TASKS_QUEUE` and stalls / risks Error 1102 on Free tier
+
 - **Evidence:**
   - `src/worker/routes/admin.ts:69-96`: when `POST /:owner/:repo/admin/compact` runs with `{ dryRun: false }`, DO writes `compactionWantedAt` and Worker responds `202` `{ status: "queued" }`, calling `sendOptionalMaintenanceTask(...)` (which silently returns `false` if `REPO_TASKS_QUEUE` is unbound).
   - `src/worker/do/repo/catalog/compaction/requests.ts:103-122`: always returns `queued: true, message: "Recorded a compaction request... and queued background work."` regardless of Queue binding presence.
@@ -238,6 +252,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-17` [High] Legacy Git Smart HTTP v0/v1 clients are rejected (`HTTP 400`) despite JSDoc claims
+
 - **Evidence:**
   - `src/worker/routes/git.ts:95-117`:
     ```ts
@@ -257,6 +272,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-18` [Medium] `systemAdmin.ts` caps cold DO branch lookups at 60 and creates an isolated `getLimiter()`
+
 - **Evidence:**
   - `src/worker/routes/systemAdmin.ts:79, 169-173`:
     ```ts
@@ -277,13 +293,15 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-19` [Medium] Non-atomic `waitUntil` repo-state sync can serve stale cached refs/trees after push
+
 - **Evidence:**
   - `src/worker/routes/git.ts:221-247`: `handleReceivePackPOST` executes `touchRepositoryUpdatedAt`, `deleteRepoBranchCacheRecord`, and `cacheDeleteJSON` inside `onRepoStateChanged` (called asynchronously in `streamReceivePack.ts` via `ctx.waitUntil`) and catches/logs failures without surfacing them.
 - **Root Cause & Impact:** If D1 or Cache API blips after DO `finalizeReceive()` succeeds, `repositories.updated_at` stays stale, causing `ls-refs` (`git.ts:120-139`) and web UI views keyed by `updatedAt` to serve stale cached refs/trees until TTL expiry.
 
 ---
 
-#### `F-20` [High] `cf-auto-deploy.mjs` manages unused legacy secrets and syncs `SESSION_SECRET` *after* `wrangler deploy`
+#### `F-20` [High] `cf-auto-deploy.mjs` manages unused legacy secrets and syncs `SESSION_SECRET` _after_ `wrangler deploy`
+
 - **Evidence:**
   - `scripts/cf-auto-deploy-lib.mjs:11-15`:
     ```js
@@ -303,6 +321,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-21` [Medium] `npm run format:check` fails on clean checkout and 22 unused AI Studio files are shipped in static Production assets
+
 - **Evidence:**
   - Live `npm run format:check` (`prettier --check .`) exited with code **1**, reporting unformatted files:
     - `public/assets/aistudio/VIB_TOOLS_COMPANY_AUTHOR_MASTER_CONTEXT_528b6a24.md`
@@ -315,6 +334,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ### Group C — UI Features vs. Backend Reality, Missing UX & Design-System Compliance
 
 #### `F-11` [Medium] Homepage language metadata is fabricated client-side via regex, filter options are hardcoded, and empty repos leak `"Vib Tools"` branding
+
 - **Evidence:**
   - `src/worker/index.ts:99-108, 158-167, 195-204`: Server props omit `language`, `langColor`, `license`, `version`, and `topics`.
   - `src/client/islands/home-repos.tsx:99-123`: `resolveRepoLanguage` inspects `${repo.slug} ${repo.description ?? ""}` with regexes (e.g., `/\bgo\b/i` matches English `"go"`, while C++/Java/empty-description repos show no language).
@@ -327,7 +347,9 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
     ```
   - `src/client/islands/home-repos.tsx:439-440`:
     ```tsx
-    {repo.description || "Official open-source repository published by Vib Tools."}
+    {
+      repo.description || "Official open-source repository published by Vib Tools.";
+    }
     ```
   - `src/shared/branding.ts:28-50`: `DEFAULT_SITE_BRANDING` defaults `siteName: "gitra"`, `websiteUrl: "https://vibtools.io"`, `docsUrl: "https://docs.vib.tools"`, `supportEmail: "support@vibtools.io"`.
 - **Root Cause & Impact:** In Production with real custom repositories, Language badges are heuristic guesses, the Language filter dropdown advertises `TypeScript` and `Python` even when 0 repositories match them (leading to empty filter results), and any public repository without a description falsely claims to be an `"Official open-source repository published by Vib Tools."`.
@@ -335,6 +357,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-12` [Medium] Repository web UI only supports text file create/edit (missing upload, rename, delete, folder create, and branch/tag UI) and stamps `@local.dev` emails
+
 - **Evidence:**
   - `src/client/islands/repo-overview-actions.tsx:111-131` & `src/client/islands/blob-editor.tsx`: UI exposes only `Add README`, `Add file`, and `Edit file` (`PUT /auth/api/repositories/:repositoryId/file` with `MAX_WEB_COMMIT_BYTES`).
   - `src/worker/routes/admin.ts:129-165`: `GET/PUT /:owner/:repo/admin/refs` exists as an admin JSON API, but no web UI renders branch creation, branch deletion, default-branch switching (`HEAD`), or tag management.
@@ -347,6 +370,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-13` [Medium] Zero Global Toast system; silent clipboard failures and abrupt `window.location.reload()` timers
+
 - **Evidence:**
   - Clipboard errors are silently discarded or only console-logged across:
     - `src/client/islands/home-repos.tsx:325-327` (`catch { // ignore silently }`)
@@ -359,6 +383,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-14` [Medium] Zero PWA support (no Web App Manifest, Service Worker, or installable mobile assets)
+
 - **Evidence:**
   - `vite.config.ts:28`: `manifest: "manifest.json"` only generates Vite's SSR chunk map inside `dist/client/`, not a PWA `manifest.webmanifest`.
   - `src/client/server/document.tsx:45-76`: no `<link rel="manifest">`, no `apple-touch-icon`, no `theme-color` meta, and no Service Worker (`sw.js`) registration.
@@ -368,6 +393,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-15` [Medium] Design-system & global UI-component consistency violations (`--radius: 0rem`, font stack, shadows, bypassed `ui/*` primitives)
+
 - **Evidence:**
   - `src/client/styles/app.css:11, 13`:
     ```css
@@ -384,6 +410,7 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 ---
 
 #### `F-16` [Low] `handleRawPath` hotlink check rejects direct raw links and reverse-proxied host headers
+
 - **Evidence:**
   - `src/worker/routes/ui/raw.ts:87-98`:
     ```ts
@@ -406,14 +433,14 @@ Core Git Smart HTTP v2 (`ls-refs`, streaming `fetch`, streaming `receive-pack`, 
 
 ## 4. Verified Test, Typecheck, Build & Format Command Results
 
-| Check Command | Status | Exact Verified Output |
-| :--- | :--- | :--- |
-| `npm run typecheck` | **PASS** | `wrangler types --env-file .dev.vars.example && tsc -p test/tsconfig.json --noEmit` exited `0` |
-| `npm run test` | **PASS** | `14` test files passed, `75` tests passed (`vitest.unit.config.ts`) |
-| `node --test test/cf-auto-deploy.node-test.ts` | **PASS** | `8` tests passed, `0` failed |
-| `npm run build` | **PASS** | `vite build` exited `0` |
-| `npm run format:check` | **FAIL** | Exit `1` — unformatted: `public/assets/aistudio/VIB_TOOLS_COMPANY_AUTHOR_MASTER_CONTEXT_528b6a24.md`, `wrangler.paid.jsonc` |
-| `npm run test:workers` | **FAIL** | `57 passed \| 1 failed (58)` files, `349 passed \| 1 failed (350)` tests — failed at `test/demo-user-mock-repo.worker.test.ts:155:31` (`footer` `<a href="/admin">` after `<main>`) |
+| Check Command                                  | Status   | Exact Verified Output                                                                                                                                                               |
+| :--------------------------------------------- | :------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run typecheck`                            | **PASS** | `wrangler types --env-file .dev.vars.example && tsc -p test/tsconfig.json --noEmit` exited `0`                                                                                      |
+| `npm run test`                                 | **PASS** | `14` test files passed, `75` tests passed (`vitest.unit.config.ts`)                                                                                                                 |
+| `node --test test/cf-auto-deploy.node-test.ts` | **PASS** | `8` tests passed, `0` failed                                                                                                                                                        |
+| `npm run build`                                | **PASS** | `vite build` exited `0`                                                                                                                                                             |
+| `npm run format:check`                         | **FAIL** | Exit `1` — unformatted: `public/assets/aistudio/VIB_TOOLS_COMPANY_AUTHOR_MASTER_CONTEXT_528b6a24.md`, `wrangler.paid.jsonc`                                                         |
+| `npm run test:workers`                         | **FAIL** | `57 passed \| 1 failed (58)` files, `349 passed \| 1 failed (350)` tests — failed at `test/demo-user-mock-repo.worker.test.ts:155:31` (`footer` `<a href="/admin">` after `<main>`) |
 
 ---
 

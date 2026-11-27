@@ -83,7 +83,7 @@ export function HomePage({
                       href={resolvedBranding.websiteUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="h-8 px-3.5 rounded-md bg-canvas hover:bg-surfaceHover border border-border text-fg text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors no-underline"
+                      className="h-8 px-3.5 rounded-none bg-canvas hover:bg-surfaceHover border border-border text-fg text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors no-underline"
                     >
                       {websiteDisplayLabel}
                       <svg
@@ -107,7 +107,7 @@ export function HomePage({
                       href={resolvedBranding.docsUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="h-8 px-3.5 rounded-md bg-fg hover:bg-fgHover text-canvas text-[12px] font-semibold inline-flex items-center transition-colors no-underline"
+                      className="h-8 px-3.5 rounded-none bg-fg hover:bg-fgHover text-canvas text-[12px] font-semibold inline-flex items-center transition-colors no-underline"
                     >
                       Documentation
                     </a>

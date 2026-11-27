@@ -8,11 +8,7 @@ import path from "node:path";
  * non-destructive secret reconciliation) can be verified deterministically.
  */
 
-export const REQUIRED_WORKER_SECRETS = [
-  "SESSION_SECRET",
-  "CREDENTIAL_SECRET",
-  "ADMIN_BOOTSTRAP_SECRET",
-];
+export const REQUIRED_WORKER_SECRETS = ["SESSION_SECRET"];
 
 export const OPTIONAL_AUTH_SECRETS = ["ADMIN_USERNAME", "ADMIN_PASSWORD", "AUTH_MODE"];
 
@@ -473,4 +469,42 @@ export function planSecretReconciliation({
   }
 
   return plan;
+}
+
+/**
+ * Extracts only pending secret creations/rotations for `wrangler deploy --secrets-file`.
+ * Kept secrets (`action === "keep"`) are strictly excluded so existing remote secrets are
+ * never written to ephemeral files or overwritten.
+ *
+ * @param {Array<{ name: string; action: string; value?: string }>} secretPlan
+ * @returns {{ payload: Record<string, string>; count: number }}
+ */
+export function buildSecretsUploadPayload(secretPlan) {
+  /** @type {Record<string, string>} */
+  const payload = {};
+  let count = 0;
+
+  for (const step of secretPlan) {
+    if (step.action !== "create" && step.action !== "rotate") continue;
+    if (typeof step.value !== "string" || step.value.length === 0) continue;
+    payload[step.name] = step.value;
+    count += 1;
+  }
+
+  return { payload, count };
+}
+
+/**
+ * Builds the argument vector for `npx wrangler deploy`, attaching `--secrets-file`
+ * whenever new or rotated secrets must take effect atomically on deployment.
+ *
+ * @param {{ secretsFilePath?: string }} [options]
+ * @returns {string[]}
+ */
+export function buildWranglerDeployArgs(options = {}) {
+  const args = ["wrangler", "deploy"];
+  if (options.secretsFilePath) {
+    args.push("--secrets-file", options.secretsFilePath);
+  }
+  return args;
 }

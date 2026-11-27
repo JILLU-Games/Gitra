@@ -55,7 +55,7 @@ function PackRow({
       </td>
       <td className="py-2">
         <span
-          className={`rounded border px-1.5 py-0.5 font-mono text-[11px] ${
+          className={`rounded-none border px-1.5 py-0.5 font-mono text-[11px] ${
             packStat.state === "active"
               ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
               : "border-border bg-canvas text-fgMuted"
@@ -94,7 +94,7 @@ function PackRow({
       <td className="py-2 text-center">
         <button
           type="button"
-          className="rounded p-1 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-none p-1 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
           title={
             canDelete
               ? "Delete this superseded pack"
@@ -148,7 +148,7 @@ export function PackFilesCard({ packCount, packStats, pending, removePack }: Pac
           <button
             type="button"
             onClick={() => setShowSuperseded((prev) => !prev)}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
+            className="inline-flex h-7 items-center gap-1.5 rounded-none border border-border bg-canvas px-2.5 text-[12px] text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
             aria-expanded={showSuperseded}
           >
             {showSuperseded ? (

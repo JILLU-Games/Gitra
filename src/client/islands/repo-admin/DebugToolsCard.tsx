@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Database } from "lucide-react";
 import { Button } from "@/client/components/ui/button";
 import { Card } from "@/client/components/ui/card";
+import { inputClasses } from "@/client/components/ui/input";
 import { JsonResult } from "./JsonResult";
 
 export type DebugToolsCardProps = {
@@ -36,7 +37,7 @@ export function DebugToolsCard({
               type="text"
               id="debug-oid"
               placeholder="Enter 40-character SHA-1 hash"
-              className="h-8 flex-1 rounded-md border border-border bg-canvas px-3 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+              className={`min-w-0 flex-1 font-mono ${inputClasses}`}
               pattern="[a-f0-9]{40}"
               aria-invalid={oidError ? true : undefined}
               value={debugOid}

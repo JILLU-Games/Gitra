@@ -20,7 +20,7 @@ export function AppLayout({ children, currentView, viewer, branding, origin }: A
     <>
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[200] focus:rounded-md focus:border focus:border-border focus:bg-surface focus:px-3 focus:py-1.5 focus:text-xs focus:font-medium focus:text-fg"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[200] focus:rounded-none focus:border focus:border-border focus:bg-surface focus:px-3 focus:py-1.5 focus:text-xs focus:font-medium focus:text-fg"
       >
         Skip to content
       </a>

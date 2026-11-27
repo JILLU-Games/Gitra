@@ -15,7 +15,7 @@ export function Breadcrumbs({ items, parentHref }: BreadcrumbsProps) {
 
   return (
     <nav
-      className="mb-3 flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-surface px-3.5 py-2 font-mono text-[12px]"
+      className="mb-3 flex flex-wrap items-center gap-1.5 rounded-none border border-border bg-surface px-3.5 py-2 font-mono text-[12px]"
       aria-label="Breadcrumbs"
     >
       {parentHref ? (

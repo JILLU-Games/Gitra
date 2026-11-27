@@ -1,17 +1,21 @@
 import type { CacheContext } from "@/worker/cache";
 import type { Logger } from "@/worker/common/logger";
 import type { RepoDurableObject } from "@/worker/do/repo/repoDO";
+import type { IdxView } from "@/worker/git/object-store";
 
 import { type PackRefBackfillQueueMessage, type RepoQueueMessageHandle } from "./types";
 
 import { getRepoStubByDoId } from "@/worker/common";
-import { loadIdxView } from "@/worker/git/object-store";
+import { loadActivePackCatalog, loadIdxView } from "@/worker/git/object-store";
+import { countSubrequest, getLimiter } from "@/worker/git/operations/limits";
 import { resolveDeltasAndWriteIdx, scanPack } from "@/worker/git/pack/indexer";
 import { loadPackRefView } from "@/worker/git/pack/refIndex";
 import { createQueueTaskContext, logSoftBudgetExhausted, retryQueueMessage } from "./context";
 
 const REF_BACKFILL_SUBREQUEST_BUDGET = 7_500;
 const REF_BACKFILL_RETRY_DELAY_SECONDS = 30;
+export const INLINE_REF_BACKFILL_MAX_PACKS = 2;
+export const INLINE_REF_BACKFILL_MAX_PACK_BYTES = 8 * 1024 * 1024;
 
 function countBackfillSubrequest(cacheCtx: CacheContext, log: Logger, op: string, n = 1): void {
   logSoftBudgetExhausted({
@@ -32,6 +36,85 @@ function isDeterministicPackFailure(error: unknown): boolean {
     message.includes("truncated") ||
     message.includes("cannot fit")
   );
+}
+
+/**
+ * Executes a bounded inline `.refs` sidecar repair for a single active pack when
+ * `REPO_TASKS_QUEUE` is unbound (Free-tier / `--no-queues` deployments).
+ * Uses the request-scoped `Limiter` and subrequest counter on `cacheCtx`.
+ */
+export async function backfillPackRefsInline(args: {
+  env: Env;
+  repoId: string;
+  packKey: string;
+  packBytes: number;
+  idxView: IdxView;
+  cacheCtx?: CacheContext;
+  log: Logger;
+}): Promise<boolean> {
+  const { env, repoId, packKey, packBytes, idxView, cacheCtx, log } = args;
+  const limiter = getLimiter(cacheCtx);
+  const savedCatalog = cacheCtx?.memo?.packCatalog;
+
+  try {
+    log.info("ref-index:inline-backfill-start", { packKey, packBytes });
+    const activeCatalog = await loadActivePackCatalog(env, repoId, cacheCtx);
+    const target = activeCatalog.find((row) => row.packKey === packKey);
+    if (!target) {
+      log.info("ref-index:inline-backfill-stale-pack", { packKey });
+      return false;
+    }
+
+    const externalBaseCatalog = activeCatalog.filter((row) => row.packKey !== target.packKey);
+    const scanResult = await scanPack({
+      env,
+      packKey: target.packKey,
+      packSize: target.packBytes,
+      limiter,
+      countSubrequest: (n = 1) => {
+        countSubrequest(cacheCtx, n);
+      },
+      log,
+    });
+
+    if (cacheCtx) {
+      cacheCtx.memo = cacheCtx.memo || {};
+      cacheCtx.memo.packCatalog = externalBaseCatalog;
+    }
+    const resolveResult = await resolveDeltasAndWriteIdx({
+      env,
+      packKey: target.packKey,
+      packSize: target.packBytes,
+      limiter,
+      countSubrequest: (n = 1) => {
+        countSubrequest(cacheCtx, n);
+      },
+      log,
+      scanResult,
+      activeCatalog: externalBaseCatalog,
+      cacheCtx,
+      repoId,
+      writeIdx: false,
+      existingIdxView: idxView,
+    });
+
+    log.info("ref-index:inline-backfill-complete", {
+      packKey: target.packKey,
+      objectCount: resolveResult.objectCount,
+      refIndexBytes: resolveResult.refIndexBytes,
+    });
+    return true;
+  } catch (error) {
+    log.warn("ref-index:inline-backfill-failed", {
+      packKey,
+      error: String(error),
+    });
+    return false;
+  } finally {
+    if (cacheCtx?.memo) {
+      cacheCtx.memo.packCatalog = savedCatalog;
+    }
+  }
 }
 
 export async function handlePackRefBackfillMessage(

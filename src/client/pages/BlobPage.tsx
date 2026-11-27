@@ -22,6 +22,7 @@ export type BlobPageProps = {
   refEnc: string;
   fileName: string;
   canEditFile?: boolean;
+  canMutateFile?: boolean;
   codeLang?: string | null;
   lineCount?: number;
   sizeStr?: string;
@@ -55,6 +56,7 @@ export function BlobPage(props: BlobPageProps) {
     refEnc,
     fileName,
     canEditFile = false,
+    canMutateFile = canEditFile,
     codeLang,
     lineCount,
     sizeStr,
@@ -81,6 +83,9 @@ export function BlobPage(props: BlobPageProps) {
   const showInlineEditor = Boolean(
     canEditFile && repositoryId && filePath && refShort && editableContent !== undefined
   );
+  const showBlobMutator = Boolean(
+    (showInlineEditor || canMutateFile) && repositoryId && filePath && refShort
+  );
 
   return (
     <div>
@@ -93,17 +98,17 @@ export function BlobPage(props: BlobPageProps) {
         canManageRepo={canManageRepo}
       />
       <Breadcrumbs items={breadcrumbs} parentHref={parentHref} />
-      <div className="blob-container mt-3 rounded-md border border-border bg-surface">
+      <div className="blob-container mt-3 rounded-none border border-border bg-surface">
         <div className="flex items-center justify-between border-b border-border px-3.5 py-2">
           <div className="flex items-center gap-2 text-[12px] text-fgMuted">
             <span className="font-mono font-medium text-fg">{fileName}</span>
             {codeLang ? (
-              <span className="inline-flex items-center rounded border border-border bg-canvas px-1.5 py-0.5 text-[11px] text-fgMuted">
+              <span className="inline-flex items-center rounded-none border border-border bg-canvas px-1.5 py-0.5 text-[11px] text-fgMuted">
                 {codeLang}
               </span>
             ) : null}
             {isMarkdown ? (
-              <span className="inline-flex items-center rounded border border-border bg-canvas px-1.5 py-0.5 text-[11px] text-fgMuted">
+              <span className="inline-flex items-center rounded-none border border-border bg-canvas px-1.5 py-0.5 text-[11px] text-fgMuted">
                 Markdown
               </span>
             ) : null}
@@ -131,11 +136,7 @@ export function BlobPage(props: BlobPageProps) {
             />
           </IslandHost>
         </div>
-        {showInlineEditor &&
-        repositoryId &&
-        filePath &&
-        refShort &&
-        editableContent !== undefined ? (
+        {showBlobMutator && repositoryId && filePath && refShort ? (
           <IslandHost
             name="blob-editor"
             props={{
@@ -144,8 +145,10 @@ export function BlobPage(props: BlobPageProps) {
               repositoryId,
               filePath,
               refShort,
-              initialContent: editableContent,
+              initialContent: editableContent ?? "",
               isMarkdown: Boolean(isMarkdown),
+              canEditFile: showInlineEditor,
+              canMutateFile: Boolean(canMutateFile),
             }}
           >
             <BlobEditorIsland
@@ -154,8 +157,10 @@ export function BlobPage(props: BlobPageProps) {
               repositoryId={repositoryId}
               filePath={filePath}
               refShort={refShort}
-              initialContent={editableContent}
+              initialContent={editableContent ?? ""}
               isMarkdown={Boolean(isMarkdown)}
+              canEditFile={showInlineEditor}
+              canMutateFile={Boolean(canMutateFile)}
             />
           </IslandHost>
         ) : null}
@@ -168,14 +173,19 @@ export function BlobPage(props: BlobPageProps) {
           ) : null}
           {!tooLarge && isImage && mediaSrc ? (
             <div className="flex items-center justify-center">
-              <img src={mediaSrc} alt={fileName} className="max-w-full rounded-md" loading="lazy" />
+              <img
+                src={mediaSrc}
+                alt={fileName}
+                className="max-w-full rounded-none"
+                loading="lazy"
+              />
             </div>
           ) : null}
           {!tooLarge && isPdf && mediaSrc ? (
             <div className="w-full" style={{ height: "75vh" }}>
               <iframe
                 src={mediaSrc}
-                className="h-full w-full rounded-md"
+                className="h-full w-full rounded-none"
                 title={fileName}
                 loading="lazy"
               ></iframe>

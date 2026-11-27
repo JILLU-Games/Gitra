@@ -23,6 +23,10 @@ function applyTheme(theme: ThemeMode) {
   root.dataset.theme = theme;
   root.classList.toggle("dark", theme === "dark");
   root.style.colorScheme = theme;
+  const metaTheme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (metaTheme) {
+    metaTheme.content = theme === "dark" ? "#09090b" : "#ffffff";
+  }
   applyHighlightTheme(theme);
 }
 
@@ -47,7 +51,7 @@ export function ThemeToggleIsland(_props: ThemeToggleProps) {
       id="themeBtn"
       title="Toggle theme"
       data-theme-toggle
-      className="w-7 h-7 rounded text-fgMuted hover:text-fg hover:bg-surfaceHover flex items-center justify-center transition-colors"
+      className="w-7 h-7 rounded-none text-fgMuted hover:text-fg hover:bg-surfaceHover flex items-center justify-center transition-colors"
       aria-label={`Toggle theme (current: ${theme === "dark" ? "Dark" : "Light"})`}
       onClick={() => {
         const nextTheme = toggleThemeMode(theme);

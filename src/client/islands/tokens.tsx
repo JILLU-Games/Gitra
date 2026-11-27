@@ -3,7 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { hydrateIsland } from "@/client/hydrate";
-import { Button, Card, ConfirmModal, EmptyState, ErrorBanner } from "@/client/components/ui";
+import {
+  Button,
+  Card,
+  ConfirmModal,
+  EmptyState,
+  ErrorBanner,
+  copyToClipboard,
+  inputClasses,
+  showToast,
+} from "@/client/components/ui";
 import { Copy, FolderGit2, KeyRound, Trash2 } from "lucide-react";
 import {
   REPOSITORIES_CHANGED_EVENT,
@@ -198,7 +207,9 @@ export function TokensIsland({
       }
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(body.error ?? "Could not create token");
+        const msg = body.error ?? "Could not create token";
+        setError(msg);
+        showToast({ tone: "error", title: "Could not create token", message: msg });
         return;
       }
       const body = (await res.json()) as { plaintext: string };
@@ -206,9 +217,16 @@ export function TokensIsland({
       setName("");
       setRepoSlug("");
       setLevel("pull");
+      showToast({
+        tone: "success",
+        title: "Personal access token created",
+        message: "Copy the revealed token now — it will not be shown again.",
+      });
       await refresh();
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Could not create token", message: msg });
     } finally {
       setSubmitting(false);
     }
@@ -232,13 +250,22 @@ export function TokensIsland({
       }
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(body.error ?? "Could not revoke token");
+        const msg = body.error ?? "Could not revoke token";
+        setError(msg);
+        showToast({ tone: "error", title: "Could not revoke token", message: msg });
         return;
       }
       setConfirmRevokeToken(null);
+      showToast({
+        tone: "success",
+        title: "Access token revoked",
+        message: `Revoked "${token.name}".`,
+      });
       await refresh();
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Could not revoke token", message: msg });
     } finally {
       setRevokingId(null);
     }
@@ -273,22 +300,18 @@ export function TokensIsland({
           copyError={copyError}
           onCopy={() => {
             setCopyError(false);
-            if (!navigator.clipboard?.writeText) {
-              setCopyError(true);
-              return;
-            }
-            navigator.clipboard.writeText(revealedToken).then(
-              () => setCopied(true),
-              () => {
-                setCopied(false);
-                setCopyError(true);
-              }
-            );
+            void copyToClipboard(revealedToken, {
+              label: "personal access token",
+              successTitle: "Access token copied",
+            }).then((ok) => {
+              setCopied(ok);
+              setCopyError(!ok);
+            });
           }}
           onDismiss={() => setRevealedToken(null)}
         />
       ) : (
-        <section className="rounded-md border border-border bg-surface">
+        <section className="rounded-none border border-border bg-surface">
           <div className="border-b border-borderSubtle px-4 py-2.5 text-[14px] font-semibold text-fg">
             Create token
           </div>
@@ -344,7 +367,7 @@ export function TokensIsland({
                   onChange={(event) => setName(event.target.value)}
                   placeholder="ci-deploy"
                   required
-                  className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+                  className={inputClasses}
                 />
                 <p className="m-0 mt-1 text-[12px] text-fgMuted">
                   A label to identify this token later.
@@ -353,7 +376,7 @@ export function TokensIsland({
               {scope === "global" ? (
                 <div>
                   <span className="mb-1 block text-[12px] font-medium text-fg">Target scope</span>
-                  <div className="flex h-8 items-center rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fgBody">
+                  <div className="flex h-8 items-center rounded-none border border-border bg-canvas px-2.5 text-[12px] text-fgBody">
                     All namespaces (all users &amp; repos)
                   </div>
                   <p className="m-0 mt-1 text-[12px] text-fgMuted">
@@ -376,7 +399,7 @@ export function TokensIsland({
                     onChange={(event) => setNamespaceSlug(event.target.value)}
                     placeholder={exampleNamespace}
                     required
-                    className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+                    className={`${inputClasses} font-mono`}
                   />
                   <p className="m-0 mt-1 text-[12px] text-fgMuted">
                     Defaults to your primary handle.
@@ -414,20 +437,16 @@ export function TokensIsland({
               <p className="m-0 text-[12px] text-fgMuted">
                 Plaintext token is displayed once immediately after generation.
               </p>
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas transition-colors hover:bg-fgHover disabled:opacity-50"
-              >
+              <Button type="submit" variant="primary" size="md" disabled={!canSubmit}>
                 <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>Generate token</span>
-              </button>
+              </Button>
             </div>
           </form>
         </section>
       )}
 
-      <section className="overflow-hidden rounded-md border border-border bg-surface">
+      <section className="overflow-hidden rounded-none border border-border bg-surface">
         <div className="flex items-center justify-between border-b border-borderSubtle px-4 py-2.5">
           <h3 className="m-0 text-[14px] font-semibold text-fg">
             {tokens.length === 0 ? "Your tokens" : "Issued tokens"}
@@ -492,7 +511,7 @@ function RevealPanel({ token, copied, copyError, onCopy, onDismiss }: RevealPane
         <p className="m-0 text-[12px] font-semibold uppercase tracking-wider text-fg">
           One time only · copy now
         </p>
-        <code className="block break-all rounded-md border border-border bg-canvas px-3 py-2 text-center font-mono text-[13px] text-fg select-all [-webkit-text-security:disc] hover:[-webkit-text-security:none] focus-within:[-webkit-text-security:none]">
+        <code className="block break-all rounded-none border border-border bg-canvas px-3 py-2 text-center font-mono text-[13px] text-fg select-all [-webkit-text-security:disc] hover:[-webkit-text-security:none] focus-within:[-webkit-text-security:none]">
           {token}
         </code>
         {copyError ? (
@@ -535,7 +554,7 @@ function ScopeSegmented({
   const inactiveHalf = "bg-canvas text-fgBody hover:bg-surfaceHover/60 hover:text-fg";
   return (
     <div
-      className="flex w-full flex-col overflow-hidden rounded-md border border-border sm:flex-row"
+      className="flex w-full flex-col overflow-hidden rounded-none border border-border sm:flex-row"
       role="radiogroup"
       aria-label="Token scope"
     >
@@ -586,7 +605,7 @@ type PermissionLevelTilesProps = {
 // pull" state.
 function PermissionLevelTiles({ level, readOnly = false, onChange }: PermissionLevelTilesProps) {
   const tile =
-    "group relative flex cursor-pointer flex-col gap-0.5 rounded-md border border-border bg-canvas px-3 py-2.5 transition-colors hover:border-fgMuted has-[:checked]:border-fgMuted has-[:checked]:bg-surfaceHover";
+    "group relative flex cursor-pointer flex-col gap-0.5 rounded-none border border-border bg-canvas px-3 py-2.5 transition-colors hover:border-fgMuted has-[:checked]:border-fgMuted has-[:checked]:bg-surfaceHover";
   return (
     <fieldset className="m-0 grid gap-2.5 border-0 p-0 sm:grid-cols-2">
       <legend className="sr-only">Permission level</legend>
@@ -636,7 +655,7 @@ type RepoTilesProps = {
 
 function RepoTiles({ repositories, selectedSlug, onChange }: RepoTilesProps) {
   const tile =
-    "group relative flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-canvas px-3 py-2 transition-colors hover:border-fgMuted has-[:checked]:border-fgMuted has-[:checked]:bg-surfaceHover";
+    "group relative flex cursor-pointer items-center justify-between gap-3 rounded-none border border-border bg-canvas px-3 py-2 transition-colors hover:border-fgMuted has-[:checked]:border-fgMuted has-[:checked]:bg-surfaceHover";
   return (
     <fieldset className="m-0 grid max-h-48 gap-1.5 overflow-y-auto border-0 p-0">
       <legend className="sr-only">Repository</legend>
@@ -690,14 +709,14 @@ function TokenRow({ token, onRevoke }: TokenRowProps) {
         </span>
       </div>
       {revoked ? (
-        <span className="shrink-0 rounded-md border border-border bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-fgMuted">
+        <span className="shrink-0 rounded-none border border-border bg-canvas px-1.5 py-0.5 text-[11px] font-medium text-fgMuted">
           revoked
         </span>
       ) : (
         <button
           type="button"
           onClick={() => void onRevoke(token.id)}
-          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-red-500/30 bg-transparent px-2 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/10"
+          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-none border border-red-500/30 bg-transparent px-2 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/10"
         >
           <Trash2 className="h-3 w-3" aria-hidden="true" />
           <span>Revoke</span>

@@ -50,7 +50,7 @@ async function renderUserSettingsView(
     summarizeTokens(db, tokenRows, c.env.DB),
     primaryNs
       ? getNamespaceProfileMeta(c.env.DB, primaryNs.id)
-      : Promise.resolve({ bio: "", location: "", website: "" }),
+      : Promise.resolve({ bio: "", location: "", website: "", commitEmail: "" }),
     listRepositoryMetaMap(
       c.env.DB,
       repositoryRows.map((row) => row.repository.id)
@@ -66,6 +66,7 @@ async function renderUserSettingsView(
       bio: profileMeta.bio,
       location: profileMeta.location,
       website: profileMeta.website,
+      commitEmail: profileMeta.commitEmail,
       viewerRole: viewer.role,
       isPrimaryAdmin: viewer.isPrimaryAdmin,
       hasPassword: viewer.hasPassword,

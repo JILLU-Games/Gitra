@@ -1,4 +1,5 @@
 import type { Logger } from "@/worker/common/logger";
+import { shouldAutoQueueBackgroundCompaction } from "@/worker/common/tier";
 import type { RepoStateSchema } from "../repoState";
 
 import { asTypedSyncStorage } from "../repoState";
@@ -138,7 +139,8 @@ export async function finalizeReceiveState(args: {
       kv.put("nextPackSeq", nextPackSeq + 1);
       const activeCatalog = listActivePackCatalogSync(db);
       bumpPacksetVersionSync(kv);
-      shouldQueueCompaction = catalogNeedsCompaction(activeCatalog);
+      shouldQueueCompaction =
+        catalogNeedsCompaction(activeCatalog) && shouldAutoQueueBackgroundCompaction(args.env);
       if (shouldQueueCompaction) {
         kv.put("compactionWantedAt", now);
       }

@@ -44,3 +44,23 @@ export function hasRepoTasksQueue(env: Pick<CloudflareTierEnv, "REPO_TASKS_QUEUE
 export function shouldAutoQueueBackgroundCompaction(env: CloudflareTierEnv): boolean {
   return hasRepoTasksQueue(env) && resolveCloudflareTier(env) === "paid";
 }
+
+/**
+ * Maximum source pack bytes and object count permitted for manual compaction
+ * when running on `CLOUDFLARE_TIER=free` (10ms CPU ceiling). Rewriting and
+ * re-indexing larger multi-pack sets on the Free tier risks Cloudflare
+ * Error 1102 (`Worker exceeded CPU time limit`).
+ */
+export const FREE_TIER_COMPACTION_MAX_BYTES = 4 * 1024 * 1024;
+export const FREE_TIER_COMPACTION_MAX_OBJECTS = 2_500;
+
+export function exceedsFreeTierCompactionBudget(
+  env: Pick<CloudflareTierEnv, "CLOUDFLARE_TIER">,
+  plan: { sourceBytes: number; sourceObjects: number }
+): boolean {
+  if (!isFreeCloudflareTier(env)) return false;
+  return (
+    plan.sourceBytes > FREE_TIER_COMPACTION_MAX_BYTES ||
+    plan.sourceObjects > FREE_TIER_COMPACTION_MAX_OBJECTS
+  );
+}

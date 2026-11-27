@@ -2,6 +2,7 @@ import { getRepoStub, isValidOid, json } from "@/worker/common";
 import { buildCacheKeyFrom, cacheDeleteJSON } from "@/worker/cache";
 import { sameOriginViolation } from "@/worker/auth/origin";
 import { findRepositoryById, touchRepositoryUpdatedAt } from "@/worker/db/d1/dal";
+import { isValidRefName } from "@/worker/git/operations/validation";
 import { type RepositoryRoute } from "@/worker/repositories/route";
 import { deleteRepoBranchCacheRecord } from "@/worker/repositories/routeCache";
 import { safeParseJsonRequest } from "@/shared/web";
@@ -13,6 +14,8 @@ import {
   AdminCompactionRequestSchema,
   AdminHeadPayloadSchema,
   AdminPurgeRequestSchema,
+  AdminRefCreateRequestSchema,
+  AdminRefDeleteRequestSchema,
   AdminRefsPayloadSchema,
 } from "./requestSchemas";
 
@@ -92,6 +95,16 @@ export function registerAdminRoutes(router: AppRouter) {
         c.executionCtx.waitUntil(queueTask);
       }
 
+      if (!dryRun && res.status === "rejected") {
+        log.warn("admin:compaction-request-rejected", {
+          reason: res.reason,
+          message: res.message,
+        });
+        return json({ ok: false, error: res.message, ...res }, 409, {
+          "Cache-Control": "no-cache",
+        });
+      }
+
       const status = dryRun || res.status !== "queued" ? 200 : 202;
       return json(res, status, { "Cache-Control": "no-cache" });
     } catch (e) {
@@ -161,6 +174,118 @@ export function registerAdminRoutes(router: AppRouter) {
     } catch (e) {
       log.error("admin:set-refs-failed", { error: String(e) });
       return json({ error: "Failed to update repository refs" }, 500);
+    }
+  });
+
+  router.post(`/:owner/:repo/admin/refs`, async (c) => {
+    const gate = await requireRepoAdmin(c);
+    if (gate.kind === "response") return gate.response;
+    const { route, limiter } = gate;
+    const log = c.var.logFor({ service: "AdminRoutes", repoId: route.doName });
+    const rawBody = await safeParseJsonRequest(c.req.raw);
+    const parsed = AdminRefCreateRequestSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return json({ ok: false, error: "Invalid ref payload" }, 400);
+    }
+
+    const prefix = parsed.data.kind === "tag" ? "refs/tags/" : "refs/heads/";
+    const strippedName = parsed.data.name
+      .replace(/^refs\/heads\//, "")
+      .replace(/^refs\/tags\//, "")
+      .replace(/^\/+|\/+$/g, "");
+    const fullRef = `${prefix}${strippedName}`;
+    if (!strippedName || !isValidRefName(fullRef)) {
+      return json({ ok: false, error: "Invalid branch or tag name" }, 400);
+    }
+
+    const stub = getRepoStub(c.env, route.doName);
+    try {
+      const headAndRefs = await limiter.run("do:admin-create-ref-read", () =>
+        stub.getHeadAndRefs()
+      );
+      if (headAndRefs.refs.some((r) => r.name === fullRef)) {
+        return json({ ok: false, error: `${fullRef} already exists` }, 409);
+      }
+
+      const sourceRaw = parsed.data.sourceRef.trim();
+      let resolvedOid: string | undefined;
+      if (sourceRaw === "HEAD" || !sourceRaw) {
+        const target = headAndRefs.head.target;
+        resolvedOid =
+          (target ? headAndRefs.refs.find((r) => r.name === target)?.oid : undefined) ??
+          headAndRefs.refs.find((r) => r.name.startsWith("refs/heads/"))?.oid ??
+          headAndRefs.refs[0]?.oid;
+      } else if (isValidOid(sourceRaw)) {
+        const oidLower = sourceRaw.toLowerCase();
+        const check = await limiter.run("do:admin-create-ref-check-oid", () =>
+          stub.debugCheckOid(oidLower)
+        );
+        if (check.presence.hasLoose || check.presence.hasR2Loose || check.inPacks.length > 0) {
+          resolvedOid = oidLower;
+        }
+      } else {
+        const exact = headAndRefs.refs.find((r) => r.name === sourceRaw);
+        const branchMatch = headAndRefs.refs.find((r) => r.name === `refs/heads/${sourceRaw}`);
+        const tagMatch = headAndRefs.refs.find((r) => r.name === `refs/tags/${sourceRaw}`);
+        resolvedOid = (exact ?? branchMatch ?? tagMatch)?.oid;
+      }
+
+      if (!resolvedOid) {
+        return json({ ok: false, error: "Source ref or commit was not found" }, 400);
+      }
+
+      const nextRefs = [...headAndRefs.refs, { name: fullRef, oid: resolvedOid }];
+      await limiter.run("do:admin-create-ref-write", () => stub.setRefs(nextRefs));
+      await invalidateRepoRefsAndBranchCache(c, route).catch((error) => {
+        log.warn("admin:invalidate-refs-cache-failed", { error: String(error) });
+      });
+      log.info("admin:create-ref-ok", { ref: fullRef, oid: resolvedOid });
+      return json({ ok: true, ref: fullRef, oid: resolvedOid }, 201);
+    } catch (e) {
+      log.error("admin:create-ref-failed", { ref: fullRef, error: String(e) });
+      return json({ ok: false, error: "Failed to create ref" }, 500);
+    }
+  });
+
+  router.delete(`/:owner/:repo/admin/refs`, async (c) => {
+    const gate = await requireRepoAdmin(c);
+    if (gate.kind === "response") return gate.response;
+    const { route, limiter } = gate;
+    const log = c.var.logFor({ service: "AdminRoutes", repoId: route.doName });
+    const rawBody = await safeParseJsonRequest(c.req.raw);
+    const parsed = AdminRefDeleteRequestSchema.safeParse(rawBody);
+    const queryName = c.req.query("name")?.trim() || "";
+    const targetName = (parsed.success && parsed.data.name) || queryName;
+    if (!targetName) {
+      return json({ ok: false, error: "Ref name is required" }, 400);
+    }
+
+    const stub = getRepoStub(c.env, route.doName);
+    try {
+      const headAndRefs = await limiter.run("do:admin-delete-ref-read", () =>
+        stub.getHeadAndRefs()
+      );
+      const matched =
+        headAndRefs.refs.find((r) => r.name === targetName) ??
+        headAndRefs.refs.find((r) => r.name === `refs/heads/${targetName}`) ??
+        headAndRefs.refs.find((r) => r.name === `refs/tags/${targetName}`);
+      if (!matched) {
+        return json({ ok: false, error: "Ref not found" }, 404);
+      }
+      if (headAndRefs.head.target && matched.name === headAndRefs.head.target) {
+        return json({ ok: false, error: "Cannot delete the default branch" }, 409);
+      }
+
+      const nextRefs = headAndRefs.refs.filter((r) => r.name !== matched.name);
+      await limiter.run("do:admin-delete-ref-write", () => stub.setRefs(nextRefs));
+      await invalidateRepoRefsAndBranchCache(c, route).catch((error) => {
+        log.warn("admin:invalidate-refs-cache-failed", { error: String(error) });
+      });
+      log.info("admin:delete-ref-ok", { ref: matched.name });
+      return json({ ok: true, deleted: matched.name });
+    } catch (e) {
+      log.error("admin:delete-ref-failed", { name: targetName, error: String(e) });
+      return json({ ok: false, error: "Failed to delete ref" }, 500);
     }
   });
 

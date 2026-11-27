@@ -20,7 +20,11 @@ export type AuthRateLimitDecision = {
 
 const localRateLimitStates = new Map<string, AuthRateLimitState>();
 
-function isWindowActive(state: AuthRateLimitState | null, nowMs: number, windowMs: number): boolean {
+function isWindowActive(
+  state: AuthRateLimitState | null,
+  nowMs: number,
+  windowMs: number
+): boolean {
   if (!state || !Number.isFinite(state.failures) || !Number.isFinite(state.windowStartedAt)) {
     return false;
   }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Check, Clipboard } from "lucide-react";
+import { copyToClipboard } from "@/client/components/ui";
 
 export function JsonResult({ data }: { data: unknown }) {
   const [copied, setCopied] = useState(false);
@@ -8,11 +9,14 @@ export function JsonResult({ data }: { data: unknown }) {
 
   async function copyJson() {
     setCopyError(false);
-    try {
-      await navigator.clipboard.writeText(serialized);
+    const ok = await copyToClipboard(serialized, {
+      label: "JSON payload",
+      successTitle: "JSON copied",
+    });
+    if (ok) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1200);
-    } catch {
+    } else {
       setCopied(false);
       setCopyError(true);
       window.setTimeout(() => setCopyError(false), 2000);
@@ -21,13 +25,13 @@ export function JsonResult({ data }: { data: unknown }) {
 
   return (
     <div className="relative mt-2">
-      <pre className="overflow-x-auto rounded-md border border-border bg-canvas p-3.5 pr-12 font-mono text-[12px] text-fgBody">
+      <pre className="overflow-x-auto rounded-none border border-border bg-canvas p-3.5 pr-12 font-mono text-[12px] text-fgBody">
         {serialized}
       </pre>
       <button
         type="button"
         onClick={() => void copyJson()}
-        className="absolute right-2 top-2 rounded border border-border bg-surface p-1.5 text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
+        className="absolute right-2 top-2 rounded-none border border-border bg-surface p-1.5 text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
         title={copied ? "Copied" : copyError ? "Copy failed" : "Copy JSON"}
         aria-label={copied ? "Copied JSON" : copyError ? "Copy JSON failed" : "Copy JSON"}
       >

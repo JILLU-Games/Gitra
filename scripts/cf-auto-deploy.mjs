@@ -24,6 +24,8 @@ import process from "node:process";
 
 import {
   buildGeneratedWranglerConfig,
+  buildSecretsUploadPayload,
+  buildWranglerDeployArgs,
   parseCliArgs,
   parseDotEnv,
   parseJsonc,
@@ -35,6 +37,7 @@ const ROOT_DIR = process.cwd();
 const TEMPLATE_CONFIG_PATH = path.join(ROOT_DIR, "wrangler.jsonc");
 const GENERATED_DIR = path.join(ROOT_DIR, ".wrangler");
 const GENERATED_CONFIG_PATH = path.join(GENERATED_DIR, "deploy.generated.jsonc");
+const GENERATED_SECRETS_PATH = path.join(GENERATED_DIR, "deploy.secrets.json");
 const CF_API_BASE = "https://api.cloudflare.com/client/v4";
 
 function printHelp() {
@@ -318,22 +321,6 @@ async function listWorkerSecretNames(token, accountId, workerName) {
   return new Set(items.map((item) => item?.name).filter(Boolean));
 }
 
-async function putWorkerSecret(token, accountId, workerName, name, value) {
-  const res = await cfRequest(
-    token,
-    "PUT",
-    `/accounts/${accountId}/workers/scripts/${encodeURIComponent(workerName)}/secrets`,
-    {
-      name,
-      text: value,
-      type: "secret_text",
-    }
-  );
-  if (!res.ok) {
-    throw new Error(`Failed to upload Worker secret "${name}": ${formatCfErrors(res)}`);
-  }
-}
-
 function runCommand(command, args, extraEnv = {}) {
   const bin = process.platform === "win32" && command === "npx" ? "npx.cmd" : command;
   const result = spawnSync(bin, args, {
@@ -400,11 +387,13 @@ async function main() {
     );
     console.log("3. Ephemeral config preview (.wrangler/deploy.generated.jsonc):");
     console.log(JSON.stringify(sampleGenerated, null, 2));
-    console.log("4. Would run remote D1 migrations, Vite production build, and Wrangler deploy");
-    console.log("5. Secret reconciliation preview (assuming first install):");
+    console.log("4. Secret reconciliation preview (planned before deploy on first install):");
     for (const item of samplePlan) {
       console.log(`   - ${item.name}: ${item.action} (${item.source})`);
     }
+    console.log(
+      "5. Would run remote D1 migrations, Vite production build, and atomic Wrangler deploy (--secrets-file)"
+    );
     console.log("\nDry run completed cleanly.");
     return;
   }
@@ -453,7 +442,36 @@ async function main() {
     WRANGLER_CONFIG: "./.wrangler/deploy.generated.jsonc",
   };
 
-  // Phase C: Apply D1 Migrations, Build Bundle, and Deploy Worker + Custom Domain
+  // Phase C: Reconcile Required & Optional Secrets Prior to Deployment
+  console.log("\n→ Planning Worker secrets prior to deployment...");
+  const existingSecrets = await listWorkerSecretNames(
+    deployConfig.apiToken,
+    accountId,
+    deployConfig.appName
+  );
+  const secretPlan = planSecretReconciliation({
+    existingRemoteSecretNames: existingSecrets,
+    envSecrets: deployConfig.envSecrets,
+    forceRotate: deployConfig.forceRotateSecrets,
+  });
+
+  const newlyGenerated = [];
+  for (const step of secretPlan) {
+    if (step.action === "keep") {
+      console.log(`✓ Secret ${step.name}: kept (${step.reason})`);
+      continue;
+    }
+    console.log(
+      `→ Secret ${step.name}: queued for atomic ${step.action === "rotate" ? "rotation" : "creation"} (${step.source})`
+    );
+    if (step.source === "generated") {
+      newlyGenerated.push(step.name);
+    }
+  }
+  const { payload: secretsPayload, count: secretsToUploadCount } =
+    buildSecretsUploadPayload(secretPlan);
+
+  // Phase D: Apply D1 Migrations, Build Bundle, and Deploy Worker + Secrets Atomically
   console.log("\n→ Applying remote D1 migrations...");
   runCommand(
     "npx",
@@ -474,40 +492,26 @@ async function main() {
   runCommand("npx", ["vite", "build"], cfChildEnv);
 
   console.log("\n→ Deploying Worker to Cloudflare...");
-  runCommand("npx", ["wrangler", "deploy"], cfChildEnv);
-
-  // Phase D: Non-Destructive Secret Reconciliation (Zero Credential Mismatch)
-  console.log("\n→ Reconciling Worker secrets...");
-  const existingSecrets = await listWorkerSecretNames(
-    deployConfig.apiToken,
-    accountId,
-    deployConfig.appName
-  );
-  const secretPlan = planSecretReconciliation({
-    existingRemoteSecretNames: existingSecrets,
-    envSecrets: deployConfig.envSecrets,
-    forceRotate: deployConfig.forceRotateSecrets,
-  });
-
-  const newlyGenerated = [];
-  for (const step of secretPlan) {
-    if (step.action === "keep") {
-      console.log(`✓ Secret ${step.name}: kept (${step.reason})`);
-      continue;
+  if (secretsToUploadCount > 0) {
+    fs.writeFileSync(GENERATED_SECRETS_PATH, `${JSON.stringify(secretsPayload, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    try {
+      runCommand(
+        "npx",
+        buildWranglerDeployArgs({
+          secretsFilePath: path.relative(ROOT_DIR, GENERATED_SECRETS_PATH),
+        }),
+        cfChildEnv
+      );
+    } finally {
+      fs.rmSync(GENERATED_SECRETS_PATH, { force: true });
     }
-    await putWorkerSecret(
-      deployConfig.apiToken,
-      accountId,
-      deployConfig.appName,
-      step.name,
-      step.value
-    );
-    console.log(
-      `✓ Secret ${step.name}: ${step.action === "rotate" ? "rotated" : "created"} (${step.source})`
-    );
-    if (step.source === "generated") {
-      newlyGenerated.push(step.name);
-    }
+    console.log(`✓ Deployed Worker with ${secretsToUploadCount} reconciled secret(s) attached.`);
+  } else {
+    fs.rmSync(GENERATED_SECRETS_PATH, { force: true });
+    runCommand("npx", buildWranglerDeployArgs(), cfChildEnv);
   }
 
   console.log("\n=== Deployment Complete ===");
@@ -519,7 +523,7 @@ async function main() {
   console.log(`Tier     : ${deployConfig.tier.toUpperCase()}`);
   if (newlyGenerated.length > 0) {
     console.log(
-      `Secrets  : Auto-generated on first install (${newlyGenerated.join(", ")}) and stored safely in Cloudflare. Future redeploys will keep them unchanged.`
+      `Secrets  : Auto-generated prior to first deploy (${newlyGenerated.join(", ")}) and uploaded atomically with the Worker. Future redeploys will keep them unchanged.`
     );
   } else {
     console.log("Secrets  : All existing Worker secrets preserved (zero credential mismatch).");

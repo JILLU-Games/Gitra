@@ -6,7 +6,11 @@
  * worker code, and then atomically commits the result via `commitCompactionState`.
  */
 import type { Logger } from "@/worker/common/logger";
-import { shouldAutoQueueBackgroundCompaction } from "@/worker/common/tier";
+import {
+  exceedsFreeTierCompactionBudget,
+  hasRepoTasksQueue,
+  shouldAutoQueueBackgroundCompaction,
+} from "@/worker/common/tier";
 import type { PackCatalogRow } from "../../db/schema";
 import type { RepoLease, RepoStateSchema } from "../../repoState";
 
@@ -31,7 +35,6 @@ import {
 import { activeLeaseOrUndefined } from "../activity";
 import {
   selectCompactionPlan,
-  catalogNeedsCompaction,
   scheduleCompactionWake,
   scheduleCompactionAlarm,
   rowsMatchForCommit,
@@ -101,6 +104,20 @@ export async function beginCompactionState(args: {
       status: "no_work",
       reason: "below-threshold",
       message: "The active pack catalog is already within the compaction policy.",
+    };
+  }
+
+  if (exceedsFreeTierCompactionBudget(args.env, plan)) {
+    await store.delete("compactionWantedAt");
+    args.logger?.warn("compaction:begin-blocked-free-tier-budget", {
+      sourceBytes: plan.sourceBytes,
+      sourceObjects: plan.sourceObjects,
+    });
+    return {
+      ok: false,
+      status: "no_work",
+      reason: "below-threshold",
+      message: "Compaction plan exceeds the Cloudflare Free tier CPU safety budget.",
     };
   }
 
@@ -228,7 +245,12 @@ export async function commitCompactionState(args: {
     const activeCatalog = listActivePackCatalogSync(db);
     const nextPackCatalogVersion = bumpPacksetVersionSync(kv);
 
-    const shouldRequeue = catalogNeedsCompaction(activeCatalog);
+    const nextPlan = selectCompactionPlan(activeCatalog);
+    const shouldRequeue = Boolean(
+      nextPlan &&
+      hasRepoTasksQueue(args.env) &&
+      !exceedsFreeTierCompactionBudget(args.env, nextPlan)
+    );
     if (shouldRequeue) {
       kv.put("compactionWantedAt", now);
     } else {
@@ -283,9 +305,27 @@ export async function rearmCompactionQueueFromAlarm(args: {
   if (activeLeaseOrUndefined(await store.get("compactLease"), now)) return false;
 
   const doId = args.ctx.id.toString();
-  if (!shouldAutoQueueBackgroundCompaction(args.env)) {
-    args.logger?.debug("compaction:alarm-rearm-skipped-tier", { doId });
+  if (!hasRepoTasksQueue(args.env)) {
+    await store.delete("compactionWantedAt");
+    args.logger?.debug("compaction:alarm-rearm-skipped-no-queue", { doId });
     return false;
+  }
+
+  // On Free tier, automatic post-push compaction does not set compactionWantedAt,
+  // so a recorded compactionWantedAt is an explicit manual request. Verify it still
+  // fits the Free-tier CPU safety budget before re-arming the queue consumer.
+  if (!shouldAutoQueueBackgroundCompaction(args.env)) {
+    const activeCatalog = await getActivePackCatalogSnapshot(args.ctx);
+    const plan = selectCompactionPlan(activeCatalog);
+    if (plan && exceedsFreeTierCompactionBudget(args.env, plan)) {
+      await store.delete("compactionWantedAt");
+      args.logger?.warn("compaction:alarm-rearm-blocked-free-tier-budget", {
+        doId,
+        sourceBytes: plan.sourceBytes,
+        sourceObjects: plan.sourceObjects,
+      });
+      return false;
+    }
   }
 
   try {

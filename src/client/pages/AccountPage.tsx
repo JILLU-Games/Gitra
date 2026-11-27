@@ -37,6 +37,7 @@ export type AccountPageProps = {
   bio?: string;
   location?: string;
   website?: string;
+  commitEmail?: string;
   viewerRole?: DirectoryRole;
   isPrimaryAdmin?: boolean;
   hasPassword?: boolean;
@@ -86,6 +87,7 @@ export function AccountPage({
   bio = "",
   location = "",
   website = "",
+  commitEmail = "",
   viewerRole = "member",
   isPrimaryAdmin = false,
   hasPassword = false,
@@ -127,7 +129,7 @@ export function AccountPage({
             <div className="flex shrink-0 flex-wrap items-center gap-1.5">
               <a
                 href={buildNamespaceProfileHref(primaryNamespaceSlug)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-canvas px-3 text-[12px] font-medium whitespace-nowrap text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
+                className="inline-flex h-8 items-center gap-1.5 rounded-none border border-border bg-canvas px-3 text-[12px] font-medium whitespace-nowrap text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
               >
                 <span>Public profile</span>
                 <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -138,7 +140,7 @@ export function AccountPage({
 
         {/* Identity / Profile Summary Card */}
         {showProfileCard ? (
-          <section className="rounded-md border border-border bg-surface">
+          <section className="rounded-none border border-border bg-surface">
             <div className="border-b border-border px-4 py-2.5 text-[13px] font-semibold text-fg">
               Identity
             </div>
@@ -180,6 +182,7 @@ export function AccountPage({
               initialBio: bio,
               initialLocation: location,
               initialWebsite: website,
+              initialCommitEmail: commitEmail,
             }}
           >
             <ProfileSettingsIsland
@@ -188,6 +191,7 @@ export function AccountPage({
               initialBio={bio}
               initialLocation={location}
               initialWebsite={website}
+              initialCommitEmail={commitEmail}
             />
           </IslandHost>
         ) : null}
@@ -197,7 +201,7 @@ export function AccountPage({
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <a
               href="/user/account"
-              className="block rounded-md border border-border bg-surface p-3.5 no-underline transition-colors hover:bg-surfaceHover/50"
+              className="block rounded-none border border-border bg-surface p-3.5 no-underline transition-colors hover:bg-surfaceHover/50"
             >
               <div className="flex items-center justify-between text-[13px] font-medium text-fg">
                 <span>Repositories</span>
@@ -209,7 +213,7 @@ export function AccountPage({
             </a>
             <a
               href="/user/settings/tokens"
-              className="block rounded-md border border-border bg-surface p-3.5 no-underline transition-colors hover:bg-surfaceHover/50"
+              className="block rounded-none border border-border bg-surface p-3.5 no-underline transition-colors hover:bg-surfaceHover/50"
             >
               <div className="flex items-center justify-between text-[13px] font-medium text-fg">
                 <span>Access Tokens</span>
@@ -221,7 +225,7 @@ export function AccountPage({
             </a>
             <a
               href="/user/settings/security"
-              className="block rounded-md border border-border bg-surface p-3.5 no-underline transition-colors hover:bg-surfaceHover/50"
+              className="block rounded-none border border-border bg-surface p-3.5 no-underline transition-colors hover:bg-surfaceHover/50"
             >
               <div className="flex items-center justify-between text-[13px] font-medium text-fg">
                 <span>Security</span>
@@ -254,7 +258,7 @@ export function AccountPage({
                   <a
                     key={ns.id}
                     href={buildNamespaceProfileHref(ns.slug)}
-                    className="inline-flex items-center rounded border border-border bg-canvas px-2.5 py-1 font-mono text-[12px] text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
+                    className="inline-flex items-center rounded-none border border-border bg-canvas px-2.5 py-1 font-mono text-[12px] text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
                   >
                     @{ns.slug}
                   </a>

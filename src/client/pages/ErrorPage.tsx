@@ -14,7 +14,7 @@ export function ErrorPage({ message, stack, owner, repo, refEnc, path }: ErrorPa
   return (
     <div className="mx-auto max-w-lg space-y-5 py-10">
       <div className="flex flex-col items-center gap-3 text-center">
-        <span className="inline-grid h-10 w-10 place-items-center rounded-md border border-red-500/30 bg-red-500/10">
+        <span className="inline-grid h-10 w-10 place-items-center rounded-none border border-red-500/30 bg-red-500/10">
           <TriangleAlert className="h-5 w-5 text-red-400" aria-hidden="true" />
         </span>
         <div>
@@ -28,11 +28,11 @@ export function ErrorPage({ message, stack, owner, repo, refEnc, path }: ErrorPa
         </div>
       </div>
       {stack ? (
-        <details className="rounded-md border border-border bg-surface p-3.5 text-[12px]">
+        <details className="rounded-none border border-border bg-surface p-3.5 text-[12px]">
           <summary className="cursor-pointer font-medium text-fgBody select-none">
             Stack trace
           </summary>
-          <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-md border border-border bg-canvas p-3 font-mono text-[11px] text-fg">
+          <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-none border border-border bg-canvas p-3 font-mono text-[11px] text-fg">
             {stack}
           </pre>
         </details>

@@ -8,9 +8,22 @@
 
 @theme {
   --default-transition-duration: 75ms;
-  --font-sans: "Segoe UI", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+  --radius: 0rem;
+  --radius-none: 0rem;
+  --radius-xs: 0rem;
+  --radius-sm: 0rem;
+  --radius-md: 0rem;
+  --radius-lg: 0rem;
+  --radius-xl: 0rem;
+  --radius-2xl: 0rem;
+  --radius-3xl: 0rem;
+  --font-sans:
+    "Segoe UI", "Segoe UI Web", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue",
+    Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-display: "Segoe UI", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+  --font-display:
+    "Segoe UI", "Segoe UI Web", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue",
+    Helvetica, Arial, sans-serif;
 
   /* SSOT Neutral Charcoal tokens from index.html (Dark defaults; overridden in html:not(.dark)) */
   --color-canvas: #09090b;
@@ -161,8 +174,11 @@
     color: var(--color-fg);
     font-family:
       "Segoe UI",
+      "Segoe UI Web",
+      system-ui,
       -apple-system,
       BlinkMacSystemFont,
+      "Helvetica Neue",
       Helvetica,
       Arial,
       sans-serif;
@@ -217,7 +233,7 @@
 
   ::-webkit-scrollbar-thumb {
     background: #27272a;
-    border-radius: 4px;
+    border-radius: 0;
   }
 
   ::-webkit-scrollbar-thumb:hover {
@@ -249,11 +265,11 @@
   }
 
   pre {
-    @apply overflow-x-auto rounded-md border border-border bg-canvas p-3 text-[12px];
+    @apply overflow-x-auto rounded-none border border-border bg-canvas p-3 text-[12px];
   }
 
   code {
-    @apply rounded-sm bg-canvas px-1.5 py-0.5 font-mono text-[12px] text-fg;
+    @apply rounded-none bg-canvas px-1.5 py-0.5 font-mono text-[12px] text-fg;
   }
 
   pre code {
@@ -337,7 +353,7 @@
   }
 
   .markdown-compact .markdown-content pre {
-    @apply rounded-md p-3;
+    @apply rounded-none p-3;
   }
 
   .markdown-content ul,
@@ -362,7 +378,7 @@
   }
 
   .markdown-content pre {
-    @apply overflow-x-auto rounded-md border border-border bg-canvas p-3;
+    @apply overflow-x-auto rounded-none border border-border bg-canvas p-3;
   }
 
   .markdown-content pre code,
@@ -636,7 +652,7 @@
 
 @layer components {
   .diff-viewer {
-    @apply rounded-md border border-border bg-surface;
+    @apply rounded-none border border-border bg-surface;
     overflow: hidden;
   }
 
@@ -662,7 +678,7 @@
   }
 
   .diff-compare-label {
-    @apply rounded-md border border-border bg-canvas px-2 py-0.5 text-[12px] font-medium text-fgBody;
+    @apply rounded-none border border-border bg-canvas px-2 py-0.5 text-[12px] font-medium text-fgBody;
   }
 
   /* File list */
@@ -697,7 +713,7 @@
 
   /* Badges */
   .diff-badge {
-    @apply inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-sm text-[11px] font-semibold;
+    @apply inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-none text-[11px] font-semibold;
   }
 
   .diff-badge-add {
@@ -714,7 +730,7 @@
 
   /* Toggle button */
   .diff-toggle-btn {
-    @apply inline-flex h-7 flex-shrink-0 items-center gap-1.5 rounded-md border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg;
+    @apply inline-flex h-7 flex-shrink-0 items-center gap-1.5 rounded-none border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg;
   }
 
   .diff-toggle-btn.active {

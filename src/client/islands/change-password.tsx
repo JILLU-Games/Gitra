@@ -9,6 +9,7 @@ import {
   validateUserPassword,
 } from "@/shared/admin/panel";
 import { hydrateIsland } from "@/client/hydrate";
+import { Button, ErrorBanner, inputClasses, showToast } from "@/client/components/ui";
 
 export type ChangePasswordIslandProps = {
   isPrimaryAdmin: boolean;
@@ -64,7 +65,7 @@ export function ChangePasswordIsland({
 
   if (isPrimaryAdmin && passwordManagedByEnv) {
     return (
-      <div className="flex items-start gap-2.5 rounded-md border border-border bg-surface px-4 py-3 text-[12px] text-fgBody">
+      <div className="flex items-start gap-2.5 rounded-none border border-border bg-surface px-4 py-3 text-[12px] text-fgBody">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-fgMuted" aria-hidden="true" />
         <div>
           <p className="m-0 font-semibold text-fg">Managed by environment configuration</p>
@@ -80,7 +81,7 @@ export function ChangePasswordIsland({
 
   if (!hasPassword) {
     return (
-      <div className="flex items-start gap-2.5 rounded-md border border-border bg-surface px-4 py-3 text-[12px] text-fgBody">
+      <div className="flex items-start gap-2.5 rounded-none border border-border bg-surface px-4 py-3 text-[12px] text-fgBody">
         <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-fgMuted" aria-hidden="true" />
         <p className="m-0 leading-relaxed">
           No local password is set for this account yet. Ask an administrator to assign an initial
@@ -136,22 +137,31 @@ export function ChangePasswordIsland({
         reason?: string;
       };
       if (!res.ok || !body.ok) {
-        setError(describeChangePasswordError(body.reason));
+        const msg = describeChangePasswordError(body.reason);
+        setError(msg);
+        showToast({ tone: "error", title: "Password update failed", message: msg });
         return;
       }
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
       setSaved(true);
+      showToast({
+        tone: "success",
+        title: "Password updated",
+        message: "Use your new password the next time you sign in.",
+      });
     } catch {
-      setError("Network error while updating password.");
+      const msg = "Network error while updating password.";
+      setError(msg);
+      showToast({ tone: "error", title: "Password update failed", message: msg });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="rounded-md border border-border bg-surface p-4">
+    <div className="rounded-none border border-border bg-surface p-4">
       <form onSubmit={handleSubmit} className="space-y-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -160,10 +170,11 @@ export function ChangePasswordIsland({
               Update your sign-in password ({PASSWORD_MIN_LENGTH}–{PASSWORD_MAX_LENGTH} characters).
             </p>
           </div>
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => setShowPasswords((prev) => !prev)}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
           >
             {showPasswords ? (
               <>
@@ -176,22 +187,15 @@ export function ChangePasswordIsland({
                 <span>Show</span>
               </>
             )}
-          </button>
+          </Button>
         </div>
 
-        {error ? (
-          <div
-            role="alert"
-            className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-          >
-            {error}
-          </div>
-        ) : null}
+        {error ? <ErrorBanner className="px-3 py-2 text-[12px]">{error}</ErrorBanner> : null}
 
         {saved ? (
           <div
             role="status"
-            className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300"
+            className="flex items-center gap-2 rounded-none border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300"
           >
             <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>Password updated. Use your new password the next time you sign in.</span>
@@ -214,7 +218,7 @@ export function ChangePasswordIsland({
               disabled={busy}
               autoComplete="current-password"
               required
-              className="h-8 w-full rounded-md border border-border bg-canvas px-3 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-60"
+              className={`${inputClasses} font-mono`}
             />
           </div>
 
@@ -235,7 +239,7 @@ export function ChangePasswordIsland({
               minLength={PASSWORD_MIN_LENGTH}
               maxLength={PASSWORD_MAX_LENGTH}
               required
-              className="h-8 w-full rounded-md border border-border bg-canvas px-3 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-60"
+              className={`${inputClasses} font-mono`}
             />
           </div>
 
@@ -256,20 +260,16 @@ export function ChangePasswordIsland({
               minLength={PASSWORD_MIN_LENGTH}
               maxLength={PASSWORD_MAX_LENGTH}
               required
-              className="h-8 w-full rounded-md border border-border bg-canvas px-3 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-60"
+              className={`${inputClasses} font-mono`}
             />
           </div>
         </div>
 
         <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={busy}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas transition-colors hover:bg-fgHover disabled:opacity-50"
-          >
+          <Button type="submit" variant="primary" size="md" disabled={busy}>
             <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
             <span>{busy ? "Updating..." : "Update password"}</span>
-          </button>
+          </Button>
         </div>
       </form>
     </div>

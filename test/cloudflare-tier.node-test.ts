@@ -4,6 +4,9 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  exceedsFreeTierCompactionBudget,
+  FREE_TIER_COMPACTION_MAX_BYTES,
+  FREE_TIER_COMPACTION_MAX_OBJECTS,
   hasRepoTasksQueue,
   isFreeCloudflareTier,
   resolveCloudflareTier,
@@ -54,6 +57,43 @@ test("shouldAutoQueueBackgroundCompaction only enables on paid tier with queue b
   assert.equal(
     shouldAutoQueueBackgroundCompaction({ CLOUDFLARE_TIER: "paid", REPO_TASKS_QUEUE: mockQueue }),
     true
+  );
+});
+
+test("exceedsFreeTierCompactionBudget enforces byte and object safety ceilings only on free tier", () => {
+  assert.equal(
+    exceedsFreeTierCompactionBudget(
+      { CLOUDFLARE_TIER: "free" },
+      {
+        sourceBytes: FREE_TIER_COMPACTION_MAX_BYTES,
+        sourceObjects: FREE_TIER_COMPACTION_MAX_OBJECTS,
+      }
+    ),
+    false
+  );
+  assert.equal(
+    exceedsFreeTierCompactionBudget(
+      { CLOUDFLARE_TIER: "free" },
+      { sourceBytes: FREE_TIER_COMPACTION_MAX_BYTES + 1, sourceObjects: 10 }
+    ),
+    true
+  );
+  assert.equal(
+    exceedsFreeTierCompactionBudget(
+      { CLOUDFLARE_TIER: "free" },
+      { sourceBytes: 1024, sourceObjects: FREE_TIER_COMPACTION_MAX_OBJECTS + 1 }
+    ),
+    true
+  );
+  assert.equal(
+    exceedsFreeTierCompactionBudget(
+      { CLOUDFLARE_TIER: "paid" },
+      {
+        sourceBytes: FREE_TIER_COMPACTION_MAX_BYTES * 10,
+        sourceObjects: FREE_TIER_COMPACTION_MAX_OBJECTS * 10,
+      }
+    ),
+    false
   );
 });
 

@@ -103,6 +103,7 @@ const BOOTSTRAP_STATEMENTS: readonly string[] = [
     bio text NOT NULL DEFAULT '',
     location text NOT NULL DEFAULT '',
     website text NOT NULL DEFAULT '',
+    commit_email text NOT NULL DEFAULT '',
     updated_at integer NOT NULL,
     FOREIGN KEY (namespace_id) REFERENCES namespaces(id) ON UPDATE no action ON DELETE cascade
   )`,
@@ -133,6 +134,7 @@ const BOOTSTRAP_STATEMENTS: readonly string[] = [
   `INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0000_gray_supernaut.sql')`,
   `INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0001_outgoing_vin_gonzales.sql')`,
   `INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0002_curvy_skreet.sql')`,
+  `INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0003_chief_stellaris.sql')`,
 ];
 
 const ensuredDatabases = new WeakMap<D1Database, Promise<void>>();
@@ -167,6 +169,23 @@ async function runSchemaCheck(db: D1Database): Promise<void> {
           `ALTER TABLE namespace_directory_meta ADD COLUMN session_epoch integer NOT NULL DEFAULT 1`
         ),
         db.prepare(`INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0002_curvy_skreet.sql')`),
+      ]);
+    }
+    const emailCol = await db
+      .prepare(
+        `SELECT COUNT(*) AS hasCol
+         FROM pragma_table_info('namespace_profile_meta')
+         WHERE name = 'commit_email'`
+      )
+      .first<{ hasCol: number }>();
+    if (emailCol && emailCol.hasCol === 0) {
+      await db.batch([
+        db.prepare(
+          `ALTER TABLE namespace_profile_meta ADD COLUMN commit_email text NOT NULL DEFAULT ''`
+        ),
+        db.prepare(
+          `INSERT OR IGNORE INTO "d1_migrations" (name) VALUES ('0003_chief_stellaris.sql')`
+        ),
       ]);
     }
     return;

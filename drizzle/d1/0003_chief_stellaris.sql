@@ -1,0 +1,1 @@
+ALTER TABLE `namespace_profile_meta` ADD `commit_email` text DEFAULT '' NOT NULL;

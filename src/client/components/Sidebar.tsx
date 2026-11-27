@@ -31,7 +31,7 @@ const ADMIN_ITEMS: readonly NavItem[] = [
 
 function navItemClasses(active: boolean): string {
   return [
-    "sidebar-nav-link flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[12px] font-medium no-underline transition-colors",
+    "sidebar-nav-link flex items-center gap-2 rounded-none border px-2.5 py-1.5 text-[12px] font-medium no-underline transition-colors",
     active
       ? "border-border bg-surfaceHover text-fg"
       : "border-transparent text-fgBody hover:bg-surfaceHover/60 hover:text-fg",
@@ -115,10 +115,10 @@ function SidebarNavList({
       </div>
 
       <div className="sidebar-footer-expanded border-t border-border pt-2.5">
-        <div className="rounded-md border border-border bg-canvas px-2.5 py-2">
+        <div className="rounded-none border border-border bg-canvas px-2.5 py-2">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate font-mono text-[12px] font-medium text-fg">{handle}</span>
-            <span className="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase text-fgMuted">
+            <span className="rounded-none border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase text-fgMuted">
               {viewer.role}
             </span>
           </div>
@@ -177,7 +177,7 @@ export function Sidebar({ currentView, viewer }: SidebarProps) {
               type="button"
               data-sidebar-close
               aria-label="Close navigation menu"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-fgMuted hover:bg-surfaceHover hover:text-fg"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-none border border-border text-fgMuted hover:bg-surfaceHover hover:text-fg"
             >
               <X className="h-4 w-4" aria-hidden="true" />
             </button>

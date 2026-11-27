@@ -4,6 +4,13 @@ import { useState, type FormEvent } from "react";
 import { ArrowUpRight, Check, Eye, FileText, Pencil, Sparkles } from "lucide-react";
 
 import { MarkdownContent } from "@/client/components/MarkdownContent";
+import {
+  Button,
+  ErrorBanner,
+  inputClasses,
+  showToast,
+  textareaClasses,
+} from "@/client/components/ui";
 import { hydrateIsland } from "@/client/hydrate";
 import { buildDefaultProfileReadmeTemplate, buildNamespaceProfileHref } from "@/shared/admin/panel";
 
@@ -68,19 +75,27 @@ export function ProfileReadmeEditorIsland({
       const body = (await response.json().catch(() => null)) as SaveProfileReadmeResponse | null;
       if (!response.ok || !body || !body.ok) {
         const reason = body && !body.ok ? body.reason : `HTTP ${response.status}`;
-        setError(
+        const msg =
           reason === "viewer-read-only"
             ? "Viewer accounts cannot commit repository changes."
             : reason === "repo-busy"
               ? "Repository is busy with another receive. Try again in a moment."
-              : `Could not commit profile/README.md (${reason}).`
-        );
+              : `Could not commit profile/README.md (${reason}).`;
+        setError(msg);
+        showToast({ tone: "error", title: "Could not commit profile README", message: msg });
         return;
       }
       setSavedCommitOid(body.commitOid);
       setSavedUnchanged(body.unchanged);
+      showToast({
+        tone: body.unchanged ? "info" : "success",
+        title: body.unchanged ? "No changes to commit" : "Profile README committed",
+        message: body.unchanged ? undefined : `Commit ${body.commitOid.slice(0, 7)}`,
+      });
     } catch {
-      setError("Network error while committing profile/README.md.");
+      const msg = "Network error while committing profile/README.md.";
+      setError(msg);
+      showToast({ tone: "error", title: "Could not commit profile README", message: msg });
     } finally {
       setSaving(false);
     }
@@ -89,7 +104,7 @@ export function ProfileReadmeEditorIsland({
   return (
     <section
       aria-label="Namespace profile README editor"
-      className="rounded-md border border-border bg-surface"
+      className="rounded-none border border-border bg-surface"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-borderSubtle px-3.5 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
@@ -97,7 +112,7 @@ export function ProfileReadmeEditorIsland({
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 font-mono text-[12px] font-semibold text-fg">
               <span>{initialPath || "profile/README.md"}</span>
-              <span className="rounded border border-borderSubtle bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-fgBody">
+              <span className="rounded-none border border-borderSubtle bg-canvas px-1.5 py-0.5 text-[10px] font-medium text-fgBody">
                 @{owner} profile
               </span>
             </div>
@@ -115,14 +130,14 @@ export function ProfileReadmeEditorIsland({
           <div
             role="tablist"
             aria-label="Profile README editor mode"
-            className="inline-flex rounded-md border border-border bg-canvas p-0.5"
+            className="inline-flex rounded-none border border-border bg-canvas p-0.5"
           >
             <button
               type="button"
               role="tab"
               aria-selected={tab === "write"}
               onClick={() => setTab("write")}
-              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[12px] font-medium transition-colors ${
+              className={`inline-flex items-center gap-1 rounded-none px-2 py-1 text-[12px] font-medium transition-colors ${
                 tab === "write" ? "bg-surfaceHover text-fg" : "text-fgMuted hover:text-fg"
               }`}
             >
@@ -134,7 +149,7 @@ export function ProfileReadmeEditorIsland({
               role="tab"
               aria-selected={tab === "preview"}
               onClick={() => setTab("preview")}
-              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[12px] font-medium transition-colors ${
+              className={`inline-flex items-center gap-1 rounded-none px-2 py-1 text-[12px] font-medium transition-colors ${
                 tab === "preview" ? "bg-surfaceHover text-fg" : "text-fgMuted hover:text-fg"
               }`}
             >
@@ -145,7 +160,7 @@ export function ProfileReadmeEditorIsland({
 
           <a
             href={profileHref}
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-canvas px-2 text-[12px] font-medium text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
+            className="inline-flex h-7 items-center gap-1 rounded-none border border-border bg-canvas px-2 text-[12px] font-medium text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
           >
             <span>View profile</span>
             <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
@@ -154,19 +169,12 @@ export function ProfileReadmeEditorIsland({
       </div>
 
       <form onSubmit={handleSave} className="space-y-3 p-3.5">
-        {error ? (
-          <div
-            role="alert"
-            className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-          >
-            {error}
-          </div>
-        ) : null}
+        {error ? <ErrorBanner className="px-3 py-2 text-[12px]">{error}</ErrorBanner> : null}
 
         {savedCommitOid ? (
           <div
             role="status"
-            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-none border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300"
           >
             <span className="inline-flex items-center gap-1.5">
               <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
@@ -191,7 +199,7 @@ export function ProfileReadmeEditorIsland({
               <button
                 type="button"
                 onClick={() => setContent(buildDefaultProfileReadmeTemplate(owner, displayName))}
-                className="inline-flex items-center gap-1 rounded border border-border bg-canvas px-2 py-0.5 text-[11px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
+                className="inline-flex items-center gap-1 rounded-none border border-border bg-canvas px-2 py-0.5 text-[11px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
               >
                 <Sparkles className="h-3 w-3" aria-hidden="true" />
                 <span>Reset template</span>
@@ -205,11 +213,11 @@ export function ProfileReadmeEditorIsland({
               spellCheck={false}
               disabled={saving}
               placeholder="# Organization / User Profile"
-              className="w-full rounded-md border border-border bg-canvas p-3 font-mono text-[12px] leading-5 text-fg focus:border-fgMuted focus:outline-none"
+              className={`${textareaClasses} p-3 font-mono text-[12px] leading-5`}
             />
           </div>
         ) : (
-          <div className="rounded-md border border-border bg-canvas p-4">
+          <div className="rounded-none border border-border bg-canvas p-4">
             {content.trim() ? (
               <div className="markdown-compact">
                 <MarkdownContent
@@ -235,17 +243,13 @@ export function ProfileReadmeEditorIsland({
               onChange={(event) => setCommitMessage(event.target.value)}
               disabled={saving}
               placeholder="Update profile/README.md"
-              className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+              className={inputClasses}
             />
           </div>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
-          >
+          <Button type="submit" variant="primary" size="md" disabled={saving} className="shrink-0">
             <Check className="h-3.5 w-3.5" aria-hidden="true" />
             <span>{saving ? "Committing…" : "Save & commit"}</span>
-          </button>
+          </Button>
         </div>
       </form>
     </section>

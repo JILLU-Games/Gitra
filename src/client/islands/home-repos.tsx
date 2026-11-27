@@ -32,6 +32,7 @@ import {
 } from "@/shared/branding";
 import { PROFILE_README_PATH, PROFILE_REPO_SLUG } from "@/shared/slugs";
 import { formatRelativeTime } from "@/shared/web";
+import { copyToClipboard, ErrorBanner, showToast } from "@/client/components/ui";
 import { hydrateIsland } from "@/client/hydrate";
 
 export type PublicNamespaceItem = {
@@ -97,29 +98,11 @@ const LANGUAGE_COLORS: Record<string, string> = {
 };
 
 function resolveRepoLanguage(repo: HomeRepositoryItem): { name: string; color: string } | null {
-  if (repo.language) {
-    return {
-      name: repo.language,
-      color: repo.langColor ?? LANGUAGE_COLORS[repo.language] ?? "#a1a1aa",
-    };
-  }
-  const text = `${repo.slug} ${repo.description ?? ""}`;
-  if (/\btypescript\b|\bworker\b|\btsx\b/i.test(text)) {
-    return { name: "TypeScript", color: LANGUAGE_COLORS.TypeScript! };
-  }
-  if (/\bpython\b/i.test(text)) {
-    return { name: "Python", color: LANGUAGE_COLORS.Python! };
-  }
-  if (/\brust\b/i.test(text)) {
-    return { name: "Rust", color: LANGUAGE_COLORS.Rust! };
-  }
-  if (/\bgolang\b|\bgo\b/i.test(text)) {
-    return { name: "Go", color: LANGUAGE_COLORS.Go! };
-  }
-  if (/\bjavascript\b|\bnode\b/i.test(text)) {
-    return { name: "JavaScript", color: LANGUAGE_COLORS.JavaScript! };
-  }
-  return null;
+  if (!repo.language) return null;
+  return {
+    name: repo.language,
+    color: repo.langColor ?? LANGUAGE_COLORS[repo.language] ?? "#a1a1aa",
+  };
 }
 
 export function HomeReposIsland({
@@ -209,11 +192,7 @@ export function HomeReposIsland({
       const lang = resolveRepoLanguage(repo);
       if (lang) set.add(lang.name);
     }
-    if (set.size === 0) {
-      set.add("TypeScript");
-      set.add("Python");
-    }
-    return Array.from(set);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [sourceList]);
 
   const teamFilterItems = useMemo(() => {
@@ -316,14 +295,16 @@ export function HomeReposIsland({
   async function handleCopyClone(repo: HomeRepositoryItem) {
     const baseOrigin = typeof window !== "undefined" ? window.location.origin : origin;
     const url = buildGitCloneUrl(baseOrigin, repo.namespaceSlug, repo.slug);
-    try {
-      await navigator.clipboard.writeText(url);
+    const copied = await copyToClipboard(url, {
+      label: "clone URL",
+      successTitle: "Clone URL copied",
+      successMessage: url,
+    });
+    if (copied) {
       setCopiedId(repo.id);
       window.setTimeout(() => {
         setCopiedId((current) => (current === repo.id ? null : current));
       }, 1300);
-    } catch {
-      // Clipboard API unavailable in restricted contexts; ignore silently.
     }
   }
 
@@ -357,13 +338,14 @@ export function HomeReposIsland({
       const body = (await response.json().catch(() => null)) as CreateRepoResponse | null;
       if (!response.ok || !body || !body.ok) {
         const reason = body && !body.ok ? body.reason : `HTTP ${response.status}`;
-        setCreateError(
+        const msg =
           reason === "slug-taken"
             ? "A repository with that slug already exists in this namespace."
             : reason === "invalid-slug"
               ? "Use lowercase letters, digits, hyphens/dots, or .vibtools (1–40 chars)."
-              : `Could not create repository (${reason}).`
-        );
+              : `Could not create repository (${reason}).`;
+        setCreateError(msg);
+        showToast({ tone: "error", title: "Could not create repository", message: msg });
         return;
       }
       setRepositories((prev) =>
@@ -386,8 +368,15 @@ export function HomeReposIsland({
       setNewDescription("");
       setInitReadme(false);
       setShowCreate(false);
+      showToast({
+        tone: "success",
+        title: "Repository created",
+        message: `${body.namespaceSlug}/${body.slug}`,
+      });
     } catch (error) {
-      setCreateError(String(error));
+      const msg = String(error);
+      setCreateError(msg);
+      showToast({ tone: "error", title: "Could not create repository", message: msg });
     } finally {
       setCreating(false);
     }
@@ -416,7 +405,7 @@ export function HomeReposIsland({
                   return (
                     <article
                       key={`featured-${repo.id}`}
-                      className="bg-surface border border-border hover:border-borderHover rounded-md p-4 flex flex-col justify-between gap-3.5 transition-colors"
+                      className="bg-surface border border-border hover:border-borderHover rounded-none p-4 flex flex-col justify-between gap-3.5 transition-colors"
                     >
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between gap-2">
@@ -436,8 +425,9 @@ export function HomeReposIsland({
                           </span>
                         </div>
                         <p className="m-0 text-[13px] text-fgBody line-clamp-2">
-                          {repo.description ||
-                            "Official open-source repository published by Vib Tools."}
+                          {repo.description || (
+                            <span className="italic text-fgMuted">No description provided.</span>
+                          )}
                         </p>
                       </div>
 
@@ -503,7 +493,7 @@ export function HomeReposIsland({
               </div>
             </div>
 
-            <div className="bg-surface border border-border rounded-md overflow-hidden">
+            <div className="bg-surface border border-border rounded-none overflow-hidden">
               {/* Toolbar: Search + Dropdowns */}
               <div className="p-3 border-b border-borderSubtle flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <div className="relative flex-1">
@@ -526,7 +516,7 @@ export function HomeReposIsland({
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="Search repositories, topics, or descriptions..."
                     aria-label="Search repositories"
-                    className="w-full h-8 pl-8 pr-7 rounded-md bg-canvas border border-border text-[13px] text-fg placeholder:text-fgMuted focus:outline-none focus:border-fgMuted"
+                    className="w-full h-8 pl-8 pr-7 rounded-none bg-canvas border border-border text-[13px] text-fg placeholder:text-fgMuted focus:outline-none focus:border-fgMuted"
                   />
                   <kbd className="hidden sm:inline-block absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-mono text-fgMuted">
                     /
@@ -539,7 +529,7 @@ export function HomeReposIsland({
                     aria-label="Filter by language"
                     value={languageFilter}
                     onChange={(event) => setLanguageFilter(event.target.value)}
-                    className="h-8 px-2.5 rounded-md bg-canvas hover:bg-surfaceHover border border-border text-[12px] text-fgBody focus:outline-none focus:border-fgMuted cursor-pointer"
+                    className="h-8 px-2.5 rounded-none bg-canvas hover:bg-surfaceHover border border-border text-[12px] text-fgBody focus:outline-none focus:border-fgMuted cursor-pointer"
                   >
                     <option value="all">Language: All</option>
                     {availableLanguages.map((lang) => (
@@ -555,7 +545,7 @@ export function HomeReposIsland({
                     onChange={(event) =>
                       setSortBy(event.target.value === "name" ? "name" : "updated")
                     }
-                    className="h-8 px-2.5 rounded-md bg-canvas hover:bg-surfaceHover border border-border text-[12px] text-fgBody focus:outline-none focus:border-fgMuted cursor-pointer"
+                    className="h-8 px-2.5 rounded-none bg-canvas hover:bg-surfaceHover border border-border text-[12px] text-fgBody focus:outline-none focus:border-fgMuted cursor-pointer"
                   >
                     <option value="updated">Sort: Recently updated</option>
                     <option value="name">Sort: Name (A–Z)</option>
@@ -572,8 +562,8 @@ export function HomeReposIsland({
                   onClick={() => setNamespaceFilter("all")}
                   className={
                     namespaceFilter === "all"
-                      ? "team-pill px-2.5 py-0.5 rounded bg-fg text-canvas font-medium transition-colors"
-                      : "team-pill px-2.5 py-0.5 rounded text-fgBody hover:text-fg hover:bg-surfaceHover transition-colors"
+                      ? "team-pill px-2.5 py-0.5 rounded-none bg-fg text-canvas font-medium transition-colors"
+                      : "team-pill px-2.5 py-0.5 rounded-none text-fgBody hover:text-fg hover:bg-surfaceHover transition-colors"
                   }
                 >
                   All{" "}
@@ -601,8 +591,8 @@ export function HomeReposIsland({
                       }
                       className={
                         isActive
-                          ? "team-pill px-2.5 py-0.5 rounded bg-fg text-canvas font-medium transition-colors"
-                          : "team-pill px-2.5 py-0.5 rounded text-fgBody hover:text-fg hover:bg-surfaceHover transition-colors"
+                          ? "team-pill px-2.5 py-0.5 rounded-none bg-fg text-canvas font-medium transition-colors"
+                          : "team-pill px-2.5 py-0.5 rounded-none text-fgBody hover:text-fg hover:bg-surfaceHover transition-colors"
                       }
                     >
                       @{team.slug}{" "}
@@ -680,7 +670,7 @@ export function HomeReposIsland({
                               {repo.topics.map((topic) => (
                                 <span
                                   key={topic}
-                                  className="px-2 py-0.5 rounded bg-canvas border border-borderSubtle text-[12px] text-fgMuted"
+                                  className="px-2 py-0.5 rounded-none bg-canvas border border-borderSubtle text-[12px] text-fgMuted"
                                 >
                                   {topic}
                                 </span>
@@ -693,7 +683,7 @@ export function HomeReposIsland({
                           <button
                             type="button"
                             onClick={() => void handleCopyClone(repo)}
-                            className={`h-7 px-3 rounded-md bg-canvas hover:bg-surfaceHover border border-border text-[12px] transition-colors ${
+                            className={`h-7 px-3 rounded-none bg-canvas hover:bg-surfaceHover border border-border text-[12px] transition-colors ${
                               isCopied ? "text-emerald-400" : "text-fgBody hover:text-fg"
                             }`}
                           >
@@ -701,7 +691,7 @@ export function HomeReposIsland({
                           </button>
                           <a
                             href={`/${repo.namespaceSlug}/${repo.slug}/commits`}
-                            className="h-7 px-3 rounded-md bg-canvas hover:bg-surfaceHover border border-border text-[12px] text-fgBody hover:text-fg inline-flex items-center transition-colors no-underline"
+                            className="h-7 px-3 rounded-none bg-canvas hover:bg-surfaceHover border border-border text-[12px] text-fgBody hover:text-fg inline-flex items-center transition-colors no-underline"
                           >
                             Commits
                           </a>
@@ -718,7 +708,7 @@ export function HomeReposIsland({
         {/* Right Sidebar (4 cols) */}
         <aside className="lg:col-span-4 space-y-5">
           {/* Organization Details */}
-          <section className="bg-surface border border-border rounded-md p-4 space-y-3">
+          <section className="bg-surface border border-border rounded-none p-4 space-y-3">
             <div className="text-[12px] font-semibold text-fg">
               {resolvedBranding.shortName} · Organization
             </div>
@@ -766,7 +756,7 @@ export function HomeReposIsland({
           {/* Teams & Namespaces */}
           <section
             id="teams"
-            className="bg-surface border border-border rounded-md overflow-hidden"
+            className="bg-surface border border-border rounded-none overflow-hidden"
           >
             <div className="px-4 py-3 border-b border-borderSubtle flex items-center justify-between text-[12px]">
               <span className="font-semibold text-fg">Teams &amp; Namespaces</span>
@@ -824,13 +814,13 @@ export function HomeReposIsland({
           </section>
 
           {/* Developer Access */}
-          <section className="bg-surface border border-border rounded-md p-4 space-y-2.5">
+          <section className="bg-surface border border-border rounded-none p-4 space-y-2.5">
             <div className="text-[12px] font-semibold text-fg">Developer Access</div>
             <p className="m-0 text-[13px] text-fgBody">
               All public repositories support anonymous HTTPS cloning under permissive open-source
               licenses.
             </p>
-            <div className="px-3 py-2 rounded bg-canvas border border-borderSubtle font-mono text-[12px] text-fgBody truncate">
+            <div className="px-3 py-2 rounded-none bg-canvas border border-borderSubtle font-mono text-[12px] text-fgBody truncate">
               git clone {cloneBaseOrigin}/&lt;ns&gt;/&lt;repo&gt;.git
             </div>
           </section>
@@ -862,7 +852,7 @@ export function HomeReposIsland({
               setShowCreate((open) => !open);
               setCreateError(null);
             }}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-fg px-3.5 text-[12px] font-semibold whitespace-nowrap text-canvas transition-colors hover:bg-fgHover"
+            className="inline-flex h-8 items-center gap-1.5 rounded-none bg-fg px-3.5 text-[12px] font-semibold whitespace-nowrap text-canvas transition-colors hover:bg-fgHover"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             <span>New repository</span>
@@ -874,7 +864,7 @@ export function HomeReposIsland({
       {showCreate && primaryNamespaceSlug && canWrite ? (
         <form
           onSubmit={(event) => void handleCreateSubmit(event)}
-          className="rounded-md border border-border bg-surface p-4"
+          className="rounded-none border border-border bg-surface p-4"
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="flex-1">
@@ -888,7 +878,7 @@ export function HomeReposIsland({
                 <button
                   type="button"
                   onClick={() => setNewSlug(PROFILE_REPO_SLUG)}
-                  className="rounded border border-border bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-fgBody hover:bg-surfaceHover hover:text-fg"
+                  className="rounded-none border border-border bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-fgBody hover:bg-surfaceHover hover:text-fg"
                 >
                   Use {PROFILE_REPO_SLUG}
                 </button>
@@ -900,7 +890,7 @@ export function HomeReposIsland({
                 onChange={(event) => setNewSlug(event.target.value)}
                 placeholder="edge-worker or .vibtools"
                 required
-                className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 font-mono text-[12px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+                className="h-8 w-full rounded-none border border-border bg-canvas px-2.5 font-mono text-[12px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
               />
             </div>
             <div className="sm:w-36">
@@ -916,7 +906,7 @@ export function HomeReposIsland({
                 onChange={(event) =>
                   setNewVisibility(event.target.value === "private" ? "private" : "public")
                 }
-                className="h-8 w-full rounded-md border border-border bg-canvas px-2 text-[12px] text-fg focus:border-fgMuted focus:outline-none"
+                className="h-8 w-full rounded-none border border-border bg-canvas px-2 text-[12px] text-fg focus:border-fgMuted focus:outline-none"
               >
                 <option value="public">Public</option>
                 <option value="private">Private</option>
@@ -926,14 +916,14 @@ export function HomeReposIsland({
               <button
                 type="submit"
                 disabled={creating || !newSlug.trim()}
-                className="inline-flex h-8 items-center rounded-md bg-fg px-3 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
+                className="inline-flex h-8 items-center rounded-none bg-fg px-3 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
               >
                 {creating ? "Creating…" : "Create"}
               </button>
               <button
                 type="button"
                 onClick={() => setShowCreate(false)}
-                className="inline-flex h-8 items-center rounded-md border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
+                className="inline-flex h-8 items-center rounded-none border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
               >
                 Cancel
               </button>
@@ -947,7 +937,7 @@ export function HomeReposIsland({
               maxLength={200}
               placeholder="Optional description..."
               aria-label="Repository description"
-              className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+              className="h-8 w-full rounded-none border border-border bg-canvas px-2.5 text-[12px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
             />
             {isProfileSlug ? (
               <label className="flex cursor-pointer items-center gap-2 text-[12px] text-fgBody">
@@ -973,7 +963,9 @@ export function HomeReposIsland({
               </label>
             )}
           </div>
-          {createError ? <p className="m-0 mt-2 text-[12px] text-red-400">{createError}</p> : null}
+          {createError ? (
+            <ErrorBanner className="mt-2 px-3 py-2 text-[12px]">{createError}</ErrorBanner>
+          ) : null}
         </form>
       ) : null}
 
@@ -981,7 +973,7 @@ export function HomeReposIsland({
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
         {/* Left Column (8 cols) — Unified Repository Explorer Card */}
         <div className="lg:col-span-8">
-          <div className="overflow-hidden rounded-md border border-border bg-surface">
+          <div className="overflow-hidden rounded-none border border-border bg-surface">
             {/* Toolbar Row 1: Search + Sort + Visibility */}
             <div className="flex flex-col items-stretch gap-2 border-b border-borderSubtle p-3 sm:flex-row sm:items-center">
               <div className="relative flex-1">
@@ -1003,9 +995,9 @@ export function HomeReposIsland({
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Filter repositories..."
                   aria-label="Filter repositories"
-                  className="h-8 w-full rounded-md border border-border bg-canvas pr-8 pl-8 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+                  className="h-8 w-full rounded-none border border-border bg-canvas pr-8 pl-8 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
                 />
-                <kbd className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] text-fgMuted">
+                <kbd className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded-none border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] text-fgMuted">
                   /
                 </kbd>
               </div>
@@ -1017,7 +1009,7 @@ export function HomeReposIsland({
                   onChange={(event) =>
                     setSortBy(event.target.value === "name" ? "name" : "updated")
                   }
-                  className="h-8 cursor-pointer rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fgBody hover:bg-surfaceHover focus:border-fgMuted focus:outline-none"
+                  className="h-8 cursor-pointer rounded-none border border-border bg-canvas px-2.5 text-[12px] text-fgBody hover:bg-surfaceHover focus:border-fgMuted focus:outline-none"
                 >
                   <option value="updated">Sort: Recently updated</option>
                   <option value="name">Sort: Name (A–Z)</option>
@@ -1025,7 +1017,7 @@ export function HomeReposIsland({
 
                 {activeFeed === "mine" ? (
                   <div
-                    className="inline-flex h-8 items-center rounded-md border border-border bg-canvas p-0.5"
+                    className="inline-flex h-8 items-center rounded-none border border-border bg-canvas p-0.5"
                     role="group"
                     aria-label="Filter by visibility"
                   >
@@ -1034,7 +1026,7 @@ export function HomeReposIsland({
                         key={option}
                         type="button"
                         onClick={() => setVisibilityFilter(option)}
-                        className={`h-full rounded px-2.5 text-[12px] font-medium capitalize transition-colors ${
+                        className={`h-full rounded-none px-2.5 text-[12px] font-medium capitalize transition-colors ${
                           visibilityFilter === option
                             ? "bg-fg text-canvas"
                             : "text-fgBody hover:text-fg"
@@ -1060,7 +1052,7 @@ export function HomeReposIsland({
                   role="tab"
                   aria-selected={activeFeed === "mine"}
                   onClick={() => setActiveFeed("mine")}
-                  className={`rounded px-2.5 py-0.5 font-medium whitespace-nowrap transition-colors ${
+                  className={`rounded-none px-2.5 py-0.5 font-medium whitespace-nowrap transition-colors ${
                     activeFeed === "mine"
                       ? "bg-fg text-canvas"
                       : "text-fgBody hover:bg-surfaceHover hover:text-fg"
@@ -1076,7 +1068,7 @@ export function HomeReposIsland({
                   role="tab"
                   aria-selected={activeFeed === "public"}
                   onClick={() => setActiveFeed("public")}
-                  className={`rounded px-2.5 py-0.5 font-medium whitespace-nowrap transition-colors ${
+                  className={`rounded-none px-2.5 py-0.5 font-medium whitespace-nowrap transition-colors ${
                     activeFeed === "public"
                       ? "bg-fg text-canvas"
                       : "text-fgBody hover:bg-surfaceHover hover:text-fg"
@@ -1114,7 +1106,7 @@ export function HomeReposIsland({
                     <button
                       type="button"
                       onClick={handleResetFilters}
-                      className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
+                      className="inline-flex h-7 items-center gap-1.5 rounded-none border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
                     >
                       <RotateCcw className="h-3 w-3" aria-hidden="true" />
                       <span>Reset filters</span>
@@ -1127,6 +1119,7 @@ export function HomeReposIsland({
                 {filtered.map((repo) => {
                   const isPrivate = repo.visibility === "private";
                   const isCopied = copiedId === repo.id;
+                  const langInfo = resolveRepoLanguage(repo);
                   return (
                     <article
                       key={repo.id}
@@ -1168,6 +1161,17 @@ export function HomeReposIsland({
                         ) : null}
 
                         <div className="flex flex-wrap items-center gap-3 text-[12px] text-fgMuted">
+                          {langInfo ? (
+                            <span className="inline-flex items-center gap-1.5 text-fgBody">
+                              <span
+                                className="h-2 w-2 rounded-full"
+                                style={{ backgroundColor: langInfo.color }}
+                              />
+                              {langInfo.name}
+                            </span>
+                          ) : null}
+                          {repo.license ? <span>{repo.license}</span> : null}
+                          {repo.branch ? <span className="font-mono">{repo.branch}</span> : null}
                           <a
                             href={buildNamespaceProfileHref(repo.namespaceSlug)}
                             className="font-mono text-fgBody no-underline hover:text-fg"
@@ -1185,7 +1189,7 @@ export function HomeReposIsland({
                         <button
                           type="button"
                           onClick={() => void handleCopyClone(repo)}
-                          className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-canvas px-3 text-[12px] text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
+                          className="inline-flex h-7 items-center gap-1 rounded-none border border-border bg-canvas px-3 text-[12px] text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
                         >
                           {isCopied ? (
                             <>
@@ -1201,7 +1205,7 @@ export function HomeReposIsland({
                         </button>
                         <a
                           href={`/${repo.namespaceSlug}/${repo.slug}/commits`}
-                          className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-canvas px-3 text-[12px] text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
+                          className="inline-flex h-7 items-center gap-1 rounded-none border border-border bg-canvas px-3 text-[12px] text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
                         >
                           <GitCommitHorizontal className="h-3 w-3" aria-hidden="true" />
                           <span>Commits</span>
@@ -1209,7 +1213,7 @@ export function HomeReposIsland({
                         {activeFeed === "mine" ? (
                           <a
                             href={`/${repo.namespaceSlug}/${repo.slug}/admin`}
-                            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-canvas px-3 text-[12px] text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
+                            className="inline-flex h-7 items-center gap-1 rounded-none border border-border bg-canvas px-3 text-[12px] text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
                           >
                             <Settings className="h-3 w-3" aria-hidden="true" />
                             <span>Settings</span>
@@ -1226,13 +1230,13 @@ export function HomeReposIsland({
 
         {/* Right Sidebar (4 cols) */}
         <aside className="space-y-5 lg:col-span-4" aria-label="Workspace summary">
-          <div className="overflow-hidden rounded-md border border-border bg-surface">
+          <div className="overflow-hidden rounded-none border border-border bg-surface">
             <div className="border-b border-borderSubtle px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate font-mono text-[12px] font-semibold text-fg">
                   {primaryNamespaceSlug ? `@${primaryNamespaceSlug}` : "Workspace"}
                 </span>
-                <span className="rounded border border-border bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-fgBody">
+                <span className="rounded-none border border-border bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-fgBody">
                   {viewerRole}
                 </span>
               </div>
@@ -1285,7 +1289,7 @@ export function HomeReposIsland({
           </div>
 
           {namespaces.length > 0 ? (
-            <div className="overflow-hidden rounded-md border border-border bg-surface">
+            <div className="overflow-hidden rounded-none border border-border bg-surface">
               <div className="border-b border-borderSubtle px-4 py-2.5 text-[12px] font-semibold text-fg">
                 Namespaces
               </div>
@@ -1294,7 +1298,7 @@ export function HomeReposIsland({
                   <a
                     key={ns.id}
                     href={buildNamespaceProfileHref(ns.slug)}
-                    className="inline-flex items-center rounded border border-border bg-canvas px-2 py-0.5 font-mono text-[12px] text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
+                    className="inline-flex items-center rounded-none border border-border bg-canvas px-2 py-0.5 font-mono text-[12px] text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                   >
                     @{ns.slug}
                   </a>

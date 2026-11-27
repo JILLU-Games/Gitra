@@ -3,6 +3,7 @@ import type { CacheContext } from "@/worker/cache/cache";
 
 import {
   capabilityAdvertisement,
+  parseFetchArgs,
   parseV2Command,
   pktLine,
   flushPkt,
@@ -27,6 +28,7 @@ import {
 import type { Db } from "@/worker/db/d1/client";
 import type { Logger } from "@/worker/common/logger";
 import { findRepositoryById, touchRepositoryUpdatedAt } from "@/worker/db/d1/dal/repositories";
+import { dispatchRouteCacheSync } from "@/worker/tasks/dispatch";
 import { workerExecutionContext, type AppContext, type AppRouter } from "./hono";
 
 type GitService = "git-upload-pack" | "git-receive-pack";
@@ -94,7 +96,9 @@ async function decodeUploadPackBody(request: Request): Promise<Uint8Array | Resp
 
 /**
  * Handles Git upload-pack (fetch) POST requests.
- * Supports both protocol v2 and legacy protocol based on Git-Protocol header.
+ * Supports Git Smart HTTP protocol v2 (`command=ls-refs` and `command=fetch`),
+ * as well as legacy v0/v1 `want`/`have` upload-pack fetch bodies when clients
+ * omit `Git-Protocol: version=2`.
  */
 async function handleUploadPackPOST(
   env: Env,
@@ -109,11 +113,15 @@ async function handleUploadPackPOST(
   const body = decodedBody;
   const gitProto = request.headers.get("Git-Protocol") || "";
   const { command } = parseV2Command(body);
-  // Accept either explicit v2 header or a v2-formatted body (contains command=...)
-  if (!/version=2/.test(gitProto) && !command) {
-    return new Response("Expected Git protocol v2 (set Git-Protocol: version=2)\n", {
-      status: 400,
-    });
+  const isLegacyFetchBody = !command && parseFetchArgs(body).wants.length > 0;
+  // Accept explicit v2 header, a v2-formatted body (command=...), or a legacy v0/v1 want/have fetch body.
+  if (!/version=2/.test(gitProto) && !command && !isLegacyFetchBody) {
+    return new Response(
+      "Expected Git protocol v2 (set Git-Protocol: version=2) or a valid upload-pack want/have request\n",
+      {
+        status: 400,
+      }
+    );
   }
 
   if (command === "ls-refs") {
@@ -203,7 +211,7 @@ async function handleUploadPackPOST(
     });
   }
 
-  if (command === "fetch") {
+  if (command === "fetch" || isLegacyFetchBody) {
     return handleFetchV2Streaming(env, route.doName, body, request.signal, cacheCtx);
   }
 
@@ -221,18 +229,12 @@ async function handleReceivePackPOST(
   return await handleStreamingReceivePackPOST(env, route.doName, request, ctx, {
     onRepoStateChanged: async ({ changed }) => {
       if (!changed) return;
+      let prevVersion: string | undefined;
       try {
         const prevRepo = await findRepositoryById(db, route.repositoryId);
-        const prevVersion = prevRepo ? String(prevRepo.updatedAt) : undefined;
+        prevVersion = prevRepo ? String(prevRepo.updatedAt) : undefined;
         const nextUpdatedAt = prevRepo ? Math.max(Date.now(), prevRepo.updatedAt + 1) : Date.now();
         await touchRepositoryUpdatedAt(db, route.repositoryId, nextUpdatedAt);
-        await deleteRepoBranchCacheRecord(env, route.repositoryId);
-        const versionsToPurge = Array.from(new Set<string | undefined>([prevVersion, undefined]));
-        await Promise.all(
-          versionsToPurge.map((v) =>
-            cacheDeleteJSON(buildCacheKeyFrom(request, "/_cache/refs", { repo: route.doName, v }))
-          )
-        );
         log.debug("receive:repo-updated-at-touched", {
           repositoryId: route.repositoryId,
           updatedAt: nextUpdatedAt,
@@ -242,6 +244,34 @@ async function handleReceivePackPOST(
           repositoryId: route.repositoryId,
           error: String(error),
         });
+        dispatchRouteCacheSync({
+          env,
+          ctx,
+          message: {
+            kind: "route-cache-sync",
+            repositoryId: route.repositoryId,
+            namespaceSlug: route.routeNamespaceSlug,
+            repoSlug: route.routeRepoSlug,
+            enqueuedAt: Date.now(),
+          },
+          log,
+        });
+      }
+
+      const versionsToPurge = Array.from(new Set<string | undefined>([prevVersion, undefined]));
+      const purgeResults = await Promise.allSettled([
+        deleteRepoBranchCacheRecord(env, route.repositoryId),
+        ...versionsToPurge.map((v) =>
+          cacheDeleteJSON(buildCacheKeyFrom(request, "/_cache/refs", { repo: route.doName, v }))
+        ),
+      ]);
+      for (const result of purgeResults) {
+        if (result.status === "rejected") {
+          log.warn("receive:cache-purge-failed", {
+            repositoryId: route.repositoryId,
+            error: String(result.reason),
+          });
+        }
       }
     },
   });

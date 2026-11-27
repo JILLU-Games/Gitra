@@ -1,4 +1,5 @@
 import {
+  sanitizeCommitEmail,
   sanitizeDisplayName,
   sanitizeProfileBio,
   sanitizeProfileLocation,
@@ -18,6 +19,7 @@ export type NamespaceProfileMeta = {
   bio: string;
   location: string;
   website: string;
+  commitEmail: string;
 };
 
 export type RepositoryMeta = {
@@ -40,6 +42,7 @@ type NamespaceProfileMetaRow = {
   bio: string;
   location: string;
   website: string;
+  commit_email: string;
   updated_at: number;
 };
 
@@ -57,7 +60,7 @@ export async function getNamespaceProfileMeta(
 ): Promise<NamespaceProfileMeta> {
   const row = await d1
     .prepare(
-      `SELECT namespace_id, bio, location, website, updated_at
+      `SELECT namespace_id, bio, location, website, commit_email, updated_at
        FROM namespace_profile_meta
        WHERE namespace_id = ?
        LIMIT 1`
@@ -69,6 +72,7 @@ export async function getNamespaceProfileMeta(
     bio: row?.bio ?? "",
     location: row?.location ?? "",
     website: row?.website ?? "",
+    commitEmail: row?.commit_email ?? "",
   };
 }
 
@@ -79,27 +83,35 @@ export async function upsertNamespaceProfileMeta(
     bio: string;
     location: string;
     website: string;
+    commitEmail?: string;
     now: number;
   }
 ): Promise<NamespaceProfileMeta> {
   const bio = sanitizeProfileBio(meta.bio);
   const location = sanitizeProfileLocation(meta.location);
   const website = sanitizeProfileWebsite(meta.website);
+  const commitEmail =
+    meta.commitEmail !== undefined
+      ? sanitizeCommitEmail(meta.commitEmail)
+      : (await getNamespaceProfileMeta(d1, namespaceId)).commitEmail;
 
   await d1
     .prepare(
-      `INSERT INTO namespace_profile_meta (namespace_id, bio, location, website, updated_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO namespace_profile_meta (
+         namespace_id, bio, location, website, commit_email, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(namespace_id) DO UPDATE SET
          bio = excluded.bio,
          location = excluded.location,
          website = excluded.website,
+         commit_email = excluded.commit_email,
          updated_at = excluded.updated_at`
     )
-    .bind(namespaceId, bio, location, website, meta.now)
+    .bind(namespaceId, bio, location, website, commitEmail, meta.now)
     .run();
 
-  return { bio, location, website };
+  return { bio, location, website, commitEmail };
 }
 
 export async function getRepositoryMeta(

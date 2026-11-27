@@ -61,7 +61,11 @@ import {
   updateNamespaceHandle,
   upsertNamespaceDirectoryMeta,
 } from "@/worker/db/d1/dal";
-import { getLimiter, type Limiter } from "@/worker/git/operations/limits";
+import {
+  countSubrequest,
+  DEFAULT_SUBREQUEST_BUDGET,
+  type Limiter,
+} from "@/worker/git/operations/limits";
 import { deleteRouteCacheRecord } from "@/worker/repositories/routeCache";
 import { dispatchRepositoryDelete } from "@/worker/tasks/dispatch";
 import { handleRepositoryPatch } from "./authRepositories";
@@ -78,6 +82,8 @@ import { renderUiDocumentResponse } from "./uiResponse";
 
 const REPO_BRANCH_KV_PREFIX = "repo-branch:";
 const MAX_COLD_BRANCH_LOOKUPS = 60;
+const COLD_BRANCH_SUBREQUEST_HEADROOM = 100;
+const UNRESOLVED_COLD_BRANCH_PLACEHOLDER = "...";
 
 async function resolvePrimaryAdminNamespaceId(c: AppContext): Promise<string | null> {
   const ns = await resolvePrimaryAdminNamespace(c.env.DB, c.var.db, c.env);
@@ -105,9 +111,14 @@ function resolveRequestOrigin(c: AppContext): string {
   return forwardedHost && forwardedProto ? `${forwardedProto}://${forwardedHost}` : url.origin;
 }
 
-async function resolveDefaultBranch(env: Env, limiter: Limiter, doName: string): Promise<string> {
+async function resolveDefaultBranch(
+  c: AppContext,
+  limiter: Limiter,
+  doName: string
+): Promise<string> {
   try {
-    const stub = getRepoStub(env, doName);
+    countSubrequest(c.var.cacheCtx, 1);
+    const stub = getRepoStub(c.env, doName);
     const head = await limiter.run("do:system-admin-head", async () => await stub.getHead());
     if (head && typeof head.target === "string" && head.target.length > 0) {
       return shortRefName(head.target);
@@ -164,19 +175,25 @@ async function resolveCachedDefaultBranches(
     uncached.push(...repoRows);
   }
 
-  // Bound cold-cache DO lookups to stay comfortably below the Worker request ceiling,
-  // while caching resolved branches in ROUTES KV keyed by repo updatedAt.
-  const toResolve = uncached.slice(0, MAX_COLD_BRANCH_LOOKUPS);
-  const overflow = uncached.slice(MAX_COLD_BRANCH_LOOKUPS);
+  // Bound cold-cache DO lookups by both MAX_COLD_BRANCH_LOOKUPS and remaining
+  // request subrequest headroom, while caching resolved branches in ROUTES KV
+  // keyed by repo updatedAt. Any overflow beyond the cold lookup budget is marked
+  // "..." (instead of silently faking "main") and warmed asynchronously.
+  const currentBudget = c.var.cacheCtx.memo?.subreqBudget ?? DEFAULT_SUBREQUEST_BUDGET;
+  const availableHeadroom = Math.max(0, currentBudget - COLD_BRANCH_SUBREQUEST_HEADROOM);
+  const coldLookupLimit = Math.min(MAX_COLD_BRANCH_LOOKUPS, availableHeadroom);
+
+  const toResolve = uncached.slice(0, coldLookupLimit);
+  const overflow = uncached.slice(coldLookupLimit);
   for (const row of overflow) {
-    branchById.set(row.id, "main");
+    branchById.set(row.id, UNRESOLVED_COLD_BRANCH_PLACEHOLDER);
   }
 
   if (toResolve.length > 0) {
     const resolved = await Promise.all(
       toResolve.map(async (row) => ({
         row,
-        branch: await resolveDefaultBranch(c.env, limiter, row.doName),
+        branch: await resolveDefaultBranch(c, limiter, row.doName),
       }))
     );
     const kvWrites: Promise<void>[] = [];
@@ -193,6 +210,24 @@ async function resolveCachedDefaultBranches(
       } catch {
         await Promise.allSettled(kvWrites);
       }
+    }
+  }
+
+  if (overflow.length > 0 && kv && typeof kv.put === "function") {
+    const backgroundBatch = overflow.slice(0, MAX_COLD_BRANCH_LOOKUPS);
+    const warmTask = (async () => {
+      for (const row of backgroundBatch) {
+        const remaining = c.var.cacheCtx.memo?.subreqBudget ?? DEFAULT_SUBREQUEST_BUDGET;
+        if (remaining <= COLD_BRANCH_SUBREQUEST_HEADROOM) break;
+        const branch = await resolveDefaultBranch(c, limiter, row.doName);
+        const payload: CachedRepoBranch = { branch, updatedAt: row.updatedAt };
+        await kv.put(`${REPO_BRANCH_KV_PREFIX}${row.id}`, JSON.stringify(payload));
+      }
+    })().catch(() => {});
+    try {
+      c.executionCtx.waitUntil(warmTask);
+    } catch {
+      // No execution context available in direct unit calls.
     }
   }
 
@@ -268,7 +303,7 @@ async function loadSystemAdminData(
   const patRows = patEntries.map((entry) => entry.pat);
   const ownerSlugByPatId = new Map(patEntries.map((entry) => [entry.pat.id, entry.ownerSlug]));
 
-  const limiter = getLimiter();
+  const limiter = c.var.limiter;
   const [tokenSummaries, repoMeta, branchById] = await Promise.all([
     summarizeTokens(db, patRows, c.env.DB),
     listRepositoryMetaMap(
@@ -286,7 +321,7 @@ async function loadSystemAdminData(
       namespaceId: row.namespaceId,
       namespaceSlug: row.namespaceSlug,
       visibility: row.visibility,
-      defaultBranch: branchById.get(row.id) ?? "main",
+      defaultBranch: branchById.get(row.id) ?? UNRESOLVED_COLD_BRANCH_PLACEHOLDER,
       pinned: meta?.pinned ?? false,
       homePinned: meta?.homePinned ?? false,
       updatedAt: row.updatedAt,
@@ -578,7 +613,8 @@ async function handlePatchDirectoryUser(c: AppContext, namespaceId: string): Pro
   const hasPassword = Boolean(nextPasswordHash ?? existingMeta?.password_hash);
 
   const shouldBumpSessionEpoch =
-    nextPasswordHash !== undefined || (nextStatus === "disabled" && existingMeta?.status !== "disabled");
+    nextPasswordHash !== undefined ||
+    (nextStatus === "disabled" && existingMeta?.status !== "disabled");
 
   const { sessionEpoch } = await upsertNamespaceDirectoryMeta(c.env.DB, ns.id, {
     displayName: nextDisplayName,
@@ -863,7 +899,8 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       users.find((u) => u.isPrimaryAdmin)?.slug ??
       viewer.primaryNamespaceSlug ??
       resolveInitialAdminNamespaceSlug(c.env);
-    const primaryAdminHandle = authSource === "d1" ? primaryAdminNamespaceSlug : authConfig.username;
+    const primaryAdminHandle =
+      authSource === "d1" ? primaryAdminNamespaceSlug : authConfig.username;
     const origin = resolveRequestOrigin(c);
 
     return renderUiDocumentResponse(
@@ -912,7 +949,8 @@ export function registerSystemAdminRoutes(router: AppRouter) {
       users.find((u) => u.isPrimaryAdmin)?.slug ??
       viewer.primaryNamespaceSlug ??
       resolveInitialAdminNamespaceSlug(c.env);
-    const primaryAdminHandle = authSource === "d1" ? primaryAdminNamespaceSlug : authConfig.username;
+    const primaryAdminHandle =
+      authSource === "d1" ? primaryAdminNamespaceSlug : authConfig.username;
     const origin = resolveRequestOrigin(c);
     return renderUiDocumentResponse(
       c.env,

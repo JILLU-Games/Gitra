@@ -159,6 +159,22 @@ export async function handleTree(c: AppContext<"/:owner/:repo/tree">) {
           : null;
       const progress = await loadUiRepoActivity(env, access);
       const viewer = access.viewer;
+      let canEditRepo = false;
+      const isCommitSha = OID_RE.test(ref);
+      const hasNonBranchPrefix = ref.startsWith("refs/") && !ref.startsWith("refs/heads/");
+      if (canManageRepo && !isCommitSha && !hasNonBranchPrefix) {
+        const { getHeadAndRefs } = await import("@/worker/git");
+        const { head, refs } = await getHeadAndRefs(env, repoId, cacheCtx);
+        if (ref === "HEAD") {
+          canEditRepo = Boolean(head?.target?.startsWith("refs/heads/"));
+        } else if (ref.startsWith("refs/heads/")) {
+          canEditRepo = true;
+        } else {
+          const hasBranch = refs.some((entry) => entry.name === `refs/heads/${ref}`);
+          const hasTag = refs.some((entry) => entry.name === `refs/tags/${ref}`);
+          canEditRepo = hasBranch || !hasTag;
+        }
+      }
       return renderUiDocumentResponse(
         env,
         "tree",
@@ -168,6 +184,10 @@ export async function handleTree(c: AppContext<"/:owner/:repo/tree">) {
           repo,
           visibility: route.visibility,
           canManageRepo,
+          repositoryId: route.repositoryId,
+          refShort: ref,
+          currentPath: path,
+          canEditRepo,
           refEnc: encodeURIComponent(ref),
           progress,
           breadcrumbs,

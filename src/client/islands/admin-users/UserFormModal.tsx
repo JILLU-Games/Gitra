@@ -12,6 +12,13 @@ import {
   type DirectoryRole,
   type DirectoryStatus,
 } from "@/shared/admin/panel";
+import {
+  Button,
+  ErrorBanner,
+  inputClasses,
+  selectClasses,
+  showToast,
+} from "@/client/components/ui";
 
 type UserFormModalProps = {
   mode: "create" | "edit";
@@ -203,6 +210,11 @@ export function UserFormModal({
         },
         !lockPassword && password.length > 0 ? password : undefined
       );
+      showToast({
+        tone: "success",
+        title: "User updated",
+        message: `@${data.slug ?? initialUser.slug}`,
+      });
       onClose();
     } catch {
       setError("Network error while saving user.");
@@ -223,7 +235,7 @@ export function UserFormModal({
         }
       }}
     >
-      <div className="w-full max-w-md rounded-md border border-border bg-surface">
+      <div className="w-full max-w-md rounded-none border border-border bg-surface">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div>
             <h2 id="user-form-modal-title" className="m-0 text-[14px] font-semibold text-fg">
@@ -240,24 +252,17 @@ export function UserFormModal({
             onClick={onClose}
             disabled={busy}
             aria-label="Close modal"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-none border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3.5 p-4">
-          {error ? (
-            <div
-              role="alert"
-              className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-            >
-              {error}
-            </div>
-          ) : null}
+          {error ? <ErrorBanner className="px-3 py-2 text-[12px]">{error}</ErrorBanner> : null}
 
           {isPrimaryAdmin ? (
-            <div className="flex items-start gap-2 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-[12px] text-accent">
+            <div className="flex items-start gap-2 rounded-none border border-accent/30 bg-accent/10 px-3 py-2 text-[12px] text-accent">
               <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span>
                 {lockPassword
@@ -290,7 +295,7 @@ export function UserFormModal({
                 placeholder={isPrimaryAdmin ? "vibtools" : "jane-ops"}
                 autoComplete="off"
                 autoFocus
-                className="h-8 w-full rounded-md border border-border bg-canvas pr-3 pl-6 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                className={`${inputClasses} pr-3 pl-6 font-mono disabled:cursor-not-allowed`}
               />
             </div>
             <p className="m-0 mt-1 text-[11px] text-fgMuted">
@@ -316,7 +321,7 @@ export function UserFormModal({
               placeholder="Jane Morales"
               maxLength={80}
               autoFocus={isPrimaryAdmin}
-              className="h-8 w-full rounded-md border border-border bg-canvas px-3 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-50"
+              className={inputClasses}
             />
           </div>
 
@@ -333,7 +338,7 @@ export function UserFormModal({
                 value={role}
                 onChange={(e) => setRole(e.target.value as DirectoryRole)}
                 disabled={busy || isPrimaryAdmin}
-                className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fg focus:border-fgMuted focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                className={selectClasses}
               >
                 <option value="admin">admin</option>
                 <option value="member">member</option>
@@ -353,7 +358,7 @@ export function UserFormModal({
                 value={status}
                 onChange={(e) => setStatus(e.target.value as DirectoryStatus)}
                 disabled={busy || isPrimaryAdmin}
-                className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fg focus:border-fgMuted focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                className={selectClasses}
               >
                 <option value="active">active</option>
                 <option value="disabled">disabled</option>
@@ -374,7 +379,7 @@ export function UserFormModal({
                   type="button"
                   onClick={handleGeneratePassword}
                   disabled={busy}
-                  className="inline-flex h-6 items-center gap-1 rounded border border-border bg-canvas px-2 text-[11px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
+                  className="inline-flex h-6 items-center gap-1 rounded-none border border-border bg-canvas px-2 text-[11px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
                 >
                   <RefreshCw className="h-3 w-3" aria-hidden="true" />
                   <span>Generate</span>
@@ -396,14 +401,14 @@ export function UserFormModal({
                       ? "Leave blank to keep current password"
                       : `Min ${PASSWORD_MIN_LENGTH} characters`
                   }
-                  className="h-8 w-full rounded-md border border-border bg-canvas pr-9 pl-3 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none disabled:opacity-50"
+                  className={`${inputClasses} pr-9 pl-3 font-mono`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   disabled={busy}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute top-1/2 right-1.5 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-fgMuted hover:bg-surfaceHover hover:text-fg"
+                  className="absolute top-1/2 right-1.5 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-none text-fgMuted hover:bg-surfaceHover hover:text-fg"
                 >
                   {showPassword ? (
                     <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
@@ -421,21 +426,12 @@ export function UserFormModal({
           ) : null}
 
           <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              className="inline-flex h-8 items-center rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
-            >
+            <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={busy}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="inline-flex h-8 items-center rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
-            >
+            </Button>
+            <Button type="submit" variant="primary" size="md" disabled={busy}>
               {busy ? "Saving..." : isEdit ? "Save changes" : "Create user"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

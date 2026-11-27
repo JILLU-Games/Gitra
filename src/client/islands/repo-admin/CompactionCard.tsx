@@ -41,7 +41,7 @@ export function CompactionCard({
       </p>
 
       {state.receiveLease ? (
-        <div className="mb-3.5 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] text-amber-300">
+        <div className="mb-3.5 rounded-none border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] text-amber-300">
           <div>
             <strong>
               <Download
@@ -55,7 +55,7 @@ export function CompactionCard({
           </div>
         </div>
       ) : compactionData?.running ? (
-        <div className="mb-3.5 rounded-md border border-accent/30 bg-accent/10 p-3 text-[12px] text-accent">
+        <div className="mb-3.5 rounded-none border border-accent/30 bg-accent/10 p-3 text-[12px] text-accent">
           <div>
             <strong>
               <Info
@@ -69,7 +69,7 @@ export function CompactionCard({
           </div>
         </div>
       ) : compactionData?.queued ? (
-        <div className="mb-3.5 rounded-md border border-accent/30 bg-accent/10 p-3 text-[12px] text-accent">
+        <div className="mb-3.5 rounded-none border border-accent/30 bg-accent/10 p-3 text-[12px] text-accent">
           <strong>
             <Clock
               className="mr-1 inline h-3.5 w-3.5 align-[-2px] text-accent"
@@ -80,7 +80,7 @@ export function CompactionCard({
           compaction request is recorded in repo metadata
         </div>
       ) : (
-        <div className="mb-3.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-[12px] text-emerald-300">
+        <div className="mb-3.5 rounded-none border border-emerald-500/30 bg-emerald-500/10 p-3 text-[12px] text-emerald-300">
           <strong>
             <Check
               className="mr-1 inline h-3.5 w-3.5 align-[-2px] text-emerald-400"
@@ -93,7 +93,7 @@ export function CompactionCard({
       )}
 
       <div className="grid grid-cols-1 gap-3 text-[13px] md:grid-cols-2">
-        <div className="rounded-md border border-border bg-canvas p-3">
+        <div className="rounded-none border border-border bg-canvas p-3">
           <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">Receive Lease</div>
           <div className="font-mono text-fg">
             {state.receiveLease
@@ -101,7 +101,7 @@ export function CompactionCard({
               : "idle"}
           </div>
         </div>
-        <div className="rounded-md border border-border bg-canvas p-3">
+        <div className="rounded-none border border-border bg-canvas p-3">
           <div className="mb-1 text-[11px] uppercase tracking-wide text-fgMuted">Compaction</div>
           <div className="font-mono text-fg">{compactionStatus}</div>
           {compactionData?.wantedAt ? (
@@ -113,7 +113,7 @@ export function CompactionCard({
       </div>
 
       <div className="mt-3.5 space-y-3.5">
-        <div className="rounded-md border border-border bg-canvas p-3.5 text-[12px] text-fgBody">
+        <div className="rounded-none border border-border bg-canvas p-3.5 text-[12px] text-fgBody">
           Compaction requests queue real background work. The active pack catalog and compaction
           lease are the source of truth for repository state.
         </div>

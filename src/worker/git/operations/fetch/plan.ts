@@ -5,7 +5,13 @@ import type { OrderedPackSnapshot, ServeUploadPackPlan, UploadPackPlan } from ".
 import type { PackRefSnapshotEntry, PackRefSnapshotLoadResult } from "@/worker/git/pack/refIndex";
 
 import { createLogger } from "@/worker/common";
+import { hasRepoTasksQueue } from "@/worker/common/tier";
 import { sendOptionalMaintenanceTask } from "@/worker/tasks/dispatch";
+import {
+  backfillPackRefsInline,
+  INLINE_REF_BACKFILL_MAX_PACK_BYTES,
+  INLINE_REF_BACKFILL_MAX_PACKS,
+} from "@/worker/tasks/refBackfill";
 import { buildInitialCloneNeeded, loadOrderedPackSnapshot } from "@/worker/git/pack/snapshot";
 import { getDoIdFromPath } from "@/worker/keys";
 import { findCommonHaves } from "../closure";
@@ -103,6 +109,8 @@ export async function loadPackRefSnapshot(
     reason: "missing" | "corrupt" | "stale";
     detail?: string;
   }> = [];
+  const queueBound = hasRepoTasksQueue(env);
+  let inlineBackfillsRun = 0;
 
   for (const pack of snapshot.packs) {
     const load = await loadPackRefView(env, pack.packKey, pack.idx, cacheCtx);
@@ -118,31 +126,79 @@ export async function loadPackRefSnapshot(
 
     const reason = load.type === "Missing" ? "missing" : load.kind;
     const detail = load.type === "Invalid" ? load.reason : undefined;
+    log.warn("stream:fetch:ref-index-missing", {
+      packKey: pack.packKey,
+      reason,
+      detail,
+    });
+
+    // When REPO_TASKS_QUEUE is not bound (Free tier / --no-queues), repair bounded
+    // missing or corrupt .refs sidecars inline so incremental fetches recover
+    // immediately instead of entering an unrecoverable 503 Retry-After loop.
+    if (
+      !queueBound &&
+      inlineBackfillsRun < INLINE_REF_BACKFILL_MAX_PACKS &&
+      pack.packBytes <= INLINE_REF_BACKFILL_MAX_PACK_BYTES
+    ) {
+      inlineBackfillsRun += 1;
+      const repaired = await backfillPackRefsInline({
+        env,
+        repoId,
+        packKey: pack.packKey,
+        packBytes: pack.packBytes,
+        idxView: pack.idx,
+        cacheCtx,
+        log,
+      });
+      if (repaired) {
+        const reloaded = await loadPackRefView(env, pack.packKey, pack.idx, cacheCtx);
+        if (reloaded.type === "Ready") {
+          packs.push({
+            packKey: pack.packKey,
+            packBytes: pack.packBytes,
+            idx: pack.idx,
+            refs: reloaded.view,
+          });
+          continue;
+        }
+      }
+    }
+
     missing.push({
       packKey: pack.packKey,
       packBytes: pack.packBytes,
       reason,
       detail,
     });
-    log.warn("stream:fetch:ref-index-missing", {
-      packKey: pack.packKey,
-      reason,
-      detail,
-    });
-    schedulePackRefBackfill({
-      env,
-      repoId,
-      packKey: pack.packKey,
-      cacheCtx,
-      log,
-      reason,
-    });
+    if (queueBound) {
+      schedulePackRefBackfill({
+        env,
+        repoId,
+        packKey: pack.packKey,
+        cacheCtx,
+        log,
+        reason,
+      });
+    } else if (cacheCtx && pack.packBytes <= INLINE_REF_BACKFILL_MAX_PACK_BYTES) {
+      cacheCtx.ctx.waitUntil(
+        backfillPackRefsInline({
+          env,
+          repoId,
+          packKey: pack.packKey,
+          packBytes: pack.packBytes,
+          idxView: pack.idx,
+          cacheCtx,
+          log,
+        }).then(() => undefined)
+      );
+    }
   }
 
   log.info("stream:plan:ref-snapshot", {
     packs: snapshot.packs.length,
     loaded: packs.length,
     missing: missing.length,
+    inlineBackfillsRun,
   });
 
   if (missing.length > 0) {

@@ -42,7 +42,7 @@ export function Header({ currentView, viewer, branding, origin }: HeaderProps) {
               <img
                 src={resolvedBranding.logoUrl}
                 alt={resolvedBranding.shortName}
-                className="h-5 w-auto max-w-[120px] shrink-0 rounded-sm object-contain"
+                className="h-5 w-auto max-w-[120px] shrink-0 rounded-none object-contain"
               />
             ) : (
               <svg

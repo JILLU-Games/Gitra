@@ -74,7 +74,7 @@ export function CommitRow({
       <td className={`${compact ? "pl-6" : ""} text-fg`}>
         {isMerge ? (
           <span
-            className={`merge-badge mr-2 inline-block rounded px-1.5 py-0.5 text-[11px] font-medium ${
+            className={`merge-badge mr-2 inline-block rounded-none px-1.5 py-0.5 text-[11px] font-medium ${
               mergeExpanded
                 ? "border border-amber-500/40 bg-amber-900/40 text-amber-200"
                 : "border border-sky-500/40 bg-sky-500/20 text-sky-300"

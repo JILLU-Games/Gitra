@@ -23,6 +23,14 @@ import {
   type AdminRepositoryEntry,
 } from "@/shared/admin/panel";
 import { PROFILE_REPO_SLUG } from "@/shared/slugs";
+import {
+  Button,
+  ErrorBanner,
+  copyToClipboard,
+  inputClasses,
+  selectClasses,
+  showToast,
+} from "@/client/components/ui";
 
 type RepositoriesSectionProps = {
   origin: string;
@@ -124,13 +132,14 @@ export function RepositoriesSection({
       const body = (await response.json().catch(() => null)) as CreateRepoResponse | null;
       if (!response.ok || !body || !body.ok) {
         const reason = body && !body.ok ? body.reason : `HTTP ${response.status}`;
-        setError(
+        const msg =
           reason === "slug-taken"
             ? "A repository with that slug already exists."
             : reason === "invalid-slug"
               ? "Use lowercase letters, digits, hyphens/dots, or .vibtools (1–40 chars)."
-              : `Could not create repository (${reason}).`
-        );
+              : `Could not create repository (${reason}).`;
+        setError(msg);
+        showToast({ tone: "error", title: "Could not create repository", message: msg });
         return;
       }
       const nsRow = namespaces.find((ns) => ns.slug === body.namespaceSlug);
@@ -148,8 +157,15 @@ export function RepositoriesSection({
       setSlug("");
       setVisibility("public");
       setShowAdd(false);
+      showToast({
+        tone: "success",
+        title: "Repository created",
+        message: `${body.namespaceSlug}/${body.slug}`,
+      });
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Could not create repository", message: msg });
     } finally {
       setCreating(false);
     }
@@ -170,12 +186,21 @@ export function RepositoriesSection({
       const body = (await response.json().catch(() => null)) as PatchRepoResponse | null;
       if (!response.ok || !body || !body.ok) {
         const reason = body && !body.ok ? body.reason : `HTTP ${response.status}`;
-        setError(`Could not update visibility (${reason}).`);
+        const msg = `Could not update visibility (${reason}).`;
+        setError(msg);
+        showToast({ tone: "error", title: "Visibility update failed", message: msg });
         return;
       }
       onVisibilityChanged(repo.id, body.visibility, body.homePinned);
+      showToast({
+        tone: "success",
+        title: "Visibility updated",
+        message: `${repo.namespaceSlug}/${repo.slug} is now ${body.visibility}.`,
+      });
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Visibility update failed", message: msg });
     } finally {
       setPendingId(null);
     }
@@ -195,12 +220,21 @@ export function RepositoriesSection({
       const body = (await response.json().catch(() => null)) as PatchRepoResponse | null;
       if (!response.ok || !body || !body.ok) {
         const reason = body && !body.ok ? body.reason : `HTTP ${response.status}`;
-        setError(`Could not update pin status (${reason}).`);
+        const msg = `Could not update pin status (${reason}).`;
+        setError(msg);
+        showToast({ tone: "error", title: "Pin update failed", message: msg });
         return;
       }
       onPinChanged(repo.id, body.pinned, body.homePinned);
+      showToast({
+        tone: "success",
+        title: body.pinned ? "Repository pinned" : "Repository unpinned",
+        message: `${repo.namespaceSlug}/${repo.slug}`,
+      });
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Pin update failed", message: msg });
     } finally {
       setPendingId(null);
     }
@@ -220,16 +254,24 @@ export function RepositoriesSection({
       const body = (await response.json().catch(() => null)) as PatchRepoResponse | null;
       if (!response.ok || !body || !body.ok) {
         const reason = body && !body.ok ? body.reason : `HTTP ${response.status}`;
-        setError(
+        const msg =
           reason === "private-repo-cannot-feature"
             ? "Make this repository public before pinning it to the public homepage."
-            : `Could not update homepage pin (${reason}).`
-        );
+            : `Could not update homepage pin (${reason}).`;
+        setError(msg);
+        showToast({ tone: "error", title: "Homepage pin update failed", message: msg });
         return;
       }
       onPinChanged(repo.id, body.pinned, body.homePinned);
+      showToast({
+        tone: "success",
+        title: body.homePinned ? "Pinned to public homepage" : "Removed from homepage",
+        message: `${repo.namespaceSlug}/${repo.slug}`,
+      });
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Homepage pin update failed", message: msg });
     } finally {
       setPendingId(null);
     }
@@ -238,14 +280,15 @@ export function RepositoriesSection({
   async function handleCopyClone(repo: AdminRepositoryEntry) {
     const baseOrigin = typeof window !== "undefined" ? window.location.origin : origin;
     const cloneUrl = buildGitCloneUrl(baseOrigin, repo.namespaceSlug, repo.slug);
-    try {
-      await navigator.clipboard.writeText(cloneUrl);
+    const copied = await copyToClipboard(cloneUrl, {
+      label: "clone URL",
+      successTitle: "Clone URL copied",
+    });
+    if (copied) {
       setCopiedId(repo.id);
       window.setTimeout(() => {
         setCopiedId((current) => (current === repo.id ? null : current));
       }, 1800);
-    } catch {
-      // Clipboard unavailable in restricted contexts.
     }
   }
 
@@ -267,22 +310,34 @@ export function RepositoriesSection({
           body && !body.ok
             ? (body.error ?? body.reason ?? `HTTP ${response.status}`)
             : `HTTP ${response.status}`;
-        setError(`Could not delete repository (${reason}).`);
+        const msg = `Could not delete repository (${reason}).`;
+        setError(msg);
         setDeleteTarget(null);
+        showToast({ tone: "error", title: "Delete failed", message: msg });
         return;
       }
       onDeleted(target.id, target.namespaceId);
       setDeleteTarget(null);
+      showToast({
+        tone: "success",
+        title: "Repository deleted",
+        message: `${target.namespaceSlug}/${target.slug}`,
+      });
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
       setDeleteTarget(null);
+      showToast({ tone: "error", title: "Delete failed", message: msg });
     } finally {
       setDeleting(false);
     }
   }
 
   return (
-    <section id="repositories" className="scroll-mt-16 rounded-md border border-border bg-surface">
+    <section
+      id="repositories"
+      className="scroll-mt-16 rounded-none border border-border bg-surface"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3.5 py-2.5">
         <div>
           <h2 className="m-0 text-[13px] font-semibold text-fg">Repositories</h2>
@@ -291,17 +346,18 @@ export function RepositoriesSection({
             remove repositories.
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="primary"
+          size="md"
           onClick={() => {
             setShowAdd((open) => !open);
             setError(null);
           }}
-          className="inline-flex h-8 items-center gap-1 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           <span>New repository</span>
-        </button>
+        </Button>
       </div>
 
       {showAdd ? (
@@ -321,7 +377,7 @@ export function RepositoriesSection({
                 id="admin-repo-ns"
                 value={namespaceSlug}
                 onChange={(event) => setNamespaceSlug(event.target.value)}
-                className="h-8 w-full rounded-md border border-border bg-surface px-2 font-mono text-[12px] text-fg focus:border-fgMuted focus:outline-none"
+                className={`${selectClasses} bg-surface px-2 font-mono`}
               >
                 {activeNamespaces.length > 0 ? (
                   activeNamespaces.map((ns) => (
@@ -348,7 +404,7 @@ export function RepositoriesSection({
                 onChange={(event) => setSlug(event.target.value)}
                 placeholder="service-api or .vibtools"
                 required
-                className="h-8 w-full rounded-md border border-border bg-surface px-2.5 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+                className={`${inputClasses} bg-surface px-2.5 font-mono`}
               />
             </div>
             <div className="sm:col-span-2 md:col-span-2">
@@ -364,39 +420,28 @@ export function RepositoriesSection({
                 onChange={(event) =>
                   setVisibility(event.target.value === "private" ? "private" : "public")
                 }
-                className="h-8 w-full rounded-md border border-border bg-surface px-2 text-[12px] text-fg focus:border-fgMuted focus:outline-none"
+                className={`${selectClasses} bg-surface px-2`}
               >
                 <option value="public">public</option>
                 <option value="private">private</option>
               </select>
             </div>
             <div className="flex items-center gap-1.5 sm:col-span-2 md:col-span-3 md:justify-end">
-              <button
-                type="submit"
-                disabled={creating || !slug.trim()}
-                className="inline-flex h-8 items-center rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
-              >
+              <Button type="submit" variant="primary" size="md" disabled={creating || !slug.trim()}>
                 {creating ? "Creating…" : "Create"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAdd(false)}
-                className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-2.5 text-[12px] text-fgBody hover:bg-surfaceHover hover:text-fg"
-              >
+              </Button>
+              <Button type="button" variant="secondary" size="md" onClick={() => setShowAdd(false)}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         </form>
       ) : null}
 
       {error ? (
-        <div
-          role="alert"
-          className="border-b border-red-500/30 bg-red-500/10 px-3.5 py-2 text-[12px] text-red-400"
-        >
+        <ErrorBanner className="rounded-none border-x-0 border-t-0 px-3.5 py-2 text-[12px]">
           {error}
-        </div>
+        </ErrorBanner>
       ) : null}
 
       {repositories.length === 0 ? (
@@ -459,7 +504,7 @@ export function RepositoriesSection({
                         disabled={isBusy}
                         onClick={() => void handleToggleVisibility(repo)}
                         title={`Switch ${repo.namespaceSlug}/${repo.slug} to ${isPrivate ? "public" : "private"}`}
-                        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[11px] font-medium transition-opacity hover:opacity-80 disabled:opacity-50 ${
+                        className={`inline-flex items-center gap-1 rounded-none border px-1.5 py-0.5 font-mono text-[11px] font-medium transition-opacity hover:opacity-80 disabled:opacity-50 ${
                           isPrivate
                             ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
                             : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
@@ -486,7 +531,7 @@ export function RepositoriesSection({
                               ? `Unpin ${repo.namespaceSlug}/${repo.slug} from profile`
                               : `Pin ${repo.namespaceSlug}/${repo.slug} to profile`
                           }
-                          className={`inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                          className={`inline-flex h-6 items-center gap-1 rounded-none border px-2 text-[11px] font-medium transition-colors disabled:opacity-50 ${
                             repo.pinned
                               ? "border-border bg-surfaceHover text-fg"
                               : "border-border bg-canvas text-fgBody hover:bg-surfaceHover hover:text-fg"
@@ -512,7 +557,7 @@ export function RepositoriesSection({
                                 ? `Unpin ${repo.namespaceSlug}/${repo.slug} from public homepage`
                                 : `Pin ${repo.namespaceSlug}/${repo.slug} to public homepage`
                           }
-                          className={`inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors disabled:opacity-45 ${
+                          className={`inline-flex h-6 items-center gap-1 rounded-none border px-2 text-[11px] font-medium transition-colors disabled:opacity-45 ${
                             repo.homePinned
                               ? "border-accent/40 bg-accent/10 text-accent hover:bg-accent/15"
                               : "border-border bg-canvas text-fgBody hover:bg-surfaceHover hover:text-fg"
@@ -528,7 +573,7 @@ export function RepositoriesSection({
                         <button
                           type="button"
                           onClick={() => void handleCopyClone(repo)}
-                          className="inline-flex h-6 items-center gap-1 rounded-md border border-border bg-canvas px-2 text-[11px] text-fgBody hover:bg-surfaceHover hover:text-fg"
+                          className="inline-flex h-6 items-center gap-1 rounded-none border border-border bg-canvas px-2 text-[11px] text-fgBody hover:bg-surfaceHover hover:text-fg"
                           title="Copy HTTPS clone URL"
                         >
                           {isCopied ? (
@@ -545,7 +590,7 @@ export function RepositoriesSection({
                         </button>
                         <a
                           href={`/${repo.namespaceSlug}/${repo.slug}/admin`}
-                          className="inline-flex h-6 items-center gap-1 rounded-md border border-border bg-canvas px-2 text-[11px] text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
+                          className="inline-flex h-6 items-center gap-1 rounded-none border border-border bg-canvas px-2 text-[11px] text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                           title="Storage & pack admin"
                         >
                           <Settings className="h-3 w-3" aria-hidden="true" />
@@ -555,7 +600,7 @@ export function RepositoriesSection({
                           type="button"
                           onClick={() => setDeleteTarget(repo)}
                           aria-label={`Delete ${repo.namespaceSlug}/${repo.slug}`}
-                          className="inline-flex h-6 items-center gap-1 rounded-md border border-red-500/30 px-2 text-[11px] text-red-400 hover:bg-red-500/10"
+                          className="inline-flex h-6 items-center gap-1 rounded-none border border-red-500/30 px-2 text-[11px] text-red-400 hover:bg-red-500/10"
                         >
                           <Trash2 className="h-3 w-3" aria-hidden="true" />
                           <span className="hidden md:inline">Delete</span>
@@ -578,7 +623,7 @@ export function RepositoriesSection({
           aria-labelledby="delete-repo-modal-title"
           className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4"
         >
-          <div className="w-full max-w-md rounded-md border border-border bg-surface">
+          <div className="w-full max-w-md rounded-none border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h3 id="delete-repo-modal-title" className="m-0 text-[14px] font-semibold text-fg">
                 Delete repository
@@ -588,7 +633,7 @@ export function RepositoriesSection({
                 disabled={deleting}
                 onClick={() => setDeleteTarget(null)}
                 aria-label="Close confirmation dialog"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-none border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg"
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
@@ -606,19 +651,20 @@ export function RepositoriesSection({
               </p>
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-border bg-canvas px-4 py-2.5">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="md"
                 disabled={deleting}
                 onClick={() => setDeleteTarget(null)}
-                className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-3 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
               >
                 Cancel
-              </button>
+              </Button>
               <button
                 type="button"
                 disabled={deleting}
                 onClick={() => void handleConfirmDelete()}
-                className="inline-flex h-8 items-center rounded-md border border-red-500/40 bg-red-500/15 px-3 text-[12px] font-medium text-red-300 hover:bg-red-500/25 disabled:opacity-50"
+                className="inline-flex h-8 items-center rounded-none border border-red-500/40 bg-red-500/15 px-3 text-[12px] font-medium text-red-300 hover:bg-red-500/25 disabled:opacity-50"
               >
                 {deleting ? "Deleting…" : "Delete repository"}
               </button>

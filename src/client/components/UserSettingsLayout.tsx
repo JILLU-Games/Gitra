@@ -79,7 +79,7 @@ function UserSidebarBody({
                     href={item.href}
                     data-sidebar-link={isDrawer ? "true" : undefined}
                     aria-current={isActive ? "page" : undefined}
-                    className={`group relative flex h-8 items-center gap-2 rounded-md px-2 text-[12px] no-underline transition-colors ${
+                    className={`group relative flex h-8 items-center gap-2 rounded-none px-2 text-[12px] no-underline transition-colors ${
                       isActive
                         ? "bg-surfaceHover font-medium text-fg"
                         : "font-normal text-fgBody hover:bg-surfaceHover/60 hover:text-fg"
@@ -87,7 +87,7 @@ function UserSidebarBody({
                   >
                     {isActive ? (
                       <span
-                        className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-r bg-fg"
+                        className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-none bg-fg"
                         aria-hidden="true"
                       />
                     ) : null}
@@ -121,7 +121,7 @@ export function UserSettingsLayout({ active, handle, children }: UserSettingsLay
           data-sidebar-open
           aria-expanded="false"
           aria-controls="user-sidebar-drawer"
-          className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-surface px-2.5 text-[12px] font-medium text-fg transition-colors hover:bg-surfaceHover"
+          className="inline-flex h-8 items-center gap-2 rounded-none border border-border bg-surface px-2.5 text-[12px] font-medium text-fg transition-colors hover:bg-surfaceHover"
         >
           <PanelLeft className="h-3.5 w-3.5 shrink-0 text-fgMuted" aria-hidden="true" />
           <span>User Settings</span>
@@ -150,7 +150,7 @@ export function UserSettingsLayout({ active, handle, children }: UserSettingsLay
         <aside className="mobile-sidebar-panel relative z-10 flex h-full w-64 max-w-[82vw] flex-col border-r border-border bg-surface transition-transform duration-150">
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2.5">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-canvas text-fgBody">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-none border border-border bg-canvas text-fgBody">
                 <User className="h-3.5 w-3.5" aria-hidden="true" />
               </span>
               <div className="min-w-0">
@@ -168,7 +168,7 @@ export function UserSettingsLayout({ active, handle, children }: UserSettingsLay
               type="button"
               data-sidebar-close
               aria-label="Close user settings sidebar"
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border text-fgMuted hover:bg-surfaceHover hover:text-fg"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-none border border-border text-fgMuted hover:bg-surfaceHover hover:text-fg"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -181,9 +181,9 @@ export function UserSettingsLayout({ active, handle, children }: UserSettingsLay
 
       {/* Persistent Compact Vertical Left Sidebar (>=640px: split-pane preview, tablet, desktop) */}
       <aside aria-label="User settings navigation" className="hidden sm:sticky sm:top-16 sm:block">
-        <div className="rounded-md border border-border bg-surface">
+        <div className="rounded-none border border-border bg-surface">
           <div className="flex items-center gap-2 border-b border-border px-2.5 py-2">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-canvas text-fgBody">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-none border border-border bg-canvas text-fgBody">
               <User className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
             <div className="min-w-0">

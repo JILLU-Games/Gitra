@@ -5,6 +5,13 @@ import { Check } from "lucide-react";
 
 import { hydrateIsland } from "@/client/hydrate";
 import { buildNamespaceProfileHref } from "@/shared/admin/panel";
+import {
+  Button,
+  ErrorBanner,
+  inputClasses,
+  showToast,
+  textareaClasses,
+} from "@/client/components/ui";
 
 export type ProfileSettingsIslandProps = {
   namespaceSlug: string;
@@ -12,6 +19,7 @@ export type ProfileSettingsIslandProps = {
   initialBio: string;
   initialLocation: string;
   initialWebsite: string;
+  initialCommitEmail?: string;
 };
 
 type SaveProfileResponse =
@@ -21,6 +29,7 @@ type SaveProfileResponse =
       bio: string;
       location: string;
       website: string;
+      commitEmail?: string;
     }
   | { ok: false; reason?: string };
 
@@ -30,11 +39,13 @@ export function ProfileSettingsIsland({
   initialBio,
   initialLocation,
   initialWebsite,
+  initialCommitEmail = "",
 }: ProfileSettingsIslandProps) {
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [bio, setBio] = useState(initialBio);
   const [location, setLocation] = useState(initialLocation);
   const [website, setWebsite] = useState(initialWebsite);
+  const [commitEmail, setCommitEmail] = useState(initialCommitEmail);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +70,7 @@ export function ProfileSettingsIsland({
           bio,
           location,
           website,
+          commitEmail,
         }),
       });
       if (response.status === 401) {
@@ -69,16 +81,25 @@ export function ProfileSettingsIsland({
       const body = (await response.json().catch(() => null)) as SaveProfileResponse | null;
       if (!response.ok || !body || !body.ok) {
         const reason = body && !body.ok ? body.reason : `HTTP ${response.status}`;
-        setError(`Could not save profile (${reason ?? "error"}).`);
+        const msg =
+          reason === "invalid-commit-email"
+            ? "Please enter a valid commit email address (or leave blank)."
+            : `Could not save profile (${reason ?? "error"}).`;
+        setError(msg);
+        showToast({ tone: "error", title: "Profile update failed", message: msg });
         return;
       }
       setDisplayName(body.displayName);
       setBio(body.bio);
       setLocation(body.location);
       setWebsite(body.website);
+      setCommitEmail(body.commitEmail ?? "");
       setSaved(true);
+      showToast({ tone: "success", title: "Public profile updated" });
     } catch {
-      setError("Network error while updating profile.");
+      const msg = "Network error while updating profile.";
+      setError(msg);
+      showToast({ tone: "error", title: "Profile update failed", message: msg });
     } finally {
       setSaving(false);
     }
@@ -87,7 +108,7 @@ export function ProfileSettingsIsland({
   return (
     <section
       aria-label="Edit public profile"
-      className="rounded-md border border-border bg-surface"
+      className="rounded-none border border-border bg-surface"
     >
       <div className="border-b border-borderSubtle px-4 py-2.5 text-[14px] font-semibold text-fg">
         Public Profile Details
@@ -95,23 +116,20 @@ export function ProfileSettingsIsland({
 
       <form onSubmit={(event) => void handleSubmit(event)} className="space-y-3.5 p-4 text-[12px]">
         {error ? (
-          <div
-            role="alert"
-            className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-          >
+          <ErrorBanner className="px-3 py-2 text-[12px]">
             <span>{error}</span>
             {sessionExpired ? (
               <a href="/auth" className="ml-1.5 font-medium underline">
                 Sign in
               </a>
             ) : null}
-          </div>
+          </ErrorBanner>
         ) : null}
 
         {saved ? (
           <div
             role="status"
-            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-none border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300"
           >
             <span className="inline-flex items-center gap-1.5">
               <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
@@ -136,7 +154,7 @@ export function ProfileSettingsIsland({
               maxLength={80}
               disabled={saving}
               placeholder="Your name or organization"
-              className="h-8 w-full rounded-md border border-border bg-canvas px-3 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+              className={inputClasses}
             />
           </div>
 
@@ -152,25 +170,46 @@ export function ProfileSettingsIsland({
               maxLength={60}
               disabled={saving}
               placeholder="e.g. Dhaka, Bangladesh"
-              className="h-8 w-full rounded-md border border-border bg-canvas px-3 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+              className={inputClasses}
             />
           </div>
         </div>
 
-        <div>
-          <label htmlFor="profile-website" className="mb-1 block font-medium text-fg">
-            Website URL
-          </label>
-          <input
-            id="profile-website"
-            type="text"
-            value={website}
-            onChange={(event) => setWebsite(event.target.value)}
-            maxLength={160}
-            disabled={saving}
-            placeholder="https://example.com"
-            className="h-8 w-full rounded-md border border-border bg-canvas px-3 font-mono text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
-          />
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <div>
+            <label htmlFor="profile-website" className="mb-1 block font-medium text-fg">
+              Website URL
+            </label>
+            <input
+              id="profile-website"
+              type="text"
+              value={website}
+              onChange={(event) => setWebsite(event.target.value)}
+              maxLength={160}
+              disabled={saving}
+              placeholder="https://example.com"
+              className={`${inputClasses} font-mono`}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="profile-commit-email" className="mb-1 block font-medium text-fg">
+              Git Commit Email
+            </label>
+            <input
+              id="profile-commit-email"
+              type="email"
+              value={commitEmail}
+              onChange={(event) => setCommitEmail(event.target.value)}
+              maxLength={120}
+              disabled={saving}
+              placeholder={`${namespaceSlug}@users.noreply.example.com`}
+              className={`${inputClasses} font-mono`}
+            />
+            <p className="m-0 mt-1 text-[11px] text-fgMuted">
+              Used as author/committer email for web edits. Leave blank for noreply fallback.
+            </p>
+          </div>
         </div>
 
         <div>
@@ -185,7 +224,7 @@ export function ProfileSettingsIsland({
             rows={2}
             disabled={saving}
             placeholder="Tell visitors what you build and maintain..."
-            className="w-full rounded-md border border-border bg-canvas p-2.5 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+            className={textareaClasses}
           />
           <p className="m-0 mt-1 text-[12px] text-fgMuted">
             Displayed on your namespace header at{" "}
@@ -194,14 +233,10 @@ export function ProfileSettingsIsland({
         </div>
 
         <div className="flex justify-end border-t border-borderSubtle pt-3">
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
-          >
+          <Button type="submit" variant="primary" size="md" disabled={saving}>
             <Check className="h-3.5 w-3.5" aria-hidden="true" />
             <span>{saving ? "Saving…" : "Save profile"}</span>
-          </button>
+          </Button>
         </div>
       </form>
     </section>

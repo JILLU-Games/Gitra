@@ -6,19 +6,20 @@ All **21 verified findings (`F-01`–`F-21`)** are organized into **5 strict, no
 
 ## Phase Sequence Overview
 
-| Phase | Focus Area | Findings Included | Gate Command |
-| :--- | :--- | :--- | :--- |
-| **Phase 01** | Regression Repair, Auth Separation, Primary-Admin & Session Security | `F-01`, `F-02`, `F-03`, `F-04`, `F-05`, `F-06`, `F-07`, `F-08` | `npm run typecheck && npm run test && npm run test:auth && npm run test:workers` |
-| **Phase 02** | Git Protocol, Ref Backfill, Compaction & Tier Reliability | `F-09`, `F-10`, `F-17`, `F-18`, `F-19` | `npm run typecheck && npm run test && npm run test:workers` |
-| **Phase 03** | Real Repo Metadata, Web Git Completeness & Raw Link Handling | `F-11`, `F-12`, `F-16` | `npm run typecheck && npm run test && npm run test:workers && npm run build` |
-| **Phase 04** | Global Component-Only UI (`--radius: 0rem`), Toast System & PWA | `F-13`, `F-14`, `F-15` | `npm run typecheck && npm run build && npm run test:workers` (+ headless browser check) |
-| **Phase 05** | Auto-Deploy Secret Timing, Unused Artifacts & Prettier Cleanliness | `F-20`, `F-21` | `node --test test/cf-auto-deploy.node-test.ts && npm run format:check && npm run build && npm run test:workers` |
+| Phase        | Focus Area                                                           | Findings Included                                              | Gate Command                                                                                                    |
+| :----------- | :------------------------------------------------------------------- | :------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| **Phase 01** | Regression Repair, Auth Separation, Primary-Admin & Session Security | `F-01`, `F-02`, `F-03`, `F-04`, `F-05`, `F-06`, `F-07`, `F-08` | `npm run typecheck && npm run test && npm run test:auth && npm run test:workers`                                |
+| **Phase 02** | Git Protocol, Ref Backfill, Compaction & Tier Reliability            | `F-09`, `F-10`, `F-17`, `F-18`, `F-19`                         | `npm run typecheck && npm run test && npm run test:workers`                                                     |
+| **Phase 03** | Real Repo Metadata, Web Git Completeness & Raw Link Handling         | `F-11`, `F-12`, `F-16`                                         | `npm run typecheck && npm run test && npm run test:workers && npm run build`                                    |
+| **Phase 04** | Global Component-Only UI (`--radius: 0rem`), Toast System & PWA      | `F-13`, `F-14`, `F-15`                                         | `npm run typecheck && npm run build && npm run test:workers` (+ headless browser check)                         |
+| **Phase 05** | Auto-Deploy Secret Timing, Unused Artifacts & Prettier Cleanliness   | `F-20`, `F-21`                                                 | `node --test test/cf-auto-deploy.node-test.ts && npm run format:check && npm run build && npm run test:workers` |
 
 ---
 
 ## Detailed Step-by-Step Phase Plans
 
 ### Phase 01 — Regression Repair, Auth & Session Security
+
 - **Findings:** `F-01`, `F-02`, `F-03`, `F-04`, `F-05`, `F-06`, `F-07`, `F-08`
 - **Why First:** Unblocks the currently failing `npm run test:workers` suite (`F-01`) and closes every Critical/High auth & setup lockout defect (`F-02`–`F-08`) before touching any feature or UI layer.
 - **Exact Steps:**
@@ -33,6 +34,7 @@ All **21 verified findings (`F-01`–`F-21`)** are organized into **5 strict, no
 ---
 
 ### Phase 02 — Git Protocol, Ref Backfill, Compaction & Tier Policy
+
 - **Findings:** `F-09`, `F-10`, `F-17`, `F-18`, `F-19`
 - **Why Second:** Stabilizes the core Cloudflare storage/queue engine across both `--no-queues`/Free Tier and Paid Tier once auth gates are verified green.
 - **Exact Steps:**
@@ -46,6 +48,7 @@ All **21 verified findings (`F-01`–`F-21`)** are organized into **5 strict, no
 ---
 
 ### Phase 03 — Real Repo Metadata, Web Git Completeness & Raw Link Guard
+
 - **Findings:** `F-11`, `F-12`, `F-16`
 - **Why Third:** Builds real repository data and web write capabilities on top of the stabilized Git/DO engine.
 - **Exact Steps:**
@@ -57,6 +60,7 @@ All **21 verified findings (`F-01`–`F-21`)** are organized into **5 strict, no
 ---
 
 ### Phase 04 — Global Component-Only UI System, Global Toast & PWA
+
 - **Findings:** `F-13`, `F-14`, `F-15`
 - **Why Fourth:** Applies visual design consistency, global Toast notifications, and PWA support across all completed pages and islands in one unified pass.
 - **Exact Steps:**
@@ -68,6 +72,7 @@ All **21 verified findings (`F-01`–`F-21`)** are organized into **5 strict, no
 ---
 
 ### Phase 05 — Auto-Deploy Secret Hygiene, Bundle Cleanup & Formatting
+
 - **Findings:** `F-20`, `F-21`
 - **Why Last:** Finalizes CI/CD deployment hygiene, secret lifecycle, and formatting once runtime & static assets (`public/`) are in final shape.
 - **Exact Steps:**

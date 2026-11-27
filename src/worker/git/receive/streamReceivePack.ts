@@ -77,16 +77,18 @@ function selectReceiveResponseMode(
   return capabilities.sideBand64k ? "side-band-64k" : "plain";
 }
 
-function scheduleRepoStateChange(
+async function runRepoStateChange(
   ctx: ExecutionContext,
   onRepoStateChanged: RepoStateChangeHandler | undefined,
   change: {
     changed: boolean;
     empty: boolean;
   }
-): void {
+): Promise<void> {
   if (!onRepoStateChanged || !change.changed) return;
-  ctx.waitUntil(Promise.resolve().then(() => onRepoStateChanged(change)));
+  const task = Promise.resolve().then(() => onRepoStateChanged(change));
+  ctx.waitUntil(task);
+  await task;
 }
 
 function buildInvalidRefResponse(args: {
@@ -189,7 +191,7 @@ function createSidebandReceiveResponse(args: {
           onProgress,
         });
 
-        scheduleRepoStateChange(args.ctx, args.onRepoStateChanged, {
+        await runRepoStateChange(args.ctx, args.onRepoStateChanged, {
           changed: result.changed,
           empty: result.empty,
         });
@@ -348,7 +350,7 @@ export async function handleStreamingReceivePackPOST(
       countSubrequest: (op, n = 1) => countReceiveSubrequest(cacheCtx, log, op, n),
     });
 
-    scheduleRepoStateChange(ctx, options?.onRepoStateChanged, {
+    await runRepoStateChange(ctx, options?.onRepoStateChanged, {
       changed: result.changed,
       empty: result.empty,
     });

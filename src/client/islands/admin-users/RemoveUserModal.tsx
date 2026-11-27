@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
 import type { AdminNamespaceEntry } from "@/shared/admin/panel";
+import { Button, ErrorBanner } from "@/client/components/ui";
 
 type RemoveUserModalProps = {
   user: AdminNamespaceEntry;
@@ -62,7 +63,7 @@ export function RemoveUserModal({ user, onClose, onRemoved }: RemoveUserModalPro
         }
       }}
     >
-      <div className="w-full max-w-md rounded-md border border-border bg-surface">
+      <div className="w-full max-w-md rounded-none border border-border bg-surface">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 id="remove-user-modal-title" className="m-0 text-[14px] font-semibold text-fg">
             Remove user
@@ -72,21 +73,14 @@ export function RemoveUserModal({ user, onClose, onRemoved }: RemoveUserModalPro
             onClick={onClose}
             disabled={busy}
             aria-label="Close modal"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-none border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
 
         <div className="space-y-3 p-4">
-          {error ? (
-            <div
-              role="alert"
-              className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-            >
-              {error}
-            </div>
-          ) : null}
+          {error ? <ErrorBanner className="px-3 py-2 text-[12px]">{error}</ErrorBanner> : null}
 
           <p className="m-0 text-[13px] leading-relaxed text-fgBody">
             Permanently remove <strong className="text-fg">{user.displayName}</strong> (
@@ -98,19 +92,14 @@ export function RemoveUserModal({ user, onClose, onRemoved }: RemoveUserModalPro
           </p>
 
           <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              className="inline-flex h-8 items-center rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
-            >
+            <Button type="button" variant="secondary" size="md" onClick={onClose} disabled={busy}>
               Cancel
-            </button>
+            </Button>
             <button
               type="button"
               onClick={handleConfirmRemove}
               disabled={busy}
-              className="inline-flex h-8 items-center rounded-md border border-red-500/40 bg-red-500/15 px-3 text-[12px] font-medium text-red-300 hover:bg-red-500/25 disabled:opacity-50"
+              className="inline-flex h-8 items-center rounded-none border border-red-500/40 bg-red-500/15 px-3 text-[12px] font-medium text-red-300 hover:bg-red-500/25 disabled:opacity-50"
             >
               {busy ? "Removing..." : "Remove user"}
             </button>

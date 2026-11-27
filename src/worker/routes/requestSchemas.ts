@@ -93,6 +93,25 @@ export const RepoFileUpdateRequestSchema = z.preprocess(
   })
 );
 
+export const RepoFileDeleteRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    path: TrimmedStringSchema,
+    message: TrimmedStringSchema,
+    ref: TrimmedStringSchema,
+  })
+);
+
+export const RepoFileMoveRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    fromPath: TrimmedStringSchema,
+    toPath: TrimmedStringSchema,
+    message: TrimmedStringSchema,
+    ref: TrimmedStringSchema,
+  })
+);
+
 export const ProfileMetaUpdateRequestSchema = z.preprocess(
   objectOrEmpty,
   z.object({
@@ -103,6 +122,10 @@ export const ProfileMetaUpdateRequestSchema = z.preprocess(
     bio: StringOrEmptySchema,
     location: TrimmedStringSchema,
     website: TrimmedStringSchema,
+    commitEmail: z.preprocess(
+      (value) => (typeof value === "string" ? value : undefined),
+      z.string().optional()
+    ),
   })
 );
 
@@ -169,6 +192,22 @@ export const AdminHeadPayloadSchema = z
     unborn: z.boolean().optional(),
   })
   .passthrough();
+
+export const AdminRefCreateRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    kind: z.preprocess((value) => (value === "tag" ? "tag" : "branch"), z.enum(["branch", "tag"])),
+    name: TrimmedStringSchema,
+    sourceRef: TrimmedStringSchema,
+  })
+);
+
+export const AdminRefDeleteRequestSchema = z.preprocess(
+  objectOrEmpty,
+  z.object({
+    name: TrimmedStringSchema,
+  })
+);
 
 export const AdminPurgeRequestSchema = z.preprocess(
   objectOrEmpty,

@@ -9,7 +9,7 @@ import {
   type SiteBrandingAssetSlot,
   type SiteBrandingConfig,
 } from "@/shared/branding";
-import { Button, Input } from "@/client/components/ui";
+import { Button, ErrorBanner, Input, showToast, textareaClasses } from "@/client/components/ui";
 import { hydrateIsland } from "@/client/hydrate";
 
 export type AdminSettingsIslandProps = {
@@ -111,14 +111,18 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
             ? (data.error ?? data.reason ?? `Save failed (HTTP ${response.status})`)
             : `Save failed (HTTP ${response.status})`;
         setError(message);
+        showToast({ tone: "error", title: "Could not save settings", message });
         return;
       }
       setForm(data.branding);
-      setSavedNotice(
-        "Site branding, SEO metadata, and assets saved. Refresh or navigate to see updates across all pages."
-      );
+      const notice =
+        "Site branding, SEO metadata, and assets saved. Refresh or navigate to see updates across all pages.";
+      setSavedNotice(notice);
+      showToast({ tone: "success", title: "Site settings saved" });
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Could not save settings", message: msg });
     } finally {
       setSaving(false);
     }
@@ -133,11 +137,15 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
     if (!file || uploadingSlot || saving) return;
 
     if (file.size === 0) {
-      setError("Selected file is empty.");
+      const msg = "Selected file is empty.";
+      setError(msg);
+      showToast({ tone: "error", title: "Upload blocked", message: msg });
       return;
     }
     if (file.size > MAX_BRANDING_ASSET_BYTES[slotMeta.slot]) {
-      setError(formatAssetErrorReason("too-large", slotMeta.slot));
+      const msg = formatAssetErrorReason("too-large", slotMeta.slot);
+      setError(msg);
+      showToast({ tone: "error", title: "File too large", message: msg });
       return;
     }
 
@@ -161,15 +169,20 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
             ? (data.error ?? formatAssetErrorReason(data.reason, slotMeta.slot))
             : `Upload failed (HTTP ${response.status})`;
         setError(message);
+        showToast({ tone: "error", title: "Asset upload failed", message });
         return;
       }
       setForm((prev) => ({
         ...prev,
         [slotMeta.field]: data.branding[slotMeta.field],
       }));
-      setSavedNotice(`${slotMeta.label} uploaded and activated immediately.`);
+      const msg = `${slotMeta.label} uploaded and activated immediately.`;
+      setSavedNotice(msg);
+      showToast({ tone: "success", title: `${slotMeta.label} updated` });
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Asset upload failed", message: msg });
     } finally {
       setUploadingSlot(null);
     }
@@ -192,15 +205,20 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
             ? (data.error ?? data.reason ?? `Remove failed (HTTP ${response.status})`)
             : `Remove failed (HTTP ${response.status})`;
         setError(message);
+        showToast({ tone: "error", title: "Asset removal failed", message });
         return;
       }
       setForm((prev) => ({
         ...prev,
         [slotMeta.field]: "",
       }));
-      setSavedNotice(`${slotMeta.label} removed and reset to default.`);
+      const msg = `${slotMeta.label} removed and reset to default.`;
+      setSavedNotice(msg);
+      showToast({ tone: "success", title: `${slotMeta.label} removed` });
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Asset removal failed", message: msg });
     } finally {
       setUploadingSlot(null);
     }
@@ -211,7 +229,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
   const previewDomain = form.websiteLabel || form.siteName;
 
   return (
-    <section className="rounded-md border border-border bg-surface">
+    <section className="rounded-none border border-border bg-surface">
       <div className="border-b border-border px-4 py-2.5">
         <h2 className="m-0 text-[13px] font-semibold text-fg">
           Site Identity, SEO Metadata &amp; Brand Assets
@@ -223,19 +241,12 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
       </div>
 
       <form onSubmit={(event) => void handleSubmit(event)} className="space-y-5 p-4">
-        {error ? (
-          <div
-            role="alert"
-            className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-          >
-            {error}
-          </div>
-        ) : null}
+        {error ? <ErrorBanner className="px-3 py-2 text-[12px]">{error}</ErrorBanner> : null}
 
         {savedNotice ? (
           <div
             role="status"
-            className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300"
+            className="flex items-center gap-2 rounded-none border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300"
           >
             <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>{savedNotice}</span>
@@ -284,7 +295,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               type="text"
               value={form.workspaceName}
               onChange={(event) => updateField("workspaceName", event.target.value)}
-              placeholder="Vib Tools Workspace"
+              placeholder="Git Workspace"
               helperText="Shown above the signed-in dashboard repository list."
               required
             />
@@ -302,7 +313,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
             type="text"
             value={form.metaTitle}
             onChange={(event) => updateField("metaTitle", event.target.value)}
-            placeholder="gitra · Vib Tools Open-Source Repositories"
+            placeholder="gitra · Self-Hosted Git Forge"
             helperText="Recommended under 60 characters for search results."
             required
           />
@@ -325,7 +336,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               maxLength={320}
               value={form.metaDescription}
               onChange={(event) => updateField("metaDescription", event.target.value)}
-              className="w-full rounded-md border border-border bg-canvas px-3 py-2 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+              className={`${textareaClasses} px-3 py-2 text-[13px]`}
               placeholder="Concise summary shown in search engine snippets and link previews."
             />
           </div>
@@ -340,13 +351,13 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               placeholder="git, open-source, cloudflare, repositories"
               helperText="Comma-separated keywords; leave blank to omit."
             />
-            <div className="flex flex-col justify-center rounded-md border border-borderSubtle bg-canvas px-3 py-2">
+            <div className="flex flex-col justify-center rounded-none border border-borderSubtle bg-canvas px-3 py-2">
               <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-fg">
                 <input
                   type="checkbox"
                   checked={form.allowIndexing}
                   onChange={(event) => updateField("allowIndexing", event.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-border accent-accent"
+                  className="h-3.5 w-3.5 rounded-none border-border accent-accent"
                 />
                 <span>Allow search engine indexing (robots)</span>
               </label>
@@ -358,14 +369,14 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
           </div>
 
           {/* Live Browser Tab & Search Preview */}
-          <div className="rounded-md border border-borderSubtle bg-canvas p-3 space-y-2.5">
+          <div className="rounded-none border border-borderSubtle bg-canvas p-3 space-y-2.5">
             <div className="flex items-center gap-2 border-b border-borderSubtle pb-2">
-              <div className="inline-flex max-w-full items-center gap-2 rounded-t border border-border bg-surface px-2.5 py-1 text-[11px] text-fg">
+              <div className="inline-flex max-w-full items-center gap-2 rounded-none border border-border bg-surface px-2.5 py-1 text-[11px] text-fg">
                 {form.faviconUrl ? (
                   <img
                     src={form.faviconUrl}
                     alt=""
-                    className="h-3.5 w-3.5 shrink-0 rounded-sm object-contain"
+                    className="h-3.5 w-3.5 shrink-0 rounded-none object-contain"
                   />
                 ) : (
                   <Globe className="h-3.5 w-3.5 shrink-0 text-fgMuted" aria-hidden="true" />
@@ -398,9 +409,9 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               return (
                 <div
                   key={slotMeta.slot}
-                  className="flex flex-col gap-3 rounded-md border border-borderSubtle bg-canvas p-3 sm:flex-row sm:items-center"
+                  className="flex flex-col gap-3 rounded-none border border-borderSubtle bg-canvas p-3 sm:flex-row sm:items-center"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-surface">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-none border border-border bg-surface">
                     {currentUrl ? (
                       <img
                         src={currentUrl}
@@ -419,7 +430,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
                       <div className="flex items-center gap-1.5">
                         <label
                           htmlFor={fileInputId}
-                          className="inline-flex cursor-pointer items-center gap-1 rounded border border-border bg-surface px-2 py-1 text-[11px] font-medium text-fg transition-colors hover:border-fgMuted"
+                          className="inline-flex cursor-pointer items-center gap-1 rounded-none border border-border bg-surface px-2 py-1 text-[11px] font-medium text-fg transition-colors hover:border-fgMuted"
                         >
                           <Upload className="h-3 w-3" aria-hidden="true" />
                           <span>{isBusy ? "Uploading…" : "Upload"}</span>
@@ -437,7 +448,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
                             type="button"
                             disabled={Boolean(uploadingSlot) || saving}
                             onClick={() => void handleRemoveAsset(slotMeta)}
-                            className="inline-flex items-center gap-1 rounded border border-border bg-surface px-2 py-1 text-[11px] font-medium text-fgMuted transition-colors hover:border-red-500/40 hover:text-red-400 disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded-none border border-border bg-surface px-2 py-1 text-[11px] font-medium text-fgMuted transition-colors hover:border-red-500/40 hover:text-red-400 disabled:opacity-50"
                           >
                             <Trash2 className="h-3 w-3" aria-hidden="true" />
                             <span>Remove</span>
@@ -451,7 +462,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
                       value={currentUrl}
                       onChange={(event) => updateField(slotMeta.field, event.target.value)}
                       placeholder={slotMeta.placeholder}
-                      className="w-full rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-[12px] text-fg placeholder:font-sans placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+                      className="w-full rounded-none border border-border bg-surface px-2.5 py-1.5 font-mono text-[12px] text-fg placeholder:font-sans placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
                     />
                     <p className="m-0 text-[11px] text-fgMuted">{slotMeta.hint}</p>
                   </div>
@@ -473,7 +484,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               type="text"
               value={form.tagline}
               onChange={(event) => updateField("tagline", event.target.value)}
-              placeholder="Vib Tools · Open-Source Forge"
+              placeholder="Open-Source Git Forge"
               helperText="Leave blank to hide the tagline prefix."
             />
             <Input
@@ -482,7 +493,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               type="text"
               value={form.heroTitle}
               onChange={(event) => updateField("heroTitle", event.target.value)}
-              placeholder="Vib Tools Open-Source Repositories"
+              placeholder="Open-Source Repositories"
               required
             />
           </div>
@@ -499,7 +510,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               rows={3}
               value={form.heroDescription}
               onChange={(event) => updateField("heroDescription", event.target.value)}
-              className="w-full rounded-md border border-border bg-canvas px-3 py-2 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+              className={`${textareaClasses} px-3 py-2 text-[13px]`}
               placeholder="Describe your Git forge and public projects."
             />
           </div>
@@ -511,7 +522,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               type="url"
               value={form.websiteUrl}
               onChange={(event) => updateField("websiteUrl", event.target.value)}
-              placeholder="https://vibtools.io"
+              placeholder="https://example.com"
               helperText="Leave blank to omit external website buttons."
             />
             <Input
@@ -520,7 +531,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               type="text"
               value={form.websiteLabel}
               onChange={(event) => updateField("websiteLabel", event.target.value)}
-              placeholder="vibtools.io"
+              placeholder="example.com"
             />
             <Input
               label="Documentation URL"
@@ -528,7 +539,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               type="url"
               value={form.docsUrl}
               onChange={(event) => updateField("docsUrl", event.target.value)}
-              placeholder="https://docs.vib.tools"
+              placeholder="https://docs.example.com"
               helperText="Leave blank to omit Documentation/Docs links."
             />
             <Input
@@ -537,7 +548,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
               type="email"
               value={form.supportEmail}
               onChange={(event) => updateField("supportEmail", event.target.value)}
-              placeholder="support@vibtools.io"
+              placeholder="support@example.com"
               helperText="Leave blank to omit the contact email link."
             />
           </div>
@@ -548,7 +559,7 @@ export function AdminSettingsIsland({ initialBranding }: AdminSettingsIslandProp
             type="text"
             value={form.footerText}
             onChange={(event) => updateField("footerText", event.target.value)}
-            placeholder="© 2026 gitra · Vib Tools"
+            placeholder="© 2026 gitra"
           />
         </div>
 

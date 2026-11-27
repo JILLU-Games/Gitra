@@ -23,7 +23,7 @@ export type CompactionData = {
   running?: boolean;
   startedAt?: number;
   queued?: boolean;
-  wantedAt?: number;
+  wantedAt?: number | null;
 };
 
 export type AdminState = {

@@ -68,19 +68,19 @@ export function NamespacesPage({
               defaultValue={trimmedQuery}
               placeholder="Filter namespaces..."
               aria-label="Filter namespaces"
-              className="h-8 w-full rounded-md border border-border bg-surface pl-8 pr-3 text-[12.5px] text-fg placeholder:text-fgMuted focus:border-accent focus:outline-none"
+              className="h-8 w-full rounded-none border border-border bg-surface pl-8 pr-3 text-[12.5px] text-fg placeholder:text-fgMuted focus:border-accent focus:outline-none"
             />
           </div>
           <button
             type="submit"
-            className="h-8 shrink-0 rounded-md border border-border bg-surface px-3 text-[12px] font-medium text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
+            className="h-8 shrink-0 rounded-none border border-border bg-surface px-3 text-[12px] font-medium text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
           >
             Filter
           </button>
           {isFiltered ? (
             <a
               href="/namespaces"
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fgMuted no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-none border border-border bg-canvas px-2.5 text-[12px] text-fgMuted no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
               aria-label="Clear namespace filter"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -93,7 +93,7 @@ export function NamespacesPage({
       {/* Compact Directory Table/List */}
       <section
         aria-label="Namespace directory"
-        className="overflow-hidden rounded-md border border-border bg-surface"
+        className="overflow-hidden rounded-none border border-border bg-surface"
       >
         <div className="flex items-center justify-between border-b border-borderSubtle px-4 py-2.5 text-[12px] text-fgMuted">
           <span>
@@ -131,7 +131,7 @@ export function NamespacesPage({
               <div className="pt-1">
                 <a
                   href="/namespaces"
-                  className="inline-flex h-8 items-center rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fg no-underline transition-colors hover:bg-surfaceHover"
+                  className="inline-flex h-8 items-center rounded-none border border-border bg-canvas px-3 text-[12px] font-medium text-fg no-underline transition-colors hover:bg-surfaceHover"
                 >
                   Show all namespaces
                 </a>
@@ -159,7 +159,7 @@ export function NamespacesPage({
                   >
                     <div className="flex min-w-0 items-start gap-3">
                       <div
-                        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded border border-border bg-canvas text-[13px] font-semibold text-fg"
+                        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-none border border-border bg-canvas text-[13px] font-semibold text-fg"
                         aria-hidden="true"
                       >
                         {initial}

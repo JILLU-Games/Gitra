@@ -24,6 +24,13 @@ import {
 } from "@/shared/admin/panel";
 import { PROFILE_README_PATH, PROFILE_REPO_SLUG } from "@/shared/slugs";
 import { hydrateIsland } from "@/client/hydrate";
+import {
+  Button,
+  ErrorBanner,
+  inputClasses,
+  selectClasses,
+  showToast,
+} from "@/client/components/ui";
 
 export type HeaderMenusIslandProps = {
   handle: string;
@@ -110,20 +117,23 @@ export function HeaderMenusIsland({
       const body = (await response.json().catch(() => null)) as CreateRepoResult | null;
       if (!response.ok || !body || !body.ok) {
         const reason = body && !body.ok ? body.reason : `HTTP ${response.status}`;
-        setCreateError(
+        const msg =
           reason === "slug-taken"
             ? "A repository with that name already exists in this namespace."
             : reason === "invalid-slug"
               ? "Use lowercase letters, numbers, internal hyphens/dots, or .vibtools (1–40 chars)."
               : reason === "viewer-read-only"
                 ? "Viewer accounts have read-only access."
-                : `Could not create repository (${reason ?? "error"}).`
-        );
+                : `Could not create repository (${reason ?? "error"}).`;
+        setCreateError(msg);
+        showToast({ tone: "error", title: "Could not create repository", message: msg });
         return;
       }
       window.location.assign(`/${body.namespaceSlug}/${body.slug}`);
     } catch {
-      setCreateError("Network error while creating repository.");
+      const msg = "Network error while creating repository.";
+      setCreateError(msg);
+      showToast({ tone: "error", title: "Could not create repository", message: msg });
     } finally {
       setCreating(false);
     }
@@ -142,7 +152,7 @@ export function HeaderMenusIsland({
               aria-expanded={openMenu === "create"}
               aria-label="Create new"
               title="Create new repository"
-              className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-canvas px-2 text-[12px] font-medium text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
+              className="inline-flex h-7 items-center gap-1 rounded-none border border-border bg-canvas px-2 text-[12px] font-medium text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               <ChevronDown className="h-3 w-3 text-fgMuted" aria-hidden="true" />
@@ -152,7 +162,7 @@ export function HeaderMenusIsland({
               <div
                 role="menu"
                 aria-label="Create menu"
-                className="absolute right-0 z-[110] mt-1.5 w-48 rounded-md border border-border bg-surface py-1 text-[12px]"
+                className="absolute right-0 z-[110] mt-1.5 w-48 rounded-none border border-border bg-surface py-1 text-[12px]"
               >
                 <button
                   type="button"
@@ -193,7 +203,7 @@ export function HeaderMenusIsland({
             aria-haspopup="menu"
             aria-expanded={openMenu === "user"}
             aria-label="Account menu"
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-canvas px-2.5 text-[12px] font-medium text-fg transition-colors hover:bg-surfaceHover"
+            className="inline-flex h-7 items-center gap-1.5 rounded-none border border-border bg-canvas px-2.5 text-[12px] font-medium text-fg transition-colors hover:bg-surfaceHover"
           >
             <User className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
             <span className="max-w-[120px] truncate font-mono">{handle}</span>
@@ -204,7 +214,7 @@ export function HeaderMenusIsland({
             <div
               role="menu"
               aria-label="User navigation menu"
-              className="absolute right-0 z-[110] mt-1.5 w-56 rounded-md border border-border bg-surface py-1 text-[12px]"
+              className="absolute right-0 z-[110] mt-1.5 w-56 rounded-none border border-border bg-surface py-1 text-[12px]"
             >
               <div className="border-b border-borderSubtle px-3 py-2">
                 <p className="m-0 text-[11px] text-fgMuted">Signed in as</p>
@@ -339,7 +349,7 @@ export function HeaderMenusIsland({
             }
           }}
         >
-          <div className="w-full max-w-md rounded-md border border-border bg-surface">
+          <div className="w-full max-w-md rounded-none border border-border bg-surface">
             <div className="flex items-center justify-between border-b border-borderSubtle px-4 py-3">
               <div>
                 <h2 id="header-create-repo-title" className="m-0 text-[14px] font-semibold text-fg">
@@ -354,7 +364,7 @@ export function HeaderMenusIsland({
                 onClick={() => setCreateModalOpen(false)}
                 disabled={creating}
                 aria-label="Close modal"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-none border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg"
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
@@ -362,12 +372,7 @@ export function HeaderMenusIsland({
 
             <form onSubmit={handleCreateRepository} className="space-y-3.5 p-4">
               {createError ? (
-                <div
-                  role="alert"
-                  className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-                >
-                  {createError}
-                </div>
+                <ErrorBanner className="px-3 py-2 text-[12px]">{createError}</ErrorBanner>
               ) : null}
 
               <div>
@@ -381,12 +386,12 @@ export function HeaderMenusIsland({
                   <button
                     type="button"
                     onClick={() => setRepoSlug(PROFILE_REPO_SLUG)}
-                    className="rounded border border-border bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-fgBody hover:bg-surfaceHover hover:text-fg"
+                    className="rounded-none border border-border bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-fgBody hover:bg-surfaceHover hover:text-fg"
                   >
                     Use {PROFILE_REPO_SLUG}
                   </button>
                 </div>
-                <div className="flex items-center rounded-md border border-border bg-canvas focus-within:border-fgMuted">
+                <div className="flex items-center rounded-none border border-border bg-canvas focus-within:border-fgMuted">
                   <span className="border-r border-border bg-surface px-2.5 py-1.5 font-mono text-[12px] text-fgMuted">
                     {namespaceSlug}/
                   </span>
@@ -424,12 +429,12 @@ export function HeaderMenusIsland({
                   disabled={creating}
                   maxLength={200}
                   placeholder="Short description of this repository"
-                  className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+                  className={inputClasses}
                 />
               </div>
 
               {isProfileSlug ? (
-                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-canvas px-3 py-2 text-[12px] text-fgBody">
+                <label className="flex cursor-pointer items-start gap-2 rounded-none border border-border bg-canvas px-3 py-2 text-[12px] text-fgBody">
                   <input
                     type="checkbox"
                     checked={initProfileReadme}
@@ -443,7 +448,7 @@ export function HeaderMenusIsland({
                   </span>
                 </label>
               ) : (
-                <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-canvas px-3 py-2 text-[12px] text-fgBody">
+                <label className="flex cursor-pointer items-start gap-2 rounded-none border border-border bg-canvas px-3 py-2 text-[12px] text-fgBody">
                   <input
                     type="checkbox"
                     checked={initReadme}
@@ -472,7 +477,7 @@ export function HeaderMenusIsland({
                     setRepoVisibility(e.target.value === "private" ? "private" : "public")
                   }
                   disabled={creating}
-                  className="h-8 w-full rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fg focus:border-fgMuted focus:outline-none"
+                  className={selectClasses}
                 >
                   <option value="public">
                     Public — visible to everyone on homepage &amp; Explore
@@ -484,21 +489,23 @@ export function HeaderMenusIsland({
               </div>
 
               <div className="flex items-center justify-end gap-2 border-t border-borderSubtle pt-3">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="md"
                   onClick={() => setCreateModalOpen(false)}
                   disabled={creating}
-                  className="inline-flex h-8 items-center rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="md"
                   disabled={creating || !repoSlug.trim()}
-                  className="inline-flex h-8 items-center rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50"
                 >
                   {creating ? "Creating..." : "Create Repository"}
-                </button>
+                </Button>
               </div>
             </form>
           </div>

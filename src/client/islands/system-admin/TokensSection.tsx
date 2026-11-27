@@ -12,7 +12,15 @@ import {
   type AdminTokenScope,
 } from "@/shared/admin/panel";
 import { formatRelativeTime } from "@/shared/web";
-import { ConfirmModal } from "@/client/components/ui";
+import {
+  Button,
+  ConfirmModal,
+  ErrorBanner,
+  copyToClipboard,
+  inputClasses,
+  selectClasses,
+  showToast,
+} from "@/client/components/ui";
 
 type TokensSectionProps = {
   namespaces: AdminNamespaceEntry[];
@@ -79,7 +87,9 @@ export function TokensSection({
       });
       const body = (await response.json().catch(() => null)) as CreatePatResponse | null;
       if (!response.ok || !body?.id || !body.plaintext || !body.prefix) {
-        setError(body?.error ?? `Could not generate token (HTTP ${response.status}).`);
+        const msg = body?.error ?? `Could not generate token (HTTP ${response.status}).`;
+        setError(msg);
+        showToast({ tone: "error", title: "Could not create token", message: msg });
         return;
       }
       const createdEntry: AdminTokenEntry = {
@@ -95,8 +105,15 @@ export function TokensSection({
       setRevealed({ label: createdEntry.name, plaintext: body.plaintext });
       setCopiedReveal(false);
       setLabel("");
+      showToast({
+        tone: "success",
+        title: "Personal access token created",
+        message: `${createdEntry.name} (${createdEntry.targetLabel})`,
+      });
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Could not create token", message: msg });
     } finally {
       setCreating(false);
     }
@@ -104,12 +121,13 @@ export function TokensSection({
 
   async function handleCopyToken() {
     if (!revealed) return;
-    try {
-      await navigator.clipboard.writeText(revealed.plaintext);
+    const copied = await copyToClipboard(revealed.plaintext, {
+      label: "personal access token",
+      successTitle: "Access token copied",
+    });
+    if (copied) {
       setCopiedReveal(true);
       window.setTimeout(() => setCopiedReveal(false), 2000);
-    } catch {
-      // Clipboard unavailable in restricted contexts.
     }
   }
 
@@ -124,20 +142,29 @@ export function TokensSection({
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? `Could not revoke token (HTTP ${response.status}).`);
+        const msg = body?.error ?? `Could not revoke token (HTTP ${response.status}).`;
+        setError(msg);
+        showToast({ tone: "error", title: "Could not revoke token", message: msg });
         return;
       }
       onRevoked(token.id, Date.now());
       setConfirmToken(null);
+      showToast({
+        tone: "success",
+        title: "Access token revoked",
+        message: `Revoked "${token.name}".`,
+      });
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      setError(msg);
+      showToast({ tone: "error", title: "Could not revoke token", message: msg });
     } finally {
       setRevokingId(null);
     }
   }
 
   return (
-    <section id="tokens" className="scroll-mt-16 rounded-md border border-border bg-surface">
+    <section id="tokens" className="scroll-mt-16 rounded-none border border-border bg-surface">
       <div className="border-b border-border px-3.5 py-2.5">
         <h2 className="m-0 text-[13px] font-semibold text-fg">Personal Access Tokens (PAT)</h2>
         <p className="m-0 text-[12px] text-fgMuted">
@@ -168,7 +195,7 @@ export function TokensSection({
               onChange={(event) => setLabel(event.target.value)}
               placeholder="ci-deploy"
               required
-              className="h-8 w-full rounded-md border border-border bg-surface px-2.5 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+              className={`${inputClasses} bg-surface px-2.5`}
             />
           </div>
 
@@ -183,7 +210,7 @@ export function TokensSection({
               id="admin-pat-namespace"
               value={namespaceSlug}
               onChange={(event) => setNamespaceSlug(event.target.value)}
-              className="h-8 w-full rounded-md border border-border bg-surface px-2 font-mono text-[12px] text-fg focus:border-fgMuted focus:outline-none"
+              className={`${selectClasses} bg-surface px-2 font-mono`}
             >
               <option value={GLOBAL_PAT_TARGET_VALUE}>All namespaces (Global)</option>
               {activeNamespaces.length > 0 ? (
@@ -209,7 +236,7 @@ export function TokensSection({
               id="admin-pat-scope"
               value={scope}
               onChange={(event) => setScope(event.target.value === "read" ? "read" : "read-write")}
-              className="h-8 w-full rounded-md border border-border bg-surface px-2 text-[12px] text-fg focus:border-fgMuted focus:outline-none"
+              className={`${selectClasses} bg-surface px-2`}
             >
               <option value="read">read (pull)</option>
               <option value="read-write">read-write (push)</option>
@@ -217,14 +244,16 @@ export function TokensSection({
           </div>
 
           <div className="sm:col-span-2 md:col-span-2 md:text-right">
-            <button
+            <Button
               type="submit"
+              variant="primary"
+              size="md"
               disabled={creating || !label.trim()}
-              className="inline-flex h-8 w-full items-center justify-center gap-1 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas hover:bg-fgHover disabled:opacity-50 md:w-auto"
+              className="w-full md:w-auto"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               <span>{creating ? "Generating…" : "Generate"}</span>
-            </button>
+            </Button>
           </div>
         </div>
         {namespaceSlug === GLOBAL_PAT_TARGET_VALUE ? (
@@ -245,13 +274,13 @@ export function TokensSection({
                 Token created: {revealed.label} — copy now (shown once)
               </p>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <code className="block max-w-full overflow-x-auto rounded border border-emerald-500/30 bg-canvas px-2.5 py-1 font-mono text-[12px] text-fg">
+                <code className="block max-w-full overflow-x-auto rounded-none border border-emerald-500/30 bg-canvas px-2.5 py-1 font-mono text-[12px] text-fg">
                   {revealed.plaintext}
                 </code>
                 <button
                   type="button"
                   onClick={() => void handleCopyToken()}
-                  className="inline-flex h-7 items-center gap-1 rounded-md border border-emerald-500/40 bg-canvas px-2.5 text-[11px] font-medium text-emerald-300 hover:bg-surfaceHover"
+                  className="inline-flex h-7 items-center gap-1 rounded-none border border-emerald-500/40 bg-canvas px-2.5 text-[11px] font-medium text-emerald-300 hover:bg-surfaceHover"
                 >
                   {copiedReveal ? (
                     <>
@@ -271,7 +300,7 @@ export function TokensSection({
               type="button"
               onClick={() => setRevealed(null)}
               aria-label="Dismiss token reveal"
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-none border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -280,12 +309,9 @@ export function TokensSection({
       ) : null}
 
       {error ? (
-        <div
-          role="alert"
-          className="border-b border-red-500/30 bg-red-500/10 px-3.5 py-2 text-[12px] text-red-400"
-        >
+        <ErrorBanner className="rounded-none border-x-0 border-t-0 px-3.5 py-2 text-[12px]">
           {error}
-        </div>
+        </ErrorBanner>
       ) : null}
 
       {tokens.length === 0 ? (
@@ -343,7 +369,7 @@ export function TokensSection({
                     </td>
                     <td className="px-3.5 py-2">
                       <span
-                        className={`inline-flex rounded border px-1.5 py-0.5 font-mono text-[11px] font-medium ${
+                        className={`inline-flex rounded-none border px-1.5 py-0.5 font-mono text-[11px] font-medium ${
                           token.scopeLabel === "read-write"
                             ? "border-accent/30 bg-accent/10 text-accent"
                             : "border-border bg-canvas text-fgBody"
@@ -360,7 +386,7 @@ export function TokensSection({
                     </td>
                     <td className="px-3.5 py-2 text-right">
                       {isRevoked ? (
-                        <span className="inline-flex rounded border border-border bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-fgMuted">
+                        <span className="inline-flex rounded-none border border-border bg-canvas px-1.5 py-0.5 font-mono text-[11px] text-fgMuted">
                           revoked
                         </span>
                       ) : (
@@ -368,7 +394,7 @@ export function TokensSection({
                           type="button"
                           disabled={isBusy}
                           onClick={() => setConfirmToken(token)}
-                          className="inline-flex h-7 items-center gap-1 rounded-md border border-red-500/30 px-2 text-[11px] text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                          className="inline-flex h-7 items-center gap-1 rounded-none border border-red-500/30 px-2 text-[11px] text-red-400 hover:bg-red-500/10 disabled:opacity-50"
                         >
                           <Trash2 className="h-3 w-3" aria-hidden="true" />
                           <span>{isBusy ? "Revoking…" : "Revoke"}</span>

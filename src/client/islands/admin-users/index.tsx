@@ -27,6 +27,14 @@ import {
 } from "@/shared/admin/panel";
 import { formatRelativeTime } from "@/shared/web";
 import { hydrateIsland } from "@/client/hydrate";
+import {
+  Button,
+  ErrorBanner,
+  copyToClipboard,
+  inputClasses,
+  selectClasses,
+  showToast,
+} from "@/client/components/ui";
 import { RemoveUserModal } from "./RemoveUserModal";
 import type { AdminUsersIslandProps } from "./types";
 import { UserFormModal } from "./UserFormModal";
@@ -90,6 +98,11 @@ export function AdminUsersIsland({
 
   function handleUserCreated(created: AdminNamespaceEntry, issuedPassword?: string) {
     setUsers((prev) => sortUsers([...prev, created]));
+    showToast({
+      tone: "success",
+      title: "User created",
+      message: `@${created.slug} (${created.role})`,
+    });
     if (issuedPassword) {
       setIssuedCredentials({
         handle: created.slug,
@@ -116,15 +129,21 @@ export function AdminUsersIsland({
 
   function handleUserRemoved(userId: string) {
     setUsers((prev) => prev.filter((item) => item.id !== userId));
+    showToast({
+      tone: "success",
+      title: "User removed",
+    });
   }
 
   function handleCopyCredentials() {
     if (!issuedCredentials) return;
     const text = `Username: @${issuedCredentials.handle}\nPassword: ${issuedCredentials.password}`;
-    navigator.clipboard?.writeText(text).then(
-      () => setCopiedCredentials(true),
-      () => setCopiedCredentials(false)
-    );
+    void copyToClipboard(text, {
+      label: "user credentials",
+      successTitle: "Credentials copied",
+    }).then((ok) => {
+      setCopiedCredentials(ok);
+    });
   }
 
   async function handleQuickToggleStatus(entry: AdminNamespaceEntry) {
@@ -146,21 +165,30 @@ export function AdminUsersIsland({
         reason?: string;
       };
       if (!res.ok || !data.ok) {
-        setBannerError(
+        const msg =
           data.reason === "protected-admin"
             ? "The signed-in primary admin cannot be disabled."
-            : "Failed to update user status."
-        );
+            : "Failed to update user status.";
+        setBannerError(msg);
+        showToast({ tone: "error", title: "Status update failed", message: msg });
         return;
       }
+      const resolvedStatus = data.status ?? nextStatus;
       handleUserUpdated({
         ...entry,
-        status: data.status ?? nextStatus,
+        status: resolvedStatus,
         lastActiveAt: data.lastActiveAt ?? entry.lastActiveAt,
         hasPassword: data.hasPassword ?? entry.hasPassword,
       });
+      showToast({
+        tone: "success",
+        title: "User status updated",
+        message: `@${entry.slug} is now ${resolvedStatus}.`,
+      });
     } catch {
-      setBannerError("Network error while updating user status.");
+      const msg = "Network error while updating user status.";
+      setBannerError(msg);
+      showToast({ tone: "error", title: "Status update failed", message: msg });
     } finally {
       setBusyId(null);
     }
@@ -184,19 +212,21 @@ export function AdminUsersIsland({
             Manage directory accounts, roles, login passwords, and active or disabled status.
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="primary"
+          size="md"
           onClick={() => setCreateOpen(true)}
-          className="inline-flex h-8 w-fit items-center gap-1.5 rounded-md bg-fg px-3.5 text-[12px] font-semibold text-canvas transition-colors hover:bg-fgHover"
+          className="w-fit"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           <span>Add user</span>
-        </button>
+        </Button>
       </header>
 
       {/* Compact Metrics Strip */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3" aria-label="User directory metrics">
-        <div className="rounded-md border border-border bg-surface px-3.5 py-3">
+        <div className="rounded-none border border-border bg-surface px-3.5 py-3">
           <div className="flex items-center justify-between text-[11px] font-medium text-fgMuted">
             <span>Total Users</span>
             <Users className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
@@ -211,25 +241,25 @@ export function AdminUsersIsland({
           </div>
         </div>
 
-        <div className="rounded-md border border-border bg-surface px-3.5 py-3">
+        <div className="rounded-none border border-border bg-surface px-3.5 py-3">
           <div className="flex items-center justify-between text-[11px] font-medium text-fgMuted">
             <span>Role Breakdown</span>
             <UserCheck className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
-            <span className="rounded border border-accent/35 bg-accent/10 px-1.5 py-0.5 text-accent">
+            <span className="rounded-none border border-accent/35 bg-accent/10 px-1.5 py-0.5 text-accent">
               {counts.admins} admin
             </span>
-            <span className="rounded border border-border bg-canvas px-1.5 py-0.5 text-fgBody">
+            <span className="rounded-none border border-border bg-canvas px-1.5 py-0.5 text-fgBody">
               {counts.members} member
             </span>
-            <span className="rounded border border-amber-500/35 bg-amber-500/10 px-1.5 py-0.5 text-amber-400">
+            <span className="rounded-none border border-amber-500/35 bg-amber-500/10 px-1.5 py-0.5 text-amber-400">
               {counts.viewers} viewer
             </span>
           </div>
         </div>
 
-        <div className="rounded-md border border-border bg-surface px-3.5 py-3">
+        <div className="rounded-none border border-border bg-surface px-3.5 py-3">
           <div className="flex items-center justify-between text-[11px] font-medium text-fgMuted">
             <span>Primary Admin</span>
             <Shield className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
@@ -248,7 +278,7 @@ export function AdminUsersIsland({
         <div
           role="status"
           aria-label="One-time credentials notice"
-          className="rounded-md border border-emerald-500/35 bg-emerald-500/10 px-4 py-3 text-[12px] text-fg"
+          className="rounded-none border border-emerald-500/35 bg-emerald-500/10 px-4 py-3 text-[12px] text-fg"
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-1.5">
@@ -269,7 +299,7 @@ export function AdminUsersIsland({
                 </span>
                 <span>
                   <span className="text-fgMuted">Password: </span>
-                  <code className="rounded border border-emerald-500/30 bg-canvas px-1.5 py-0.5 font-semibold text-fg select-all">
+                  <code className="rounded-none border border-emerald-500/30 bg-canvas px-1.5 py-0.5 font-semibold text-fg select-all">
                     {issuedCredentials.password}
                   </code>
                 </span>
@@ -285,7 +315,7 @@ export function AdminUsersIsland({
               <button
                 type="button"
                 onClick={handleCopyCredentials}
-                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-emerald-500/40 bg-canvas px-2.5 text-[11px] font-medium text-emerald-300 hover:bg-surfaceHover"
+                className="inline-flex h-7 items-center gap-1.5 rounded-none border border-emerald-500/40 bg-canvas px-2.5 text-[11px] font-medium text-emerald-300 hover:bg-surfaceHover"
               >
                 {copiedCredentials ? (
                   <>
@@ -303,7 +333,7 @@ export function AdminUsersIsland({
                 type="button"
                 onClick={() => setIssuedCredentials(null)}
                 aria-label="Dismiss credentials notice"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-none border border-border bg-canvas text-fgMuted hover:bg-surfaceHover hover:text-fg"
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
@@ -313,7 +343,10 @@ export function AdminUsersIsland({
       ) : null}
 
       {/* Main Directory Card */}
-      <section aria-label="Users directory" className="rounded-md border border-border bg-surface">
+      <section
+        aria-label="Users directory"
+        className="rounded-none border border-border bg-surface"
+      >
         {/* Search & Filter Toolbar */}
         <div className="flex flex-col gap-2 border-b border-border px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative flex-1 sm:max-w-xs">
@@ -327,7 +360,7 @@ export function AdminUsersIsland({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by @handle or name..."
               aria-label="Search users"
-              className="h-8 w-full rounded-md border border-border bg-canvas pr-3 pl-8 text-[13px] text-fg placeholder:text-fgMuted focus:border-fgMuted focus:outline-none"
+              className={`${inputClasses} pr-3 pl-8`}
             />
           </div>
 
@@ -336,7 +369,7 @@ export function AdminUsersIsland({
               aria-label="Filter by role"
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value as "all" | DirectoryRole)}
-              className="h-8 rounded-md border border-border bg-canvas px-2 text-[12px] text-fgBody focus:border-fgMuted focus:outline-none"
+              className={`${selectClasses} w-auto px-2 text-fgBody`}
             >
               <option value="all">All roles</option>
               <option value="admin">Admin</option>
@@ -348,7 +381,7 @@ export function AdminUsersIsland({
               aria-label="Filter by status"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as "all" | DirectoryStatus)}
-              className="h-8 rounded-md border border-border bg-canvas px-2 text-[12px] text-fgBody focus:border-fgMuted focus:outline-none"
+              className={`${selectClasses} w-auto px-2 text-fgBody`}
             >
               <option value="all">All statuses</option>
               <option value="active">Active</option>
@@ -356,14 +389,10 @@ export function AdminUsersIsland({
             </select>
 
             {hasFilters ? (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-canvas px-2.5 text-[12px] text-fgBody hover:bg-surfaceHover hover:text-fg"
-              >
+              <Button type="button" variant="secondary" size="md" onClick={resetFilters}>
                 <X className="h-3 w-3" aria-hidden="true" />
                 <span>Reset</span>
-              </button>
+              </Button>
             ) : null}
 
             <span className="font-mono text-[11px] text-fgMuted">
@@ -373,12 +402,7 @@ export function AdminUsersIsland({
         </div>
 
         {bannerError ? (
-          <div
-            role="alert"
-            className="mx-3.5 mt-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-400"
-          >
-            {bannerError}
-          </div>
+          <ErrorBanner className="mx-3.5 mt-3 px-3 py-2 text-[12px]">{bannerError}</ErrorBanner>
         ) : null}
 
         {filteredUsers.length === 0 ? (
@@ -388,13 +412,15 @@ export function AdminUsersIsland({
               Adjust your search query or role/status filters to see directory accounts.
             </p>
             {hasFilters ? (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="md"
                 onClick={resetFilters}
-                className="mt-3 inline-flex h-8 items-center rounded-md border border-border bg-canvas px-3 text-[12px] font-medium text-fgBody hover:bg-surfaceHover hover:text-fg"
+                className="mt-3"
               >
                 Reset filters
-              </button>
+              </Button>
             ) : null}
           </div>
         ) : (
@@ -428,7 +454,7 @@ export function AdminUsersIsland({
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="font-medium text-fg">{entry.displayName}</span>
                             {entry.isPrimaryAdmin ? (
-                              <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase text-accent">
+                              <span className="rounded-none border border-accent/30 bg-accent/10 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase text-accent">
                                 primary
                               </span>
                             ) : null}
@@ -456,12 +482,12 @@ export function AdminUsersIsland({
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5 sm:hidden">
                             <span
-                              className={`inline-flex rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium ${roleBadgeClass(entry.role)}`}
+                              className={`inline-flex rounded-none border px-1.5 py-0.5 font-mono text-[10px] font-medium ${roleBadgeClass(entry.role)}`}
                             >
                               {entry.role}
                             </span>
                             <span
-                              className={`inline-flex rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium ${statusBadgeClass(entry.status)}`}
+                              className={`inline-flex rounded-none border px-1.5 py-0.5 font-mono text-[10px] font-medium ${statusBadgeClass(entry.status)}`}
                             >
                               {entry.status}
                             </span>
@@ -471,7 +497,7 @@ export function AdminUsersIsland({
 
                       <td className="hidden px-3 py-2.5 sm:table-cell">
                         <span
-                          className={`inline-flex rounded border px-1.5 py-0.5 font-mono text-[11px] font-medium ${roleBadgeClass(entry.role)}`}
+                          className={`inline-flex rounded-none border px-1.5 py-0.5 font-mono text-[11px] font-medium ${roleBadgeClass(entry.role)}`}
                         >
                           {entry.role}
                         </span>
@@ -479,7 +505,7 @@ export function AdminUsersIsland({
 
                       <td className="hidden px-3 py-2.5 sm:table-cell">
                         <span
-                          className={`inline-flex rounded border px-1.5 py-0.5 font-mono text-[11px] font-medium ${statusBadgeClass(entry.status)}`}
+                          className={`inline-flex rounded-none border px-1.5 py-0.5 font-mono text-[11px] font-medium ${statusBadgeClass(entry.status)}`}
                         >
                           {entry.status}
                         </span>
@@ -510,7 +536,7 @@ export function AdminUsersIsland({
                               disabled={isBusy}
                               onClick={() => handleQuickToggleStatus(entry)}
                               aria-label={`${entry.status === "active" ? "Disable" : "Enable"} @${entry.slug}`}
-                              className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-canvas px-2 text-[11px] font-medium text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
+                              className="inline-flex h-7 items-center gap-1 rounded-none border border-border bg-canvas px-2 text-[11px] font-medium text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
                             >
                               {entry.status === "active" ? (
                                 <>
@@ -531,7 +557,7 @@ export function AdminUsersIsland({
                             disabled={isBusy}
                             onClick={() => setEditingUser(entry)}
                             aria-label={`Edit @${entry.slug}`}
-                            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-canvas px-2 text-[11px] font-medium text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
+                            className="inline-flex h-7 items-center gap-1 rounded-none border border-border bg-canvas px-2 text-[11px] font-medium text-fgBody transition-colors hover:bg-surfaceHover hover:text-fg disabled:opacity-50"
                           >
                             <Pencil className="h-3 w-3" aria-hidden="true" />
                             <span>Edit</span>
@@ -543,14 +569,14 @@ export function AdminUsersIsland({
                               disabled={isBusy}
                               onClick={() => setRemovingUser(entry)}
                               aria-label={`Remove @${entry.slug}`}
-                              className="inline-flex h-7 items-center gap-1 rounded-md border border-red-500/30 bg-transparent px-2 text-[11px] font-medium text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+                              className="inline-flex h-7 items-center gap-1 rounded-none border border-red-500/30 bg-transparent px-2 text-[11px] font-medium text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50"
                             >
                               <Trash2 className="h-3 w-3" aria-hidden="true" />
                               <span>Remove</span>
                             </button>
                           ) : (
                             <span
-                              className="inline-flex h-7 items-center rounded-md border border-border px-2 font-mono text-[10px] text-fgMuted"
+                              className="inline-flex h-7 items-center rounded-none border border-border px-2 font-mono text-[10px] text-fgMuted"
                               title="Primary signed-in admin cannot be disabled or removed"
                             >
                               protected

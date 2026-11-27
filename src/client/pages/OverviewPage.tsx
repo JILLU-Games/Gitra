@@ -12,6 +12,7 @@ import {
   RepoAboutCardIsland,
   RepoFileCreatorIsland,
   RepoOverviewActionsIsland,
+  RepoRefsManagerIsland,
 } from "@/client/islands/repo-overview-actions";
 import { IslandHost } from "@/client/server/IslandHost";
 import { buildGitCloneUrl, buildNamespaceProfileHref } from "@/shared/admin/panel";
@@ -111,7 +112,7 @@ export function OverviewPage({
       <ProgressBanner progress={progress} />
 
       {isProfileRepo ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface px-3.5 py-2.5 text-[12px]">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-none border border-border bg-surface px-3.5 py-2.5 text-[12px]">
           <div className="flex items-center gap-2 text-fgBody">
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-fgMuted" aria-hidden="true" />
             <span>
@@ -122,7 +123,7 @@ export function OverviewPage({
           </div>
           <a
             href={profileHref}
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
+            className="inline-flex h-7 items-center gap-1 rounded-none border border-border bg-canvas px-2.5 text-[12px] font-medium text-fgBody no-underline transition-colors hover:bg-surfaceHover hover:text-fg"
           >
             <span>Open @{owner} profile</span>
             <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
@@ -221,7 +222,7 @@ export function OverviewPage({
           {rootEntries.length > 0 ? (
             <section
               aria-label="Repository files"
-              className="overflow-hidden rounded-md border border-border bg-surface"
+              className="overflow-hidden rounded-none border border-border bg-surface"
             >
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface px-3.5 py-2.5 text-[12px]">
                 <div className="flex items-center gap-2 text-fg">
@@ -270,7 +271,7 @@ export function OverviewPage({
           ) : isEmptyRepo ? (
             <section
               aria-label="Quick setup"
-              className="rounded-md border border-border bg-surface p-4 text-[12px]"
+              className="rounded-none border border-border bg-surface p-4 text-[12px]"
             >
               <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-fg">
                 <Terminal className="h-4 w-4 text-fgMuted" aria-hidden="true" />
@@ -281,7 +282,7 @@ export function OverviewPage({
                   ? "Use Add README or Add file above to initialize this repository directly in the browser, or push from your terminal:"
                   : "Push an existing Git repository or clone once commits are published:"}
               </p>
-              <pre className="m-0 overflow-x-auto rounded-md border border-border bg-canvas p-3 font-mono text-[12px] leading-relaxed text-fg">
+              <pre className="m-0 overflow-x-auto rounded-none border border-border bg-canvas p-3 font-mono text-[12px] leading-relaxed text-fg">
                 {[
                   `git init`,
                   `git branch -M ${resolvedDefaultBranch}`,
@@ -296,7 +297,7 @@ export function OverviewPage({
           {readmeMd ? (
             <section
               aria-label="README"
-              className="overflow-hidden rounded-md border border-border bg-surface"
+              className="overflow-hidden rounded-none border border-border bg-surface"
             >
               <div className="flex items-center gap-1.5 border-b border-border bg-surface px-3.5 py-2.5 font-mono text-[12px] font-medium text-fg">
                 <BookOpen className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
@@ -373,52 +374,28 @@ export function OverviewPage({
             />
           </IslandHost>
 
-          <section
-            aria-label="Branches and tags"
-            className="rounded-md border border-border bg-surface p-4 text-[12px]"
+          <IslandHost
+            name="repo-refs-manager"
+            props={{
+              owner,
+              repo,
+              branches,
+              tags,
+              defaultBranch: resolvedDefaultBranch,
+              currentRef: refShort,
+              canManageRefs: canManageRepo,
+            }}
           >
-            <h3 className="m-0 mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-fg">
-              <GitBranch className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
-              <span>Branches</span>
-            </h3>
-            {branches.length ? (
-              <ul className="m-0 list-none divide-y divide-borderSubtle p-0">
-                {branches.map((branch) => (
-                  <li key={branch.name} className="py-1.5">
-                    <a
-                      href={`/${owner}/${repo}/tree?ref=${branch.name}`}
-                      className="font-mono text-[12px] text-fgBody no-underline hover:text-accent hover:underline"
-                    >
-                      {branch.displayName}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="m-0 text-[12px] text-fgMuted">No branches yet</p>
-            )}
-
-            {tags.length > 0 ? (
-              <div className="mt-3 border-t border-border pt-3">
-                <h4 className="m-0 mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-fg">
-                  <Tag className="h-3.5 w-3.5 text-fgMuted" aria-hidden="true" />
-                  <span>Tags</span>
-                </h4>
-                <ul className="m-0 list-none divide-y divide-borderSubtle p-0">
-                  {tags.map((tag) => (
-                    <li key={tag.name} className="py-1.5">
-                      <a
-                        href={`/${owner}/${repo}/tree?ref=${tag.name}`}
-                        className="font-mono text-[12px] text-fgBody no-underline hover:text-accent hover:underline"
-                      >
-                        {tag.displayName}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </section>
+            <RepoRefsManagerIsland
+              owner={owner}
+              repo={repo}
+              branches={branches}
+              tags={tags}
+              defaultBranch={resolvedDefaultBranch}
+              currentRef={refShort}
+              canManageRefs={canManageRepo}
+            />
+          </IslandHost>
         </aside>
       </div>
     </>

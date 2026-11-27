@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Clipboard, Download, FileText, Menu } from "lucide-react";
 
 import { hydrateIsland } from "@/client/hydrate";
-import { Button, buttonClasses } from "@/client/components/ui/button";
+import { Button, buttonClasses, copyToClipboard, showToast } from "@/client/components/ui";
 
 export type BlobActionsProps = {
   viewRawHref: string;
@@ -26,19 +26,36 @@ export function BlobActionsIsland({
   async function copyRawText() {
     try {
       const response = await fetch(viewRawHref);
+      if (!response.ok) {
+        showToast({
+          tone: "error",
+          title: "Could not load raw file",
+          message: `Server returned HTTP ${response.status}.`,
+        });
+        return;
+      }
       const text = await response.text();
-      await navigator.clipboard.writeText(text);
-      setCopyLabel("Copied");
-      window.setTimeout(() => setCopyLabel("Copy"), 1200);
-    } catch (error) {
-      console.warn("Copy failed", error);
+      const copied = await copyToClipboard(text, {
+        label: "file contents",
+        successTitle: "File contents copied",
+      });
+      if (copied) {
+        setCopyLabel("Copied");
+        window.setTimeout(() => setCopyLabel("Copy"), 1200);
+      }
+    } catch {
+      showToast({
+        tone: "error",
+        title: "Copy failed",
+        message: "Network error while loading raw file contents.",
+      });
     }
   }
 
   return (
     <div className="flex items-center gap-2">
       <div className="hidden items-center gap-2 sm:flex">
-        <div className="inline-flex h-7 items-center overflow-hidden rounded-md border border-border bg-canvas text-[12px]">
+        <div className="inline-flex h-7 items-center overflow-hidden rounded-none border border-border bg-canvas text-[12px]">
           {showCopy ? (
             <button
               className="h-full px-2.5 font-medium text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
@@ -69,12 +86,12 @@ export function BlobActionsIsland({
           <summary className={buttonClasses("secondary", "sm")}>
             <Menu className="h-3.5 w-3.5" aria-hidden="true" />
           </summary>
-          <div className="fixed inset-x-0 z-20 mx-3 mt-1.5 rounded-md border border-border bg-surface p-1.5 text-[12px]">
+          <div className="fixed inset-x-0 z-20 mx-3 mt-1.5 rounded-none border border-border bg-surface p-1.5 text-[12px]">
             <div className="flex flex-col">
               {showCopy ? (
                 <button
                   type="button"
-                  className="flex items-center gap-2 rounded px-3 py-1.5 text-left text-fgBody hover:bg-surfaceHover hover:text-fg"
+                  className="flex items-center gap-2 rounded-none px-3 py-1.5 text-left text-fgBody hover:bg-surfaceHover hover:text-fg"
                   onClick={() => void copyRawText()}
                 >
                   <Clipboard className="h-3.5 w-3.5" aria-hidden="true" />
@@ -84,7 +101,7 @@ export function BlobActionsIsland({
               {!isImage && !isPdf ? (
                 <a
                   href={viewRawHref}
-                  className="flex items-center gap-2 rounded px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
+                  className="flex items-center gap-2 rounded-none px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
                 >
                   <FileText className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>View raw</span>
@@ -92,7 +109,7 @@ export function BlobActionsIsland({
               ) : null}
               <a
                 href={rawHref}
-                className="flex items-center gap-2 rounded px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
+                className="flex items-center gap-2 rounded-none px-3 py-1.5 text-fgBody no-underline hover:bg-surfaceHover hover:text-fg"
               >
                 <Download className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>Download</span>
